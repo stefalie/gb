@@ -6,8 +6,7 @@ static inline void _SDL_CheckError(const char* file, int line)
 {
     if (strcmp(SDL_GetError(), "") != 0)
     {
-        fprintf(stderr, "ERROR: file %s, line %i: %s.\n", file, line,
-                SDL_GetError());
+        fprintf(stderr, "ERROR: file %s, line %i: %s.\n", file, line, SDL_GetError());
         SDL_ClearError();
     }
 }
@@ -26,8 +25,8 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    SDL_Window* window = SDL_CreateWindow("GB", SDL_WINDOWPOS_CENTERED,
-            SDL_WINDOWPOS_CENTERED, 512, 512, SDL_WINDOW_SHOWN);
+    SDL_Window* window = SDL_CreateWindow("GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+            512, 512, SDL_WINDOW_SHOWN);
     if (!window)
     {
         SDL_CheckError();
