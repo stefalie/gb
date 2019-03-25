@@ -6,7 +6,7 @@ set CodeFiles=..\code\gb.c
 
 mkdir build
 pushd build
-cp "%SdlDir%\lib\x64\SDL2.dll" .
+copy "%SdlDir%\lib\x64\SDL2.dll" .
 cl /Zi /I%SdlDir%\include %CodeFiles% %SdlLibs% /link /SUBSYSTEM:console
 popd
 
