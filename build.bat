@@ -15,7 +15,6 @@ if "%1" == "release" (
     set CompilerFlags=%CompilerFlags% /D_DEBUG
 )
 
-
 mkdir build
 pushd build
 copy "%SdlDir%\lib\x64\SDL2.dll" .
