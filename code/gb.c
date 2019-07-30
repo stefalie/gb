@@ -1,6 +1,8 @@
+#include <SDL.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <SDL.h>
+#include <string.h>
+
 
 static inline void _SDL_CheckError(const char* file, int line)
 {
@@ -25,8 +27,8 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    SDL_Window* window = SDL_CreateWindow("GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-            512, 512, SDL_WINDOW_SHOWN);
+    SDL_Window* window = SDL_CreateWindow(
+        "GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 512, 512, SDL_WINDOW_SHOWN);
     if (!window)
     {
         SDL_CheckError();
