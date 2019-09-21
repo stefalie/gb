@@ -6,7 +6,7 @@ set SdlDir=..\external\SDL2-2.0.9
 set SdlLibs=%SdlDir%\lib\x64\SDL2.lib %SdlDir%\lib\x64\SDL2main.lib
 set CodeFiles=..\code\gb.c
 
-set CompilerFlags=/Zi /FC /Fe%ExeName% /I..\code /I%SdlDir%\include /WX /W4 /wd4100 /WL
+set CompilerFlags=/Zi /FC /Fe%ExeName% /I..\code /I%SdlDir%\include /WX /W4 /wd4100 /WL /GR- /EHa-
 set LinkerFlags=/INCREMENTAL:NO /OPT:REF /SUBSYSTEM:console /NOLOGO %SdlLibs%
 
 if "%1" == "release" (
