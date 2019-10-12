@@ -30,7 +30,7 @@ int main(int argc, char* argv[])
     }
 
     SDL_Window* window = SDL_CreateWindow(
-        "GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 512, 512, SDL_WINDOW_SHOWN);
+            "GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 512, 512, SDL_WINDOW_SHOWN);
     if (!window)
     {
         SDL_CheckError();
@@ -47,6 +47,9 @@ int main(int argc, char* argv[])
     bool quit = false;
     while (!quit)
     {
+        // TODO note, it's a windows and not subsystem console app now, printf doesn't work.
+        fprintf(stdout, "lala\n");
+        SDL_Log("SDL_Log: Hello World\n");
         while (SDL_PollEvent(&event))
         {
             switch (event.type)

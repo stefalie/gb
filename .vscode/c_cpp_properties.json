@@ -4,16 +4,27 @@
             "name": "Win32",
             "includePath": [
                 "${workspaceFolder}/code/**",
-                "${workspaceFolder}/external/SDL2-2.0.9/include/**"
+                "${workspaceFolder}/external/SDL2-2.0.10/include/**"
             ],
             "defines": [
                 "_DEBUG"
             ],
             "windowsSdkVersion": "10.0.17763.0",
-            "compilerPath": "C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.22.27905/bin/Hostx64/x64/cl.exe",
+            "compilerPath": "\"C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.22.27905/bin/Hostx64/x64/cl.exe\"",
             "cStandard": "c11",
             "cppStandard": "c++17",
             "intelliSenseMode": "msvc-x64"
+        },
+        {
+            "name": "Win Clang",
+            "includePath": [
+                "${workspaceFolder}/code/**",
+                "${workspaceFolder}/external/SDL2-2.0.10/include/**"
+            ],
+            "compilerPath": "\"C:/Program Files/LLVM/bin/clang-cl.exe\"",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "clang-x64"
         }
     ],
     "version": 4
