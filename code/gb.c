@@ -2,7 +2,9 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include "gameboy.h"
 
+GameBoy gameboy = { 0 };
 
 static inline void _SDL_CheckError(const char* file, int line)
 {
