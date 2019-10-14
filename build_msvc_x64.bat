@@ -16,7 +16,7 @@ set CompilerFlags=/Zi /FC /Fe%ExeName% /I..\code /I%SdlDir%\include /WX /W4 /wd4
 
 set SdlLibs=%SdlDir%\lib\x64\SDL2.lib %SdlDir%\lib\x64\SDL2main.lib
 
-set LinkerFlags=/INCREMENTAL:NO /OPT:REF /SUBSYSTEM:console /NOLOGO %SdlLibs%
+set LinkerFlags=/INCREMENTAL:NO /OPT:REF /SUBSYSTEM:windows /NOLOGO %SdlLibs%
 
 if "%1" == "release" (
     rem /Zo Generates enhanced debugging information for optimized code.

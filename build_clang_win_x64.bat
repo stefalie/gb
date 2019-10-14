@@ -12,6 +12,7 @@ set CompilerFlags=-o %ExeName% -I%SdlDir%\include -std=c99 -Wall -Werror -Wextra
 set SdlLibs=%SdlDir%\lib\x64\SDL2.lib %SdlDir%\lib\x64\SDL2main.lib
 
 rem -fuse-ld=lld Use clang lld linker instead of msvc link
+rem /SUBSYSTEM:console warns about main and wmain being present
 set LinkerFlags=-fuse-ld=lld -Xlinker /INCREMENTAL:NO -Xlinker /OPT:REF -Xlinker /SUBSYSTEM:windows %SdlLibs%
 
 if "%1" == "release" (
