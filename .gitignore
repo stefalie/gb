@@ -1,1 +1,5 @@
 build
+
+# vscode seems to automatically fill in "files.associations" in the following
+# file, and it's annoying.
+.vscode/settings.json
