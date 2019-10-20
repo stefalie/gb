@@ -6,5 +6,8 @@ Call `shell.bat` to setup the development environment (you might have to open it
 
 Call `devenv gb.exe` to debug, or simply use the VSCode project (make sure `shell.bat` has been called and then open VSCode with `code .`).
 
-## TODO
-Building with clang
+## Resources
+
+
+https://twitter.com/mknejp/status/1185310491545128961?s=09, also see Eli Bendersky's example
+
