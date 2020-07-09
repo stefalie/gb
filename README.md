@@ -10,4 +10,5 @@ Call `devenv gb.exe` to debug, or simply use the VSCode project (make sure `shel
 
 
 https://twitter.com/mknejp/status/1185310491545128961?s=09, also see Eli Bendersky's example
-
+https://github.com/ThomasRinsma/dromaius
+consider switching to clang-cl instead of clang (then you can just use the same compile params as for msvc)

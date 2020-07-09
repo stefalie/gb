@@ -5,7 +5,7 @@ set ExeName=gb.exe
 set CodeFiles=..\code\gb.c
 set SdlDir=..\external\SDL2-2.0.10
 
-rem -Wno-language-extension-token is used to prevent clang from comlaining about
+rem -Wno-language-extension-token is used to prevent clang from complaining about
 rem `typedef unsigned __int64 uint64_t` in SDL headers
 set CompilerFlags=-o %ExeName% -I%SdlDir%\include -std=c99 -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token
 
