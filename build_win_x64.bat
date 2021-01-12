@@ -28,9 +28,6 @@ goto :eof
 rem ============================================================================
 rem Build
 
-set ExeName=gb.exe
-set CodeFiles=..\code\gb.c
-
 set SdlDir=..\external\SDL2-2.0.14
 set SdlLibs=%SdlDir%\lib\x64\SDL2.lib %SdlDir%\lib\x64\SDL2main.lib
 rem NOTE: SDL also needs Shell32.lib (if SDL2main.lib is used):
@@ -42,12 +39,17 @@ rem console. Subsequently also Shell32.lib won't be required anymore.
 rem If that is used, I guess one should also call SDL_SetMainReady(), see:
 rem https://wiki.libsdl.org/SDL_SetMainReady
 
+set MicrouiDir=..\external\microui
+
+set ExeName=gb.exe
+set CodeFiles=..\code\gb.c %MicrouiDir%\microui.c %MicrouiDir%\renderer.c
+
 if "%1" == "Clang" (
     set Compiler=clang
 
     rem -Wno-language-extension-token is used to prevent clang from complaining about
     rem `typedef unsigned __int64 uint64_t` (and the like) in SDL headers.
-    set CompilerFlags=-o %ExeName% -I%SdlDir%\include I%ImguiDir% -std=c11 -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token
+    set CompilerFlags=-o %ExeName% -I%SdlDir% I%MicrouiDir% -std=c11 -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token
 
     rem -fuse-ld=lld Use clang lld linker instead of msvc link.
     rem /SUBSYSTEM:console warns about both main and wmain being present.
@@ -68,7 +70,7 @@ if "%1" == "Clang" (
     rem /WL One-line warnings/errors
     rem /GR- Diable rttr
     rem /EHa- Disable all exceptions
-    set CompilerFlags=/Zi /FC /Fe%ExeName% /TC /std:c11 /I%SdlDir%\include /I%ImguiDir% /WX /W4 /WL /GR- /EHa-
+    set CompilerFlags=/Zi /FC /Fe%ExeName% /TC /std:c11 /I%SdlDir% /I%MicrouiDir% /WX /W4 /WL /GR- /EHa-
 
     if "%2" == "Rel" (
         rem /Zo Generates enhanced debugging information for optimized code.

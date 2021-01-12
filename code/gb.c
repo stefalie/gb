@@ -1,6 +1,6 @@
 // See note about SDL_MAIN_HANDLED in build_win_x64.bat
 // #define SDL_MAIN_HANDLED
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
