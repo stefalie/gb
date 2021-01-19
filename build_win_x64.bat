@@ -40,16 +40,20 @@ rem If that is used, I guess one should also call SDL_SetMainReady(), see:
 rem https://wiki.libsdl.org/SDL_SetMainReady
 
 set ImguiDir=..\external\imgui
+set ImguiSources=%ImguiDir%\
 
 set ExeName=gb.exe
-set CodeFiles=..\code\main.cpp /Tc ..\code\gb.c 
+set CodeFiles=..\code\main.cpp ..\code\gb.c 
 
 if "%1" == "Clang" (
+    rem TODO(stefalie): Consider using clang-cl, then all the args will become
+    rem equivalent (or at least more similar).
     set Compiler=clang
 
     rem -Wno-language-extension-token is used to prevent clang from complaining about
     rem `typedef unsigned __int64 uint64_t` (and the like) in SDL headers.
-    set CompilerFlags=-o %ExeName% -I%SdlDir% -I%ImguiDir% -std=c11 -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token
+    set CompilerFlags=-o %ExeName% -I%SdlDir% -I..\external -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token
+    set CFlags=-std=c11
 
     rem -fuse-ld=lld Use clang lld linker instead of msvc link.
     rem /SUBSYSTEM:console warns about both main and wmain being present.
@@ -61,6 +65,7 @@ if "%1" == "Clang" (
         set OptFlags=-g
     )
 ) else (
+    rem NOTE: You can actually use clang-cl here if you remove /std:c11 and /WL.
     set Compiler=cl
 
     rem /Zi Generates complete debugging information.
@@ -69,7 +74,8 @@ if "%1" == "Clang" (
     rem /WL One-line warnings/errors
     rem /GR- Diable rttr
     rem /EHa- Disable all exceptions
-    set CompilerFlags=/Zi /FC /Fe%ExeName% /std:c11 /I%SdlDir% /I%ImguiDir% /WX /W4 /WL /GR- /EHa-
+    set CompilerFlags=/Zi /FC /Fe%ExeName% /I%SdlDir% /I../external /WX /W4 /WL /GR- /EHa-
+    set CFlags=/std:c11
 
     if "%2" == "Rel" (
         rem /Zo Generates enhanced debugging information for optimized code.

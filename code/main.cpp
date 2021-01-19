@@ -1,4 +1,3 @@
-
 // Copyright (C) 2021 Stefan Lienhard
 
 #define NOMINMAX
@@ -12,11 +11,11 @@
 // See note about SDL_MAIN_HANDLED in build_win_x64.bat
 // #define SDL_MAIN_HANDLED
 #include <assert.h>
-#include <imgui.h>
 #include <stdbool.h>
 #include <string.h>
 #include <SDL2/SDL.h>
-
+#include <SDL2/SDL_opengl.h>
+#include <imgui/imgui.h>
 extern "C" {
 #include "gb.h"
 }
@@ -71,7 +70,7 @@ main(int argc, char* argv[])
 	// https://wiki.libsdl.org/SDL_GL_GetDrawableSize
 	// With high DPI enabled, the window on the screen simply appears smaller.
 
-	if (SDL_Init(SDL_INIT_VIDEO) < 0)
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS | SDL_INIT_GAMECONTROLLER) < 0)
 	{
 		SDL_CheckError();
 		exit(1);
@@ -91,20 +90,35 @@ main(int argc, char* argv[])
 	const int fb_height = (int)(window_height * dpi_scale);
 
 	SDL_Window* window = SDL_CreateWindow("GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, fb_width, fb_height,
-			SDL_WINDOW_ALLOW_HIGHDPI /* | SDL_WINDOW_OPENGL*/);
+			SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
 	if (!window)
 	{
 		SDL_CheckError();
 		SDL_Quit();
 		exit(1);
 	}
-	// SDL_GL_CreateContext(window);
 
-	SDL_Surface* surface = SDL_GetWindowSurface(window);
-	SDL_FillRect(surface, NULL, SDL_MapRGB(surface->format, 0xFF, 0x00, 0x00));
-	SDL_UpdateWindowSurface(window);
+	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+	// SDL_GL_MakeCurrent(window, gl_context);  // Not necessary.
 
-	GB_GameBoy gb = { 0 };
+	// OpenGL setup. Leave matrices as identity.
+	GLuint texture;
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 320, 240, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);  // Is already default.
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glEnable(GL_TEXTURE_2D);
+
+
+	// TODO
+	// Use pixel-perfect window 1x, 2x, 3x, 4x
+	// Linear interpolate for fullscreen.
+	uint32_t texture_update_buffer[320 * 240];
+
+	GB_GameBoy gb = {};
 	GB_Init(&gb);
 
 	// Main Loop
@@ -135,35 +149,46 @@ main(int argc, char* argv[])
 			}
 		}
 
-
-		if (SDL_MUSTLOCK(surface))
-		{
-			SDL_LockSurface(surface);
-		}
-
-		// TODO
+		// TODO: Don't use ticks, use perf counters as shown in the Imgui example.
 		const int tick = SDL_GetTicks();
-		for (int i = 0, yofs = 0; i < fb_height; i++)
+		for (int i = 0; i < 240; i++)
 		{
-			for (int j = 0, ofs = yofs; j < fb_width; j++, ofs++)
+			for (int j = 0; j < 320; j++)
 			{
-				((unsigned int*)surface->pixels)[ofs] = i * i + j * j + tick;
+				texture_update_buffer[i * 320 + j] = i * i + j * j + tick;
 			}
-			yofs += surface->pitch / 4;
 		}
+		// NOTE: While the binary layout between SDL and OpenGL is actually
+		// the same, SDL uses SDL_PIXELFORMAT_RGB888 and OpenGL GL_BGR(A).
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 320, 240, GL_BGRA, GL_UNSIGNED_BYTE, texture_update_buffer);
 
-		if (SDL_MUSTLOCK(surface))
+		// Ideally we could mix SDL_Renderer* with pure OpenGL calls, but that seems
+		// to be tricker than it should be.
+		glClear(GL_COLOR_BUFFER_BIT);
+		glBegin(GL_TRIANGLE_STRIP);
 		{
-			SDL_UnlockSurface(surface);
-		}
+			// Tex coords are flipped upside down. SDL uses upper left, OpenGL
+			// lower left as origin.
+			glTexCoord2f(0.0f, 0.0f);
+			glVertex2f(-1.0f, 1.0);
 
-		SDL_UpdateWindowSurface(window);
-		// SDL_GL_SwapWindow(window);
+			glTexCoord2f(0.0f, 1.0f);
+			glVertex2f(-1.0f, -1.0f);
+
+			glTexCoord2f(1.0f, 0.0f);
+			glVertex2f(1.0f, 1.0f);
+
+			glTexCoord2f(1.0f, 1.0f);
+			glVertex2f(1.0f, -1.0f);
+		}
+		glEnd();
+		SDL_GL_SwapWindow(window);
 	}
 
+	glDeleteTextures(1, &texture);
+	SDL_GL_DeleteContext(gl_context);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
 
 	return 0;
 }
-
