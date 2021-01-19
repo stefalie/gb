@@ -18,7 +18,7 @@
 #include <imgui/examples/imgui_impl_opengl2.h>
 #include <imgui/examples/imgui_impl_sdl.h>
 #include <imgui/imgui.h>
-#include "dmca_sans_serif_v0900_700.h"
+#include "dmca_sans_serif_v0900_600.h"
 extern "C" {
 #include "gb.h"
 }
@@ -60,14 +60,86 @@ EnableHighDpiAwareness()
 	}
 }
 
-static void
-DrawGui()
+struct GuiState
 {
-	//	const float margin = imgui_.margin * dpi_scale_;
-	//	const float window_width = imgui_.window_width * dpi_scale_;
-	//	const float window_height = framebuffer_height_ - 2.0f * margin;
-	//	ImGui::SetNextWindowPos(ImVec2(margin, margin), ImGuiCond_Once);
-	//	ImGui::SetNextWindowSize(ImVec2(window_width, window_height), ImGuiCond_FirstUseEver);
+	bool has_active_rom = false;
+	int save_slot = 1;
+};
+
+static void
+GuiDraw(GuiState* gui_state)
+{
+	if (ImGui::BeginMainMenuBar())
+	{
+		if (ImGui::BeginMenu("File"))
+		{
+			ImGui::MenuItem("Open ROM", "Ctrl+O");
+			ImGui::MenuItem("Close", NULL, false, gui_state->has_active_rom);
+			ImGui::Separator();
+			ImGui::MenuItem("Exit");
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("System"))
+		{
+			ImGui::MenuItem("Reset", NULL, false, gui_state->has_active_rom);
+			ImGui::MenuItem("Pause", "Ctrl+P", false, gui_state->has_active_rom);
+			ImGui::Separator();
+			ImGui::MenuItem("Save", "F5", false, gui_state->has_active_rom);
+			ImGui::MenuItem("Load", "F7", false, gui_state->has_active_rom);
+			if (ImGui::BeginMenu("Save Slot"))
+			{
+				char slot_name[7] = { 'S', 'l', 'o', 't', ' ', 'X', '\0' };
+				for (int i = 1; i <= 5; ++i)
+				{
+					slot_name[5] = '0' + (char)i;
+					if (ImGui::MenuItem(slot_name, NULL, gui_state->save_slot == i))
+					{
+						gui_state->save_slot = i;
+					}
+				}
+				ImGui::EndMenu();
+			}
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Options"))
+		{
+			if (ImGui::BeginMenu("Screen Size"))
+			{
+				ImGui::MenuItem("1x", NULL, false);
+				ImGui::MenuItem("2x", NULL, false);
+				ImGui::MenuItem("3x", NULL, true);
+				ImGui::MenuItem("Fullscreen", NULL, false);
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Magnification Filter"))
+			{
+				ImGui::MenuItem("Nearest", NULL, true);
+				ImGui::MenuItem("EPX/Scale2x/AdvMAME2x", NULL, true);
+				ImGui::MenuItem("Scale3x/AdvMAME3x/ScaleF", NULL, false);
+				ImGui::MenuItem("hqnx", NULL, false);
+				ImGui::MenuItem("Super xBR", NULL, false);
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Speed"))
+			{
+				ImGui::MenuItem("Default", NULL, true);
+				ImGui::MenuItem("Faster", "Ctrl++");
+				ImGui::MenuItem("Slower", "Ctrl+-");
+				ImGui::MenuItem("Unthrottled", NULL, false);
+				ImGui::EndMenu();
+			}
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Help"))
+		{
+			ImGui::MenuItem("Website");
+			// TODO: https://discourse.libsdl.org/t/does-sdl2-have-function-to-open-url-in-browser/22730/2
+			// TODO: Do some overlay, check the demo
+			ImGui::MenuItem("About");
+			ImGui::EndMenu();
+		}
+	}
+	ImGui::EndMainMenuBar();
 }
 
 int
@@ -123,11 +195,12 @@ main(int argc, char* argv[])
 	ImGuiIO& io = ImGui::GetIO();
 	io.IniFilename = nullptr;
 	io.Fonts->AddFontFromMemoryCompressedTTF(
-			dmca_sans_serif_v0900_700_compressed_data, dmca_sans_serif_v0900_700_compressed_size, 25.0f * dpi_scale);
+			dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, 25.0f * dpi_scale);
 	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
 	ImGui_ImplOpenGL2_Init();
 	ImGui::StyleColorsClassic();
 	ImGui::GetStyle().FrameRounding = 4.0f;
+	GuiState gui_state;
 	// TODO(stefalie): This should be true when no ROM is loaded or if the game is paused
 	// or if the mouse has been moved no longer than 2-3 s ago.
 	bool show_gui = true;
@@ -220,7 +293,7 @@ main(int argc, char* argv[])
 		ImGui::NewFrame();
 		if (show_gui)
 		{
-			DrawGui();
+			GuiDraw(&gui_state);
 			ImGui::ShowDemoWindow(&show_gui);
 		}
 		ImGui::Render();
