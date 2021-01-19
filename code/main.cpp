@@ -15,7 +15,10 @@
 #include <string.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
+#include <imgui/examples/imgui_impl_opengl2.h>
+#include <imgui/examples/imgui_impl_sdl.h>
 #include <imgui/imgui.h>
+#include "dmca_sans_serif_v0900_700.h"
 extern "C" {
 #include "gb.h"
 }
@@ -57,6 +60,16 @@ EnableHighDpiAwareness()
 	}
 }
 
+static void
+DrawGui()
+{
+	//	const float margin = imgui_.margin * dpi_scale_;
+	//	const float window_width = imgui_.window_width * dpi_scale_;
+	//	const float window_height = framebuffer_height_ - 2.0f * margin;
+	//	ImGui::SetNextWindowPos(ImVec2(margin, margin), ImGuiCond_Once);
+	//	ImGui::SetNextWindowSize(ImVec2(window_width, window_height), ImGuiCond_FirstUseEver);
+}
+
 int
 main(int argc, char* argv[])
 {
@@ -84,8 +97,9 @@ main(int argc, char* argv[])
 	(void)hdpi;
 	(void)vdpi;
 	const float dpi_scale = ddpi / 96.0f;
-	const int window_width = 800;
-	const int window_height = 600;
+	const int scale_factor = 6;
+	const int window_width = 160 * scale_factor;
+	const int window_height = 144 * scale_factor;
 	const int fb_width = (int)(window_width * dpi_scale);
 	const int fb_height = (int)(window_height * dpi_scale);
 
@@ -100,6 +114,23 @@ main(int argc, char* argv[])
 
 	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
 	// SDL_GL_MakeCurrent(window, gl_context);  // Not necessary.
+	SDL_GL_SetSwapInterval(1);  // Enable V-sync
+
+	// Setup ImGui:
+	ImGui::CreateContext();
+	SDL_Log("dpi scale: %f\n", dpi_scale);
+	ImGui::GetStyle().ScaleAllSizes(dpi_scale * 2.0f);
+	ImGuiIO& io = ImGui::GetIO();
+	io.IniFilename = nullptr;
+	io.Fonts->AddFontFromMemoryCompressedTTF(
+			dmca_sans_serif_v0900_700_compressed_data, dmca_sans_serif_v0900_700_compressed_size, 25.0f * dpi_scale);
+	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
+	ImGui_ImplOpenGL2_Init();
+	ImGui::StyleColorsClassic();
+	ImGui::GetStyle().FrameRounding = 4.0f;
+	// TODO(stefalie): This should be true when no ROM is loaded or if the game is paused
+	// or if the mouse has been moved no longer than 2-3 s ago.
+	bool show_gui = true;
 
 	// OpenGL setup. Leave matrices as identity.
 	GLuint texture;
@@ -112,7 +143,6 @@ main(int argc, char* argv[])
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glEnable(GL_TEXTURE_2D);
 
-
 	// TODO
 	// Use pixel-perfect window 1x, 2x, 3x, 4x
 	// Linear interpolate for fullscreen.
@@ -122,12 +152,13 @@ main(int argc, char* argv[])
 	GB_Init(&gb);
 
 	// Main Loop
-	SDL_Event event;
 	bool quit = false;
 	while (!quit)
 	{
+		SDL_Event event;
 		while (SDL_PollEvent(&event))
 		{
+			ImGui_ImplSDL2_ProcessEvent(&event);
 			switch (event.type)
 			{
 			case SDL_QUIT:
@@ -182,10 +213,31 @@ main(int argc, char* argv[])
 			glVertex2f(1.0f, -1.0f);
 		}
 		glEnd();
+
+		// ImGui
+		ImGui_ImplOpenGL2_NewFrame();
+		ImGui_ImplSDL2_NewFrame(window);
+		ImGui::NewFrame();
+		if (show_gui)
+		{
+			DrawGui();
+			ImGui::ShowDemoWindow(&show_gui);
+		}
+		ImGui::Render();
+		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+		// glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
+		// glClear(GL_COLOR_BUFFER_BIT);
+		ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
+
 		SDL_GL_SwapWindow(window);
 	}
 
 	glDeleteTextures(1, &texture);
+
+	ImGui_ImplOpenGL2_Shutdown();
+	ImGui_ImplSDL2_Shutdown();
+	ImGui::DestroyContext();
+
 	SDL_GL_DeleteContext(gl_context);
 	SDL_DestroyWindow(window);
 	SDL_Quit();

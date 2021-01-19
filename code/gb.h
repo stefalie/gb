@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 
-typedef struct GB_GameBoy
+typedef struct
 {
 	// TODO(stefalie): this is all just tmp
 	struct CPU
@@ -20,3 +20,8 @@ typedef struct GB_GameBoy
 
 void
 GB_Init(GB_GameBoy* gb);
+
+typedef struct
+{
+	uint8_t r, g, b;
+} GB_Pixel;
