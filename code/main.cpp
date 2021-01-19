@@ -1,3 +1,4 @@
+
 // Copyright (C) 2021 Stefan Lienhard
 
 #define NOMINMAX
@@ -63,45 +64,41 @@ main(int argc, char* argv[])
 	(void)argc;
 	(void)argv;
 	EnableHighDpiAwareness();
+	// The high DPI behavior is a bit strange, at least on Windows.
+	// Both SDL_GetWindowSize and SDL_GL_GetDrawableSize always return the same size
+	// which is in contradiction with their docs:
+	// https://wiki.libsdl.org/SDL_GetWindowSize
+	// https://wiki.libsdl.org/SDL_GL_GetDrawableSize
+	// With high DPI enabled, the window on the screen simply appears smaller.
 
 	if (SDL_Init(SDL_INIT_VIDEO) < 0)
 	{
 		SDL_CheckError();
 		exit(1);
 	}
-	// SDL_LogSetAllPriority(SDL_LOG_PRIORITY_INFO);
-	SDL_LogCritical(SDL_LOG_CATEGORY_ERROR, "Couldn't load 'Shcore.dll'.\n");
 
 	const char* pref_path = SDL_GetPrefPath(NULL, "gb");
 	SDL_Log("pref path: %s\n", pref_path);
 
-	SDL_Window* window = SDL_CreateWindow("GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600,
-			SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_OPENGL);
+	float ddpi, hdpi, vdpi;
+	SDL_GetDisplayDPI(0, &ddpi, &hdpi, &vdpi);
+	(void)hdpi;
+	(void)vdpi;
+	const float dpi_scale = ddpi / 96.0f;
+	const int window_width = 800;
+	const int window_height = 600;
+	const int fb_width = (int)(window_width * dpi_scale);
+	const int fb_height = (int)(window_height * dpi_scale);
+
+	SDL_Window* window = SDL_CreateWindow("GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, fb_width, fb_height,
+			SDL_WINDOW_ALLOW_HIGHDPI /* | SDL_WINDOW_OPENGL*/);
 	if (!window)
 	{
 		SDL_CheckError();
 		SDL_Quit();
 		exit(1);
 	}
-
-	int fb_width, fb_height;
-	SDL_GetWindowSize(window, &fb_width, &fb_height);
-	SDL_Log("w: %i, h: %i\n", fb_width, fb_height);
-	SDL_GL_GetDrawableSize(window, &fb_width, &fb_height);
-	SDL_Log("w: %i, h: %i\n", fb_width, fb_height);
-
-	float ddpi, hdpi, vdpi;
-	SDL_GetDisplayDPI(0, &ddpi, &hdpi, &vdpi);
-	ddpi /= 96.0f;
-	hdpi /= 96.0f;
-	vdpi /= 96.0f;
-	SDL_Log("dpi: %f %f %f\n", ddpi, hdpi, vdpi);
-
-	SDL_Rect display_bounds;
-	SDL_GetDisplayUsableBounds(0, &display_bounds);
-	SDL_Log("bounds: %i %i\n", display_bounds.w, display_bounds.h);
-
-	SDL_GL_CreateContext(window);
+	// SDL_GL_CreateContext(window);
 
 	SDL_Surface* surface = SDL_GetWindowSurface(window);
 	SDL_FillRect(surface, NULL, SDL_MapRGB(surface->format, 0xFF, 0x00, 0x00));
@@ -138,7 +135,30 @@ main(int argc, char* argv[])
 			}
 		}
 
-		SDL_GL_SwapWindow(window);
+
+		if (SDL_MUSTLOCK(surface))
+		{
+			SDL_LockSurface(surface);
+		}
+
+		// TODO
+		const int tick = SDL_GetTicks();
+		for (int i = 0, yofs = 0; i < fb_height; i++)
+		{
+			for (int j = 0, ofs = yofs; j < fb_width; j++, ofs++)
+			{
+				((unsigned int*)surface->pixels)[ofs] = i * i + j * j + tick;
+			}
+			yofs += surface->pitch / 4;
+		}
+
+		if (SDL_MUSTLOCK(surface))
+		{
+			SDL_UnlockSurface(surface);
+		}
+
+		SDL_UpdateWindowSurface(window);
+		// SDL_GL_SwapWindow(window);
 	}
 
 	SDL_DestroyWindow(window);
@@ -146,3 +166,4 @@ main(int argc, char* argv[])
 
 	return 0;
 }
+
