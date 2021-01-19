@@ -29,7 +29,7 @@ The build script can be called with these options: `build_win_x64.bat (Clang|Msv
 - `Clang` or `Msvc` to choose the compiler
 - `Rel` or `Deb` for release or debug flags
 
-For debugging call `devenv gb.exe` in the build directory (make sure `msvc_shell.bat` has been called first), or simply use the VSCode project by calling `code .` in the project root (make sure `shell_msvc.bat` has been called first).
+For debugging call `devenv build\gb.exe` in the build directory (make sure `msvc_shell.bat` has been called first), or simply use the VSCode project by calling `code .` in the project root (make sure `shell_msvc.bat` has been called first).
 
 ## Resources
 

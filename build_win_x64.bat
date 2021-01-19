@@ -49,11 +49,11 @@ if "%1" == "Clang" (
 
     rem -Wno-language-extension-token is used to prevent clang from complaining about
     rem `typedef unsigned __int64 uint64_t` (and the like) in SDL headers.
-    set CompilerFlags=-o %ExeName% -I%SdlDir% I%MicrouiDir% -std=c11 -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token
+    set CompilerFlags=-o %ExeName% -I%SdlDir% -I%MicrouiDir% -std=c11 -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token
 
     rem -fuse-ld=lld Use clang lld linker instead of msvc link.
     rem /SUBSYSTEM:console warns about both main and wmain being present.
-    set LinkerFlags=-fuse-ld=lld -Xlinker /INCREMENTAL:NO -Xlinker /OPT:REF -Xlinker /SUBSYSTEM:windows -lShell32 %SdlLibs%
+    set LinkerFlags=-fuse-ld=lld -Xlinker /INCREMENTAL:NO -Xlinker /OPT:REF -Xlinker /SUBSYSTEM:windows -lShell32 -lOpenGL32 %SdlLibs%
 
     if "%2" == "Rel" (
         set OptFlags=-DNDEBUG -O3 -Wno-unused-function
@@ -80,7 +80,7 @@ if "%1" == "Clang" (
         set OptFlags=/D_DEBUG
     )
 
-    set LinkerFlags=/link /INCREMENTAL:NO /OPT:REF /SUBSYSTEM:windows /NOLOGO %SdlLibs% Shell32.lib
+    set LinkerFlags=/link /INCREMENTAL:NO /OPT:REF /SUBSYSTEM:windows /NOLOGO %SdlLibs% Shell32.lib OpenGL32.lib
 )
 
 mkdir build

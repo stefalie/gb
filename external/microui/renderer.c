@@ -1,3 +1,5 @@
+#pragma warning(disable: 4244 5105)
+
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 #include <assert.h>
@@ -15,15 +17,15 @@ static int width  = 800;
 static int height = 600;
 static int buf_idx;
 
-static SDL_Window *window;
+//static SDL_Window *window;
 
 
 void r_init(void) {
-  /* init SDL window */
-  window = SDL_CreateWindow(
-    NULL, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-    width, height, SDL_WINDOW_OPENGL);
-  SDL_GL_CreateContext(window);
+  ///* init SDL window */
+  //window = SDL_CreateWindow(
+  //  NULL, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+  //  width, height, SDL_WINDOW_OPENGL);
+  //SDL_GL_CreateContext(window);
 
   /* init gl */
   glEnable(GL_BLEND);
@@ -42,8 +44,8 @@ void r_init(void) {
   glBindTexture(GL_TEXTURE_2D, id);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, ATLAS_WIDTH, ATLAS_HEIGHT, 0,
     GL_ALPHA, GL_UNSIGNED_BYTE, atlas_texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   assert(glGetError() == 0);
 }
 
@@ -134,8 +136,8 @@ void r_draw_text(const char *text, mu_Vec2 pos, mu_Color color) {
     if ((*p & 0xc0) == 0x80) { continue; }
     int chr = mu_min((unsigned char) *p, 127);
     mu_Rect src = atlas[ATLAS_FONT + chr];
-    dst.w = src.w;
-    dst.h = src.h;
+    dst.w = src.w * 1.5f;
+    dst.h = src.h * 1.5f;
     push_quad(dst, src, color);
     dst.x += dst.w;
   }
@@ -181,5 +183,5 @@ void r_clear(mu_Color clr) {
 
 void r_present(void) {
   flush();
-  SDL_GL_SwapWindow(window);
+  //SDL_GL_SwapWindow(window);
 }

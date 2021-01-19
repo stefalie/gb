@@ -20,6 +20,8 @@
 ** IN THE SOFTWARE.
 */
 
+#pragma warning(disable: 4244 4267 4456 4996)
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

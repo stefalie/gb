@@ -6,7 +6,11 @@
         {
             "label": "Build MSVC x64 Debug",
             "type": "shell",
-            "command": "build_msvc_x64.bat",
+            "command": "build_win_x64.bat",
+            "args": [
+                "Msvc",
+                "Deb"
+            ],
             "group": "build",
             "presentation": {
                 "reveal": "always"
@@ -16,9 +20,10 @@
         {
             "label": "Build MSVC x64 Release",
             "type": "shell",
-            "command": "build_msvc_x64.bat",
+            "command": "build_win_x64.bat",
             "args": [
-                "release"
+                "Msvc",
+                "Rel"
             ],
             "group": "build",
             "presentation": {
@@ -29,7 +34,11 @@
         {
             "label": "Build Clang Win x64 Debug",
             "type": "shell",
-            "command": "build_clang_win_x64.bat",
+            "command": "build_win_x64.bat",
+            "args": [
+                "Clang",
+                "Deb"
+            ],
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -42,9 +51,10 @@
         {
             "label": "Build Clang Win x64 Release",
             "type": "shell",
-            "command": "build_clang_win_x64.bat",
+            "command": "build_win_x64.bat",
             "args": [
-                "release"
+                "Clang",
+                "Rel"
             ],
             "group": "build",
             "presentation": {
