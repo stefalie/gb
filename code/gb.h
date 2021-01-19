@@ -1,6 +1,8 @@
+// Copyright (C) 2021 Stefan Lienhard
+
 #include <stdint.h>
 
-typedef struct GameBoy
+typedef struct GB_GameBoy
 {
 	// TODO(stefalie): this is all just tmp
 	struct CPU
@@ -12,4 +14,7 @@ typedef struct GameBoy
 	{
 		uint8_t bytes[1000];
 	} memory;
-} GameBoy;
+} GB_GameBoy;
+
+void
+GB_Init(GB_GameBoy* gb);
