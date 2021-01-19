@@ -43,22 +43,25 @@ set ImguiDir=..\external\imgui
 set ImguiSources=%ImguiDir%\
 
 set ExeName=gb.exe
-set CodeFiles=..\code\main.cpp ..\code\gb.c 
+
+rem With Clang, /SUBSYSTEM:console warns about both main and wmain being present.
+set LinkerFlags=/OUT:%ExeName% /INCREMENTAL:NO /OPT:REF /SUBSYSTEM:windows /NOLOGO %SdlLibs% Shell32.lib OpenGL32.lib
 
 if "%1" == "Clang" (
     rem TODO(stefalie): Consider using clang-cl, then all the args will become
     rem equivalent (or at least more similar).
     set Compiler=clang
+    set Linker=lld-link
+    set CompileExt=o
 
     rem -Wno-language-extension-token is used to prevent clang from complaining about
     rem `typedef unsigned __int64 uint64_t` (and the like) in SDL headers.
-    rem Unfortunately we can't add -std=c11 because the same flags are also
-    rem applied to C++.
-    set CompilerFlags=-o %ExeName% -I%SdlDir% -I..\external -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token
-
-    rem -fuse-ld=lld Use clang lld linker instead of msvc link.
-    rem /SUBSYSTEM:console warns about both main and wmain being present.
-    set LinkerFlags=-fuse-ld=lld -Xlinker /INCREMENTAL:NO -Xlinker /OPT:REF -Xlinker /SUBSYSTEM:windows -lShell32 -lOpenGL32 %SdlLibs%
+    set CompilerFlags=-c -I%SdlDir% -I..\external -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token
+    set CFlags=-std=c11
+    rem If compile and link is done in one step, /DEFAULTLIB:libcmt.lib seems
+    rem to be added automatically:
+    rem https://stackoverflow.com/questions/36783764/lld-undefined-symbol-maincrtstartup
+    set LinkerFlags=%LinkerFlags% libcmt.lib
 
     if "%2" == "Rel" (
         set OptFlags=-DNDEBUG -O3 -Wno-unused-function
@@ -68,14 +71,18 @@ if "%1" == "Clang" (
 ) else (
     rem NOTE: You can actually use clang-cl here if you remove /std:c11 and /WL.
     set Compiler=cl
+    set Linker=link
+    set CompileExt=obj
 
     rem /Zi Generates complete debugging information.
     rem /FC Full paths in diagnostics
+    rem /c to compile without linking instead of using /Fe%ExeName%
     rem /WX Warning become errors
     rem /WL One-line warnings/errors
     rem /GR- Diable rttr
     rem /EHa- Disable all exceptions
-    set CompilerFlags=/Zi /FC /Fe%ExeName% /I%SdlDir% /std:c11 /I../external /WX /W4 /WL /GR- /EHa-
+    set CompilerFlags=/Zi /FC /c /I%SdlDir% /I../external /WX /W4 /WL /GR- /EHa-
+    set CFlags=/TC /std:c11
 
     if "%2" == "Rel" (
         rem /Zo Generates enhanced debugging information for optimized code.
@@ -84,15 +91,19 @@ if "%1" == "Clang" (
     ) else (
         set OptFlags=/D_DEBUG
     )
-
-    set LinkerFlags=/link /INCREMENTAL:NO /OPT:REF /SUBSYSTEM:windows /NOLOGO %SdlLibs% Shell32.lib OpenGL32.lib
 )
+
+set CFiles=..\code\gb.c
+set CppFiles=..\code\main.cpp
+set Objects=main.%CompileExt% gb.%CompileExt%
 
 mkdir build
 pushd build
 copy "%SdlDir%\lib\x64\SDL2.dll" .
 echo on
-%Compiler% %CompilerFlags% %OptFlags% %CodeFiles% %LinkerFlags%
+%Compiler% %CompilerFlags% %CFlags% %OptFlags% %CFiles%
+%Compiler% %CompilerFlags% %OptFlags% %CppFiles%
+%Linker% %LinkerFlags% %Objects%
 @echo off
 popd
 
