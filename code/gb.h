@@ -1,5 +1,7 @@
 // Copyright (C) 2021 Stefan Lienhard
 
+// TODO: insert cmd to compile this -c -std=c11 /c /std:c11
+
 #include <stdint.h>
 
 typedef struct GB_GameBoy

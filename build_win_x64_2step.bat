@@ -5,7 +5,6 @@ rem Input Validation
 
 if not "%1" == "Clang" (
     if not "%1" == "Msvc" (
-        echo argh
         goto :usage
     )
 )
@@ -39,17 +38,12 @@ rem console. Subsequently also Shell32.lib won't be required anymore.
 rem If that is used, I guess one should also call SDL_SetMainReady(), see:
 rem https://wiki.libsdl.org/SDL_SetMainReady
 
-set ImguiDir=..\external\imgui
-set ImguiSources=%ImguiDir%\
-
 set ExeName=gb.exe
 
 rem With Clang, /SUBSYSTEM:console warns about both main and wmain being present.
 set LinkerFlags=/OUT:%ExeName% /INCREMENTAL:NO /OPT:REF /SUBSYSTEM:windows /NOLOGO %SdlLibs% Shell32.lib OpenGL32.lib
 
 if "%1" == "Clang" (
-    rem TODO(stefalie): Consider using clang-cl, then all the args will become
-    rem equivalent (or at least more similar).
     set Compiler=clang
     set Linker=lld-link
     set CompileExt=o
@@ -70,6 +64,7 @@ if "%1" == "Clang" (
     )
 ) else (
     rem NOTE: You can actually use clang-cl here if you remove /std:c11 and /WL.
+    rem But then it will use the MS toolchain for linking (I think).
     set Compiler=cl
     set Linker=link
     set CompileExt=obj

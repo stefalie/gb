@@ -5,7 +5,6 @@ rem Input Validation
 
 if not "%1" == "Clang" (
     if not "%1" == "Msvc" (
-        echo argh
         goto :usage
     )
 )
@@ -28,6 +27,8 @@ goto :eof
 rem ============================================================================
 rem Build
 
+set ExeName=gb.exe
+
 set SdlDir=..\external\SDL2-2.0.14
 set SdlLibs=%SdlDir%\lib\x64\SDL2.lib %SdlDir%\lib\x64\SDL2main.lib
 rem NOTE: SDL also needs Shell32.lib (if SDL2main.lib is used):
@@ -40,21 +41,20 @@ rem If that is used, I guess one should also call SDL_SetMainReady(), see:
 rem https://wiki.libsdl.org/SDL_SetMainReady
 
 set ImguiDir=..\external\imgui
-set ImguiSources=%ImguiDir%\
+rem A unity build is faster than listing required ImGui files.
 
-set ExeName=gb.exe
-set CodeFiles=..\code\main.cpp ..\code\gb.c 
+set CodeFiles=..\code\main.cpp ..\code\gb.c ..\code\imgui_unity_build.cpp
 
 if "%1" == "Clang" (
-    rem TODO(stefalie): Consider using clang-cl, then all the args will become
-    rem equivalent (or at least more similar).
     set Compiler=clang
 
     rem -Wno-language-extension-token is used to prevent clang from complaining about
     rem `typedef unsigned __int64 uint64_t` (and the like) in SDL headers.
     rem Unfortunately we can't add -std=c11 because the same flags are also
     rem applied to C++.
-    set CompilerFlags=-o %ExeName% -I%SdlDir% -I..\external -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token
+    rem Include paths for SDL and Imgui come in two forms, with and without parent
+    rem dir. This is because Imgui wants them without parent dir.
+    set CompilerFlags=-o %ExeName% -I%SdlDir% -I..\external -I%SdlDir%\SDL2 -I%ImguiDir% -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token
 
     rem -fuse-ld=lld Use clang lld linker instead of msvc link.
     rem /SUBSYSTEM:console warns about both main and wmain being present.
@@ -67,6 +67,7 @@ if "%1" == "Clang" (
     )
 ) else (
     rem NOTE: You can actually use clang-cl here if you remove /std:c11 and /WL.
+    rem But then it will use the MS toolchain for linking (I think).
     set Compiler=cl
 
     rem /Zi Generates complete debugging information.
@@ -75,7 +76,8 @@ if "%1" == "Clang" (
     rem /WL One-line warnings/errors
     rem /GR- Diable rttr
     rem /EHa- Disable all exceptions
-    set CompilerFlags=/Zi /FC /Fe%ExeName% /I%SdlDir% /std:c11 /I../external /WX /W4 /WL /GR- /EHa-
+    rem See note under 'Clang' about duplicate include dirs.
+    set CompilerFlags=/Zi /FC /Fe%ExeName% /I%SdlDir% /I../external /I%SdlDir%/SDL2 /I../external/imgui /std:c11 /WX /W4 /WL /GR- /EHa-
 
     if "%2" == "Rel" (
         rem /Zo Generates enhanced debugging information for optimized code.
@@ -91,8 +93,14 @@ if "%1" == "Clang" (
 mkdir build
 pushd build
 copy "%SdlDir%\lib\x64\SDL2.dll" .
+
+set StartTime=%time%
 echo on
 %Compiler% %CompilerFlags% %OptFlags% %CodeFiles% %LinkerFlags%
 @echo off
+set EndTime=%time%
 popd
+
+echo Start time: %StartTime%
+echo End time:   %EndTime%
 
