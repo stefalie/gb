@@ -2,11 +2,12 @@
 
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
 #pragma warning(push)
 #pragma warning(disable : 5105)
 #include <ShellScalingAPI.h>
 #pragma warning(pop)
-#include <Windows.h>
+#include <commdlg.h>
 
 // See note about SDL_MAIN_HANDLED in build_win_x64.bat
 // #define SDL_MAIN_HANDLED
@@ -62,6 +63,7 @@ EnableHighDpiAwareness()
 
 struct GuiState
 {
+	bool show_gui = true;
 	bool has_active_rom = false;
 	int save_slot = 1;
 };
@@ -73,7 +75,23 @@ GuiDraw(GuiState* gui_state)
 	{
 		if (ImGui::BeginMenu("File"))
 		{
-			ImGui::MenuItem("Open ROM", "Ctrl+O");
+			if (ImGui::MenuItem("Open ROM", "Ctrl+O"))
+			{
+				char file_path[MAX_PATH] = {};
+
+				OPENFILENAME ofn = {};
+				ofn.lStructSize = sizeof(ofn);
+				ofn.lpstrFilter = "GameBoy (*.gb)\0*.gb\0All (*.*)\0*.*\0";
+				ofn.lpstrFile = file_path;
+				ofn.nMaxFile = sizeof(file_path);
+				ofn.lpstrInitialDir = NULL;  // TODO keep that in your settings
+				ofn.lpstrTitle = "Open GameBoy ROM";
+				ofn.Flags = OFN_FILEMUSTEXIST;
+				if (GetOpenFileNameA(&ofn))
+				{
+					SDL_Log("Selected ROM: %s\n", ofn.lpstrFile);
+				}
+			}
 			ImGui::MenuItem("Close", NULL, false, gui_state->has_active_rom);
 			ImGui::Separator();
 			ImGui::MenuItem("Exit");
@@ -203,7 +221,6 @@ main(int argc, char* argv[])
 	GuiState gui_state;
 	// TODO(stefalie): This should be true when no ROM is loaded or if the game is paused
 	// or if the mouse has been moved no longer than 2-3 s ago.
-	bool show_gui = true;
 
 	// OpenGL setup. Leave matrices as identity.
 	GLuint texture;
@@ -291,10 +308,10 @@ main(int argc, char* argv[])
 		ImGui_ImplOpenGL2_NewFrame();
 		ImGui_ImplSDL2_NewFrame(window);
 		ImGui::NewFrame();
-		if (show_gui)
+		if (gui_state.show_gui)
 		{
 			GuiDraw(&gui_state);
-			ImGui::ShowDemoWindow(&show_gui);
+			// ImGui::ShowDemoWindow(&show_gui);
 		}
 		ImGui::Render();
 		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
