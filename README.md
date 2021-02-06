@@ -1,5 +1,9 @@
 # GB - GameBoy Emulator
 
+TODO:
+http://gameboy.mongenel.com/dmg/opcodes.html
+https://cturt.github.io/cinoop.html
+
 GB is a simple GameBoy emulator for Windows written in C11.
 
 The emulator itself, `gb.h` and `gb.c`, is in pure C11 while all surrounding glue, UI, windowing code is in C-like C++ (this is because ImGui does not compile in C mode).

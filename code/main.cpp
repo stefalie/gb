@@ -13,6 +13,7 @@
 // #define SDL_MAIN_HANDLED
 #include <assert.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
@@ -68,6 +69,33 @@ struct GuiState
 	int save_slot = 1;
 };
 
+struct Rom
+{
+	uint8_t* data;
+	int size;
+};
+
+static Rom
+LoadRomFromFile(const char* file_path)
+{
+	Rom result = {};
+
+	FILE* file;
+	errno_t err = fopen_s(&file, file_path, "rb");
+	if (err == 0)
+	{
+		fseek(file, 0, SEEK_END);
+		result.size = ftell(file);
+		fseek(file, 0, SEEK_SET);
+
+		result.data = (uint8_t*)malloc(result.size);
+		fread(result.data, result.size, 1, file);
+		fclose(file);
+	}
+
+	return result;
+}
+
 static void
 GuiDraw(GuiState* gui_state)
 {
@@ -91,6 +119,10 @@ GuiDraw(GuiState* gui_state)
 				{
 					SDL_Log("Selected ROM: %s\n", ofn.lpstrFile);
 				}
+
+				// TODO: load binary (could fail)
+				// TODO: Reset gb
+				// TODO: Make static functions Open ROM, reset, maybe stop?
 			}
 			ImGui::MenuItem("Close", NULL, false, gui_state->has_active_rom);
 			ImGui::Separator();

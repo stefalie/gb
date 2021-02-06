@@ -21,6 +21,15 @@ typedef struct
 void
 GB_Init(GB_GameBoy* gb);
 
+typedef struct GB_FrameBuffer
+{
+	uint16_t width;
+	uint16_t height;
+	const uint8_t* pixels;
+} GB_FrameBuffer;
+
+GB_FrameBuffer GB_GetFrameBuffer(const GB_GameBoy* gb/* GB_MagFilter mag_filter*/);
+
 typedef struct
 {
 	uint8_t r, g, b;
