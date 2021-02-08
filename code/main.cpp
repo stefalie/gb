@@ -1,5 +1,6 @@
 // Copyright (C) 2021 Stefan Lienhard
 
+#define _CRT_SECURE_NO_WARNINGS
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -62,12 +63,105 @@ EnableHighDpiAwareness()
 	}
 }
 
-struct GuiState
+struct IniFile
 {
-	bool show_gui = true;
-	bool has_active_rom = false;
-	int save_slot = 1;
+	// TODO: If the opendialog initialDir actually persist between reboots, then we can remove
+	// this option and set 'lpstrInitialDir' to NULL. And that then raises the question if we even need the ini loading
+	// code. Meh :-(
+	char last_opened_path[1024];
+	int mag_filter;
+	int screen_size;
 };
+
+// TODO(stefalie): Consider trimming whitespace off key and value.
+// TODO(stefalie): This doesn't deal with escaped special characters.
+static IniFile
+IniFileLoadOrInit(const char* ini_path)
+{
+	IniFile result = {};
+	// TODO
+	SDL_Log("pref path: %s\n", ini_path);
+
+	FILE* file = fopen(ini_path, "r");
+	if (file)
+	{
+		char tmp[1024];
+		while (true)
+		{
+			char* line = fgets(tmp, 1024, file);
+			if (!line)
+			{
+				break;
+			}
+
+			char* comment = strchr(line, '#');
+			if (comment)
+			{
+				*comment = '\0';
+			}
+
+			char* header = strchr(line, '[');
+			if (header)
+			{
+				continue;
+			}
+
+			char* key = strtok(line, "=");
+			if (!key || (strlen(key) == 0))
+			{
+				SDL_LogWarn(
+						SDL_LOG_CATEGORY_APPLICATION, "Warning: no/invalid key on line '%s' in config.ini.\n", line);
+				continue;
+			}
+
+			char* val = strtok(NULL, "\n");
+			if (!val || (strlen(val) == 0))
+			{
+				continue;
+			}
+
+			if (!strcmp(key, "last_opened_path"))
+			{
+				strcpy(result.last_opened_path, val);
+			}
+			else if (!strcmp(key, "mag_filter"))
+			{
+				// TODO: List options.
+				result.mag_filter = atoi(val);
+			}
+			else if (!strcmp(key, "screen_size"))
+			{
+				// TODO
+			}
+			else
+			{
+				SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Warning: unknown key '%s' in config.ini.\n", key);
+			}
+		}
+	}
+	else
+	{
+		// TODO: Set default values.
+		// result.mag_filter = ...;
+	}
+
+	return result;
+}
+
+static void
+IniFileSave(const char* ini_path, const IniFile* ini)
+{
+	FILE* file = fopen(ini_path, "w");
+	assert(file);
+	if (file)
+	{
+		fprintf(file, "[General]\n");
+		fprintf(file, "last_opened_path=%s\n", ini->last_opened_path);
+		fprintf(file, "mag_filter=%i\n", ini->mag_filter);
+		fprintf(file, "screen_size=%i\n", ini->screen_size);
+		fclose(file);
+	}
+}
 
 struct Rom
 {
@@ -75,14 +169,28 @@ struct Rom
 	int size;
 };
 
+struct Config
+{
+	char* save_path;
+	IniFile ini;
+
+	Rom rom;
+
+	struct Gui
+	{
+		bool show_gui = true;
+		bool has_active_rom = false;
+		int save_slot = 1;
+	} gui;
+};
+
 static Rom
 LoadRomFromFile(const char* file_path)
 {
 	Rom result = {};
 
-	FILE* file;
-	errno_t err = fopen_s(&file, file_path, "rb");
-	if (err == 0)
+	FILE* file = fopen(file_path, "rb");
+	if (file)
 	{
 		fseek(file, 0, SEEK_END);
 		result.size = ftell(file);
@@ -97,7 +205,7 @@ LoadRomFromFile(const char* file_path)
 }
 
 static void
-GuiDraw(GuiState* gui_state)
+GuiDraw(Config* config, GB_GameBoy* gb)
 {
 	if (ImGui::BeginMainMenuBar())
 	{
@@ -112,39 +220,52 @@ GuiDraw(GuiState* gui_state)
 				ofn.lpstrFilter = "GameBoy (*.gb)\0*.gb\0All (*.*)\0*.*\0";
 				ofn.lpstrFile = file_path;
 				ofn.nMaxFile = sizeof(file_path);
-				ofn.lpstrInitialDir = NULL;  // TODO keep that in your settings
+				ofn.lpstrInitialDir = NULL;
 				ofn.lpstrTitle = "Open GameBoy ROM";
 				ofn.Flags = OFN_FILEMUSTEXIST;
 				if (GetOpenFileNameA(&ofn))
 				{
 					SDL_Log("Selected ROM: %s\n", ofn.lpstrFile);
-				}
 
-				// TODO: load binary (could fail)
-				// TODO: Reset gb
-				// TODO: Make static functions Open ROM, reset, maybe stop?
+					Rom rom = LoadRomFromFile(ofn.lpstrFile);
+					if (rom.data)
+					{
+						if (config->rom.data)
+						{
+							free(config->rom.data);
+						}
+						config->rom = rom;
+						GB_LoadRom(gb, config->rom.data);
+						GB_Reset(gb);
+					}
+					else
+					{
+						// TODO: Show error overlay instead.
+						SDL_LogCritical(SDL_LOG_CATEGORY_ERROR, "ERROR: Couldn't load ROM '%s'.\n", ofn.lpstrFile);
+					}
+				}
 			}
-			ImGui::MenuItem("Close", NULL, false, gui_state->has_active_rom);
+			ImGui::MenuItem("Close", NULL, false, config->gui.has_active_rom);
 			ImGui::Separator();
 			ImGui::MenuItem("Exit");
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("System"))
 		{
-			ImGui::MenuItem("Reset", NULL, false, gui_state->has_active_rom);
-			ImGui::MenuItem("Pause", "Ctrl+P", false, gui_state->has_active_rom);
+			ImGui::MenuItem("Reset", NULL, false, config->gui.has_active_rom);
+			ImGui::MenuItem("Pause", "Ctrl+P", false, config->gui.has_active_rom);
 			ImGui::Separator();
-			ImGui::MenuItem("Save", "F5", false, gui_state->has_active_rom);
-			ImGui::MenuItem("Load", "F7", false, gui_state->has_active_rom);
+			ImGui::MenuItem("Save", "F5", false, config->gui.has_active_rom);
+			ImGui::MenuItem("Load", "F7", false, config->gui.has_active_rom);
 			if (ImGui::BeginMenu("Save Slot"))
 			{
 				char slot_name[7] = { 'S', 'l', 'o', 't', ' ', 'X', '\0' };
 				for (int i = 1; i <= 5; ++i)
 				{
 					slot_name[5] = '0' + (char)i;
-					if (ImGui::MenuItem(slot_name, NULL, gui_state->save_slot == i))
+					if (ImGui::MenuItem(slot_name, NULL, config->gui.save_slot == i))
 					{
-						gui_state->save_slot = i;
+						config->gui.save_slot = i;
 					}
 				}
 				ImGui::EndMenu();
@@ -211,9 +332,6 @@ main(int argc, char* argv[])
 		exit(1);
 	}
 
-	const char* pref_path = SDL_GetPrefPath(NULL, "gb");
-	SDL_Log("pref path: %s\n", pref_path);
-
 	float ddpi, hdpi, vdpi;
 	SDL_GetDisplayDPI(0, &ddpi, &hdpi, &vdpi);
 	(void)hdpi;
@@ -250,7 +368,6 @@ main(int argc, char* argv[])
 	ImGui_ImplOpenGL2_Init();
 	ImGui::StyleColorsClassic();
 	ImGui::GetStyle().FrameRounding = 4.0f;
-	GuiState gui_state;
 	// TODO(stefalie): This should be true when no ROM is loaded or if the game is paused
 	// or if the mouse has been moved no longer than 2-3 s ago.
 
@@ -269,6 +386,18 @@ main(int argc, char* argv[])
 	// Use pixel-perfect window 1x, 2x, 3x, 4x
 	// Linear interpolate for fullscreen.
 	uint32_t texture_update_buffer[320 * 240];
+
+	Config config = {};
+	config.save_path = SDL_GetPrefPath(NULL, "gb");
+
+	// Load ini
+	const char* ini_name = "config.ini";
+	const size_t ini_path_len = strlen(config.save_path) + strlen(ini_name);
+	char* ini_path = (char*)malloc(ini_path_len + 1);
+	strcpy(ini_path, config.save_path);
+	strcat(ini_path, ini_name);
+	ini_path[ini_path_len] = '\0';
+	config.ini = IniFileLoadOrInit(ini_path);
 
 	GB_GameBoy gb = {};
 	GB_Init(&gb);
@@ -340,9 +469,9 @@ main(int argc, char* argv[])
 		ImGui_ImplOpenGL2_NewFrame();
 		ImGui_ImplSDL2_NewFrame(window);
 		ImGui::NewFrame();
-		if (gui_state.show_gui)
+		if (config.gui.show_gui)
 		{
-			GuiDraw(&gui_state);
+			GuiDraw(&config, &gb);
 			// ImGui::ShowDemoWindow(&show_gui);
 		}
 		ImGui::Render();
@@ -359,6 +488,17 @@ main(int argc, char* argv[])
 	ImGui_ImplOpenGL2_Shutdown();
 	ImGui_ImplSDL2_Shutdown();
 	ImGui::DestroyContext();
+
+	// Save ini
+	IniFileSave(ini_path, &config.ini);
+
+	// Cleanup
+	if (config.rom.data)
+	{
+		free(config.rom.data);
+	}
+	free(ini_path);
+	SDL_free(config.save_path);
 
 	SDL_GL_DeleteContext(gl_context);
 	SDL_DestroyWindow(window);

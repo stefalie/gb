@@ -7,7 +7,23 @@ void
 GB_Init(GB_GameBoy* gb)
 {
 	(void)gb;
-	printf("Hello GB!\n");
+	printf("GB Init!\n");
+}
+
+void
+GB_Reset(GB_GameBoy* gb)
+{
+	(void)gb;
+	printf("GB Reset!\n");
+}
+
+bool
+GB_LoadRom(GB_GameBoy* gb, const uint8_t* rom)
+{
+	(void)gb;
+	(void)rom;
+	printf("GB Load ROM!\n");
+	return false;
 }
 
 // Dummy image to test image mag filters.

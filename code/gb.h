@@ -3,6 +3,7 @@
 // TODO: insert cmd to compile this -c -std=c11 /c /std:c11
 
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef struct
 {
@@ -20,6 +21,12 @@ typedef struct
 
 void
 GB_Init(GB_GameBoy* gb);
+
+void
+GB_Reset(GB_GameBoy* gb);
+
+bool
+GB_LoadRom(GB_GameBoy* gb, const uint8_t* rom);
 
 typedef struct GB_FrameBuffer
 {
