@@ -1,5 +1,9 @@
 // Copyright (C) 2021 Stefan Lienhard
 
+// TODO:
+// - Reset control in GUI.
+// - UI timeout
+
 #define _CRT_SECURE_NO_WARNINGS
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
@@ -63,24 +67,79 @@ EnableHighDpiAwareness()
 	}
 }
 
-struct IniFile
+struct Ini
 {
 	// TODO: If the opendialog initialDir actually persist between reboots, then we can remove
 	// this option and set 'lpstrInitialDir' to NULL. And that then raises the question if we even need the ini loading
 	// code. Meh :-(
-	char last_opened_path[1024];
-	int mag_filter;
-	int screen_size;
+	char last_opened_path[1024] = {};
+	int mag_filter = 0;
+	int screen_size = 0;
+
+	struct Keys
+	{
+		SDL_Keycode a = SDLK_x;
+		SDL_Keycode b = SDLK_z;
+		SDL_Keycode start = SDLK_RETURN;
+		SDL_Keycode select = SDLK_BACKSPACE;
+		SDL_Keycode left = SDLK_LEFT;
+		SDL_Keycode right = SDLK_RIGHT;
+		SDL_Keycode up = SDLK_UP;
+		SDL_Keycode down = SDLK_DOWN;
+	} keys;
+
+	struct Controller
+	{
+		SDL_GameControllerButton a = SDL_CONTROLLER_BUTTON_B;
+		SDL_GameControllerButton b = SDL_CONTROLLER_BUTTON_A;
+		SDL_GameControllerButton start = SDL_CONTROLLER_BUTTON_START;
+		SDL_GameControllerButton select = SDL_CONTROLLER_BUTTON_BACK;
+
+		// The axes are currently not customizable (and also not read/written from/into the .ini file).
+		// But would you really want to map to something else than the right stick?
+		// TODO(stefalie): Deal with this.
+		SDL_GameControllerAxis axis_x = SDL_CONTROLLER_AXIS_LEFTX;
+		SDL_GameControllerAxis axis_y = SDL_CONTROLLER_AXIS_LEFTY;
+	} controller;
 };
+
+// TODO: I don't like these 2 functions, can they be merged into a key/value parser which is taken out of the ini
+// parser.
+static void
+IniLoadKeyboardKeyOrComplain(const char* val, SDL_Keycode* key)
+{
+	const SDL_Keycode ini_key = SDL_GetKeyFromName(val);
+	if (ini_key != SDLK_UNKNOWN)
+	{
+		*key = ini_key;
+	}
+	else
+	{
+		SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Warning: unknown keyboard key '%s' in config.ini.\n", val);
+	}
+}
+
+static void
+IniLoadButtonComplain(const char* val, SDL_GameControllerButton* button)
+{
+	const SDL_GameControllerButton ini_button = SDL_GameControllerGetButtonFromString(val);
+	if (ini_button != SDL_CONTROLLER_BUTTON_INVALID)
+	{
+		*button = ini_button;
+	}
+	else
+	{
+		SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Warning: unknown controller button '%s' in config.ini.\n", val);
+	}
+}
 
 // TODO(stefalie): Consider trimming whitespace off key and value.
 // TODO(stefalie): This doesn't deal with escaped special characters.
-static IniFile
-IniFileLoadOrInit(const char* ini_path)
+static Ini
+IniLoadOrInit(const char* ini_path)
 {
-	IniFile result = {};
-	// TODO
-	SDL_Log("pref path: %s\n", ini_path);
+	SDL_Log("pref path: %s\n", ini_path);  // TODO
+	Ini result;
 
 	FILE* file = fopen(ini_path, "r");
 	if (file)
@@ -133,23 +192,66 @@ IniFileLoadOrInit(const char* ini_path)
 			{
 				// TODO
 			}
+			else if (!strcmp(key, "key_a"))
+			{
+				IniLoadKeyboardKeyOrComplain(val, &result.keys.a);
+			}
+			else if (!strcmp(key, "key_b"))
+			{
+				IniLoadKeyboardKeyOrComplain(val, &result.keys.b);
+			}
+			else if (!strcmp(key, "key_start"))
+			{
+				IniLoadKeyboardKeyOrComplain(val, &result.keys.start);
+			}
+			else if (!strcmp(key, "key_select"))
+			{
+				IniLoadKeyboardKeyOrComplain(val, &result.keys.select);
+			}
+			else if (!strcmp(key, "key_left"))
+			{
+				IniLoadKeyboardKeyOrComplain(val, &result.keys.left);
+			}
+			else if (!strcmp(key, "key_right"))
+			{
+				IniLoadKeyboardKeyOrComplain(val, &result.keys.right);
+			}
+			else if (!strcmp(key, "key_up"))
+			{
+				IniLoadKeyboardKeyOrComplain(val, &result.keys.up);
+			}
+			else if (!strcmp(key, "key_down"))
+			{
+				IniLoadKeyboardKeyOrComplain(val, &result.keys.down);
+			}
+			else if (!strcmp(key, "controller_a"))
+			{
+				IniLoadButtonComplain(val, &result.controller.a);
+			}
+			else if (!strcmp(key, "controller_b"))
+			{
+				IniLoadButtonComplain(val, &result.controller.b);
+			}
+			else if (!strcmp(key, "controller_start"))
+			{
+				IniLoadButtonComplain(val, &result.controller.start);
+			}
+			else if (!strcmp(key, "controller_select"))
+			{
+				IniLoadButtonComplain(val, &result.controller.select);
+			}
 			else
 			{
 				SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Warning: unknown key '%s' in config.ini.\n", key);
 			}
 		}
 	}
-	else
-	{
-		// TODO: Set default values.
-		// result.mag_filter = ...;
-	}
 
 	return result;
 }
 
 static void
-IniFileSave(const char* ini_path, const IniFile* ini)
+IniSave(const char* ini_path, const Ini* ini)
 {
 	FILE* file = fopen(ini_path, "w");
 	assert(file);
@@ -159,20 +261,34 @@ IniFileSave(const char* ini_path, const IniFile* ini)
 		fprintf(file, "last_opened_path=%s\n", ini->last_opened_path);
 		fprintf(file, "mag_filter=%i\n", ini->mag_filter);
 		fprintf(file, "screen_size=%i\n", ini->screen_size);
+		fprintf(file, "[Input]\n");
+		fprintf(file, "key_a=%s\n", SDL_GetKeyName(ini->keys.a));
+		fprintf(file, "key_b=%s\n", SDL_GetKeyName(ini->keys.b));
+		fprintf(file, "key_select=%s\n", SDL_GetKeyName(ini->keys.select));
+		fprintf(file, "key_start=%s\n", SDL_GetKeyName(ini->keys.start));
+		fprintf(file, "key_left=%s\n", SDL_GetKeyName(ini->keys.left));
+		fprintf(file, "key_right=%s\n", SDL_GetKeyName(ini->keys.right));
+		fprintf(file, "key_up=%s\n", SDL_GetKeyName(ini->keys.up));
+		fprintf(file, "key_down=%s\n", SDL_GetKeyName(ini->keys.down));
+		fprintf(file, "controller_a=%s\n", SDL_GameControllerGetStringForButton(ini->controller.a));
+		fprintf(file, "controller_b=%s\n", SDL_GameControllerGetStringForButton(ini->controller.b));
+		fprintf(file, "controller_select=%s\n", SDL_GameControllerGetStringForButton(ini->controller.select));
+		fprintf(file, "controller_start=%s\n", SDL_GameControllerGetStringForButton(ini->controller.start));
 		fclose(file);
 	}
 }
 
 struct Rom
 {
-	uint8_t* data;
-	int size;
+	// TODO
+	uint8_t* data = 0;
+	int size = 0;
 };
 
 struct Config
 {
-	char* save_path;
-	IniFile ini;
+	char* save_path = NULL;
+	Ini ini;
 
 	Rom rom;
 
@@ -187,7 +303,7 @@ struct Config
 static Rom
 LoadRomFromFile(const char* file_path)
 {
-	Rom result = {};
+	Rom result;
 
 	FILE* file = fopen(file_path, "rb");
 	if (file)
@@ -353,8 +469,10 @@ main(int argc, char* argv[])
 	}
 
 	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-	// SDL_GL_MakeCurrent(window, gl_context);  // Not necessary.
+	// SDL_GL_MakeCurrent(window, gl_context);  // Not necessary. TODO
 	SDL_GL_SetSwapInterval(1);  // Enable V-sync
+
+	SDL_GameController* controller = NULL;
 
 	// Setup ImGui:
 	ImGui::CreateContext();
@@ -387,7 +505,7 @@ main(int argc, char* argv[])
 	// Linear interpolate for fullscreen.
 	uint32_t texture_update_buffer[320 * 240];
 
-	Config config = {};
+	Config config;
 	config.save_path = SDL_GetPrefPath(NULL, "gb");
 
 	// Load ini
@@ -397,10 +515,28 @@ main(int argc, char* argv[])
 	strcpy(ini_path, config.save_path);
 	strcat(ini_path, ini_name);
 	ini_path[ini_path_len] = '\0';
-	config.ini = IniFileLoadOrInit(ini_path);
+	config.ini = IniLoadOrInit(ini_path);
 
 	GB_GameBoy gb = {};
 	GB_Init(&gb);
+
+
+	// SDL_GameController* controller = NULL;
+	// for (int i = 0; i < SDL_NumJoysticks(); ++i)
+	//{
+	//	if (SDL_IsGameController(i))
+	//	{
+	//		controller = SDL_GameControllerOpen(i);
+	//		if (controller)
+	//		{
+	//			break;
+	//		}
+	//		else
+	//		{
+	//			fprintf(stderr, "Could not open gamecontroller %i: %s\n", i, SDL_GetError());
+	//		}
+	//	}
+	//}
 
 	// Main Loop
 	bool quit = false;
@@ -409,24 +545,97 @@ main(int argc, char* argv[])
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
 		{
+			SDL_Log("Event: %x\n", event.type);
 			ImGui_ImplSDL2_ProcessEvent(&event);
 			switch (event.type)
 			{
 			case SDL_QUIT:
 				quit = true;
 				break;
+			case SDL_CONTROLLERDEVICEADDED:
+				// TODO(stefalie): This allows only for 1 controller, the user should be able to chose.
+				if (!controller)
+				{
+					controller = SDL_GameControllerOpen(event.cdevice.which);
+				}
+				break;
+			case SDL_CONTROLLERDEVICEREMOVED:
+				assert(controller);
+				SDL_GameControllerClose(controller);
+				controller = NULL;
+				break;
+			case SDL_CONTROLLERBUTTONDOWN:
+				if (event.cbutton.button == config.ini.controller.a)
+				{
+					SDL_Log("Pressed button 'A'.\n");
+				}
+				else if (event.cbutton.button == config.ini.controller.b)
+				{
+					SDL_Log("Pressed button 'B'.\n");
+				}
+				else if (event.cbutton.button == config.ini.controller.start)
+				{
+					SDL_Log("Pressed button 'Start'.\n");
+				}
+				else if (event.cbutton.button == config.ini.controller.select)
+				{
+					SDL_Log("Pressed button 'Select'.\n");
+				}
+				break;
+			case SDL_CONTROLLERBUTTONUP:
+				// TODO:
+				break;
+			case SDL_CONTROLLERAXISMOTION:
+				if (event.cbutton.button == config.ini.controller.axis_x)
+				{
+					SDL_Log("Moved 'X-axis' by %i\n", event.caxis.value);
+				}
+				else if (event.cbutton.button == config.ini.controller.axis_y)
+				{
+					SDL_Log("Moved 'Y-axis' by %i\n", event.caxis.value);
+				}
+				break;
 			case SDL_KEYDOWN:
 				if (event.key.keysym.sym == SDLK_ESCAPE)
 				{
 					quit = true;
 				}
-				break;
+				else if (event.key.keysym.sym == config.ini.keys.a)
+				{
+					SDL_Log("Pressed key 'A'.\n");
+				}
+				else if (event.key.keysym.sym == config.ini.keys.b)
+				{
+					SDL_Log("Pressed key 'B'.\n");
+				}
+				else if (event.key.keysym.sym == config.ini.keys.start)
+				{
+					SDL_Log("Pressed key 'Start'.\n");
+				}
+				else if (event.key.keysym.sym == config.ini.keys.select)
+				{
+					SDL_Log("Pressed key 'Select'.\n");
+				}
+				else if (event.key.keysym.sym == config.ini.keys.left)
+				{
+					SDL_Log("Pressed key 'Left'.\n");
+				}
+				else if (event.key.keysym.sym == config.ini.keys.right)
+				{
+					SDL_Log("Pressed key 'Right'.\n");
+				}
+				else if (event.key.keysym.sym == config.ini.keys.up)
+				{
+					SDL_Log("Pressed key 'Up'.\n");
+				}
+				else if (event.key.keysym.sym == config.ini.keys.down)
+				{
+					SDL_Log("Pressed key 'Down'.\n");
+				}
 			case SDL_MOUSEMOTION:
 				// TODO: Show menu for a few secs if game is running. If not running, always show menu.
 				break;
 			case SDL_MOUSEBUTTONDOWN:
-				break;
-			case SDL_MOUSEBUTTONUP:
 				break;
 			}
 		}
@@ -490,7 +699,7 @@ main(int argc, char* argv[])
 	ImGui::DestroyContext();
 
 	// Save ini
-	IniFileSave(ini_path, &config.ini);
+	IniSave(ini_path, &config.ini);
 
 	// Cleanup
 	if (config.rom.data)
@@ -500,6 +709,10 @@ main(int argc, char* argv[])
 	free(ini_path);
 	SDL_free(config.save_path);
 
+	if (controller)
+	{
+		SDL_GameControllerClose(controller);
+	}
 	SDL_GL_DeleteContext(gl_context);
 	SDL_DestroyWindow(window);
 	SDL_Quit();

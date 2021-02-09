@@ -58,7 +58,7 @@ if "%1" == "Clang" (
 
     rem -fuse-ld=lld Use clang lld linker instead of msvc link.
     rem /SUBSYSTEM:console warns about both main and wmain being present.
-    set LinkerFlags=-fuse-ld=lld -Xlinker /INCREMENTAL:NO -Xlinker /OPT:REF -Xlinker /SUBSYSTEM:windows -lShell32 -lOpenGL32 -Comdlg32 %SdlLibs%
+    set LinkerFlags=-fuse-ld=lld -Xlinker /INCREMENTAL:NO -Xlinker /OPT:REF -Xlinker /SUBSYSTEM:windows -lShell32 -lOpenGL32 -lComdlg32 %SdlLibs%
 
     if "%2" == "Rel" (
         set OptFlags=-DNDEBUG -O3 -Wno-unused-function
