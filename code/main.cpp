@@ -493,7 +493,8 @@ main(int argc, char* argv[])
 	GLuint texture;
 	glGenTextures(1, &texture);
 	glBindTexture(GL_TEXTURE_2D, texture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 320, 240, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 320, 240, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+	glTexImage2D(GL_TEXTURE_2D, 0, 1, 160, 144, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);  // Is already default.
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -504,6 +505,7 @@ main(int argc, char* argv[])
 	// Use pixel-perfect window 1x, 2x, 3x, 4x
 	// Linear interpolate for fullscreen.
 	uint32_t texture_update_buffer[320 * 240];
+	uint8_t texture_update_buffer2[160 * 144];
 
 	Config config;
 	config.save_path = SDL_GetPrefPath(NULL, "gb");
@@ -649,9 +651,21 @@ main(int argc, char* argv[])
 				texture_update_buffer[i * 320 + j] = i * i + j * j + tick;
 			}
 		}
+
+		for (int i = 0; i < 144; i++)
+		{
+			for (int j = 0; j < 160; j++)
+			{
+				texture_update_buffer2[i * 160 + j] = (uint8_t)(i + j);
+			}
+		}
 		// NOTE: While the binary layout between SDL and OpenGL is actually
 		// the same, SDL uses SDL_PIXELFORMAT_RGB888 and OpenGL GL_BGR(A).
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 320, 240, GL_BGRA, GL_UNSIGNED_BYTE, texture_update_buffer);
+		//glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 320, 240, GL_BGRA, GL_UNSIGNED_BYTE, texture_update_buffer);
+		const GB_FrameBuffer fb = GB_GetFrameBuffer(&gb);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 160, 144, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
+		//glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 160, 144, GL_RED, GL_UNSIGNED_BYTE, texture_update_buffer2);
+
 
 		// Ideally we could mix SDL_Renderer* with pure OpenGL calls, but that seems
 		// to be tricker than it should be.
