@@ -3,6 +3,9 @@
 // TODO:
 // - Reset control in GUI.
 // - UI timeout
+// - ESC should be pause
+// - make input handle function seperate.
+// - make lambdas out of the OrComplainFunctions
 
 #define _CRT_SECURE_NO_WARNINGS
 #define NOMINMAX
@@ -120,7 +123,7 @@ IniLoadKeyboardKeyOrComplain(const char* val, SDL_Keycode* key)
 }
 
 static void
-IniLoadButtonComplain(const char* val, SDL_GameControllerButton* button)
+IniLoadButtonOrComplain(const char* val, SDL_GameControllerButton* button)
 {
 	const SDL_GameControllerButton ini_button = SDL_GameControllerGetButtonFromString(val);
 	if (ini_button != SDL_CONTROLLER_BUTTON_INVALID)
@@ -226,19 +229,19 @@ IniLoadOrInit(const char* ini_path)
 			}
 			else if (!strcmp(key, "controller_a"))
 			{
-				IniLoadButtonComplain(val, &result.controller.a);
+				IniLoadButtonOrComplain(val, &result.controller.a);
 			}
 			else if (!strcmp(key, "controller_b"))
 			{
-				IniLoadButtonComplain(val, &result.controller.b);
+				IniLoadButtonOrComplain(val, &result.controller.b);
 			}
 			else if (!strcmp(key, "controller_start"))
 			{
-				IniLoadButtonComplain(val, &result.controller.start);
+				IniLoadButtonOrComplain(val, &result.controller.start);
 			}
 			else if (!strcmp(key, "controller_select"))
 			{
-				IniLoadButtonComplain(val, &result.controller.select);
+				IniLoadButtonOrComplain(val, &result.controller.select);
 			}
 			else
 			{
