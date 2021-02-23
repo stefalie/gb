@@ -6,16 +6,19 @@
 // - ESC should be pause
 // - make input handle function seperate.
 // - make lambdas out of the OrComplainFunctions
+// - deal with pause state, you might also need the previous state (if you press esc and don't quit, you want to be back
+//   in the state you were at before pressing esc).
 
 #define _CRT_SECURE_NO_WARNINGS
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#include <shellapi.h>  // For opening the website
 #pragma warning(push)
 #pragma warning(disable : 5105)
-#include <ShellScalingAPI.h>
+#include <ShellScalingAPI.h>  // For DPI scaling
 #pragma warning(pop)
-#include <commdlg.h>
+#include <commdlg.h>  // For file open dialog
 
 // See note about SDL_MAIN_HANDLED in build_win_x64.bat
 // #define SDL_MAIN_HANDLED
@@ -308,7 +311,11 @@ struct Config
 	struct Gui
 	{
 		bool show_gui = true;
+
+		bool pressed_escape = false;
 		bool show_quit_popup = false;
+		bool show_about_popup = false;
+
 		bool has_active_rom = false;
 		int save_slot = 1;
 	} gui;
@@ -434,23 +441,78 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 			}
 			ImGui::EndMenu();
 		}
+		if (ImGui::BeginMenu("Debug"))
+		{
+			ImGui::MenuItem("Open Debugger", NULL, false);
+			ImGui::MenuItem("Step", "F10");
+			ImGui::EndMenu();
+		}
 		if (ImGui::BeginMenu("Help"))
 		{
-			ImGui::MenuItem("Website");
-			// TODO: https://discourse.libsdl.org/t/does-sdl2-have-function-to-open-url-in-browser/22730/2
-			// TODO: Do some overlay, check the demo
-			ImGui::MenuItem("About");
+			if (ImGui::MenuItem("Website"))
+			{
+				// https://discourse.libsdl.org/t/does-sdl2-have-function-to-open-url-in-browser/22730/3
+				ShellExecute(NULL, "open", "https://github.com/stefalie/gb", NULL, NULL, SW_SHOWNORMAL);
+			}
+			if (ImGui::MenuItem("About"))
+			{
+				config->gui.show_about_popup = true;
+			}
 			ImGui::EndMenu();
 		}
 	}
 	ImGui::EndMainMenuBar();
 
-	// Exit popup
+	// The current (if any) popup will be closed if ESC is hit or the window
+	// is closed. This is applies for all popups except the quit popup.
+	const bool close_current_popup = config->gui.pressed_escape || config->gui.show_quit_popup;
+
+	// Use the hit ESC key only to close the quit popup only if it wasn't used
+	// to close another popup.
+	const bool any_open_popups_except_quit = config->gui.show_about_popup/* || ...*/;
+	const bool esc_for_quit_popup = config->gui.pressed_escape && !any_open_popups_except_quit;
+	const bool close_quit_popup = config->gui.show_quit_popup && esc_for_quit_popup;
+	if (esc_for_quit_popup)
+	{
+		// Activate quit popup if no active already.
+		config->gui.show_quit_popup = true;
+	}
+
+	// Reset ESC.
+	config->gui.pressed_escape = false;
+
+	// TODO(stefalie): Is this really the best/only way to handle popups?
+
+	const ImGuiWindowFlags popup_flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+
+	// About popup
+	if (config->gui.show_about_popup)
+	{
+		ImGui::OpenPopup("About GB");
+	}
+	if (ImGui::BeginPopupModal("About GB", NULL, popup_flags))
+	{
+		ImGui::Text("GB");
+		ImGui::Separator();
+		ImGui::Text(
+				"GB is a simple GameBoy emulator\n"
+				"and debugger for Windows created\n"
+				"by Stefan Lienhard in 2021.");
+		ImGui::Text("https://github.com/stefalie/gb");
+		if (ImGui::Button("Cancel") || close_current_popup)
+		{
+			config->gui.show_about_popup = false;
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+
+	// Quit popup
 	if (config->gui.show_quit_popup)
 	{
 		ImGui::OpenPopup("Exit?");
 	}
-	if (ImGui::BeginPopupModal("Exit?", &config->gui.show_quit_popup))
+	if (ImGui::BeginPopupModal("Exit?", NULL, popup_flags))
 	{
 		ImGui::Text("Do you really want to quit GB?");
 		if (ImGui::Button("Exit"))
@@ -459,7 +521,7 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Cancel"))
+		if (ImGui::Button("Cancel") || close_quit_popup)
 		{
 			config->gui.show_quit_popup = false;
 			ImGui::CloseCurrentPopup();
@@ -591,7 +653,6 @@ main(int argc, char* argv[])
 			{
 			case SDL_QUIT:
 				config.gui.show_quit_popup = true;
-				// quit = true;
 				break;
 			case SDL_CONTROLLERDEVICEADDED:
 				// TODO(stefalie): This allows only for 1 controller, the user should be able to chose.
@@ -639,7 +700,7 @@ main(int argc, char* argv[])
 			case SDL_KEYDOWN:
 				if (event.key.keysym.sym == SDLK_ESCAPE)
 				{
-					config.gui.show_quit_popup = !config.gui.show_quit_popup;
+					config.gui.pressed_escape = true;
 				}
 				else if (event.key.keysym.sym == config.ini.keys.a)
 				{
@@ -735,7 +796,10 @@ main(int argc, char* argv[])
 		{
 			GuiDraw(&config, &gb);
 			static bool show_demo = true;
-			ImGui::ShowDemoWindow(&show_demo);
+			if (show_demo)
+			{
+				ImGui::ShowDemoWindow(&show_demo);
+			}
 		}
 		ImGui::Render();
 		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
