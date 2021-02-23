@@ -34,7 +34,7 @@ Execute `build_win_x64.bat Clang All Rel`.
 
 ### Visual Studio
 
-Call `shell_msvc.bat` to setup the development environment (you might have to open it and adjust the path to `vcvarsall.bat` on your system), then execute `build_win_x64.bat Msvc All Rel`.
+Call `shell_msvc.bat` to setup the development environment (you might have to open it and adjust the path to `vcvarsall.bat` on your system depending on the Visual Studio version), then execute `build_win_x64.bat Msvc All Rel`.
 
 ### Development & Debugging
 

@@ -98,8 +98,8 @@ struct Ini
 		SDL_GameControllerButton start = SDL_CONTROLLER_BUTTON_START;
 		SDL_GameControllerButton select = SDL_CONTROLLER_BUTTON_BACK;
 
-		// The axes are currently not customizable (and also not read/written from/into the .ini file).
-		// But would you really want to map to something else than the right stick?
+		// The axes are currently not customizable (and also not read/written from/to the .ini file).
+		// But would you really want to map them to something else than the right stick?
 		// TODO(stefalie): Deal with this.
 		SDL_GameControllerAxis axis_x = SDL_CONTROLLER_AXIS_LEFTX;
 		SDL_GameControllerAxis axis_y = SDL_CONTROLLER_AXIS_LEFTY;
@@ -288,16 +288,27 @@ struct Rom
 	int size = 0;
 };
 
+enum State
+{
+	STATE_EMPTY,
+	STATE_RUNNING,
+	STATE_PAUSED,
+};
+
 struct Config
 {
 	char* save_path = NULL;
 	Ini ini;
 
 	Rom rom;
+	State state;
+
+	bool quit = false;
 
 	struct Gui
 	{
 		bool show_gui = true;
+		bool show_quit_popup = false;
 		bool has_active_rom = false;
 		int save_slot = 1;
 	} gui;
@@ -366,7 +377,10 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 			}
 			ImGui::MenuItem("Close", NULL, false, config->gui.has_active_rom);
 			ImGui::Separator();
-			ImGui::MenuItem("Exit");
+			if (ImGui::MenuItem("Exit", "Esc"))
+			{
+				config->gui.show_quit_popup = true;
+			}
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("System"))
@@ -430,6 +444,28 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 		}
 	}
 	ImGui::EndMainMenuBar();
+
+	// Exit popup
+	if (config->gui.show_quit_popup)
+	{
+		ImGui::OpenPopup("Exit?");
+	}
+	if (ImGui::BeginPopupModal("Exit?", &config->gui.show_quit_popup))
+	{
+		ImGui::Text("Do you really want to quit GB?");
+		if (ImGui::Button("Exit"))
+		{
+			config->quit = true;
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel"))
+		{
+			config->gui.show_quit_popup = false;
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
 }
 
 int
@@ -496,7 +532,7 @@ main(int argc, char* argv[])
 	GLuint texture;
 	glGenTextures(1, &texture);
 	glBindTexture(GL_TEXTURE_2D, texture);
-	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 320, 240, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+	// glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 320, 240, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
 	glTexImage2D(GL_TEXTURE_2D, 0, 1, 160, 144, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);  // Is already default.
@@ -544,18 +580,18 @@ main(int argc, char* argv[])
 	//}
 
 	// Main Loop
-	bool quit = false;
-	while (!quit)
+	while (!config.quit)
 	{
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
 		{
-			SDL_Log("Event: %x\n", event.type);
+			// SDL_Log("Event: %x\n", event.type);
 			ImGui_ImplSDL2_ProcessEvent(&event);
 			switch (event.type)
 			{
 			case SDL_QUIT:
-				quit = true;
+				config.gui.show_quit_popup = true;
+				// quit = true;
 				break;
 			case SDL_CONTROLLERDEVICEADDED:
 				// TODO(stefalie): This allows only for 1 controller, the user should be able to chose.
@@ -603,7 +639,7 @@ main(int argc, char* argv[])
 			case SDL_KEYDOWN:
 				if (event.key.keysym.sym == SDLK_ESCAPE)
 				{
-					quit = true;
+					config.gui.show_quit_popup = !config.gui.show_quit_popup;
 				}
 				else if (event.key.keysym.sym == config.ini.keys.a)
 				{
@@ -664,10 +700,10 @@ main(int argc, char* argv[])
 		}
 		// NOTE: While the binary layout between SDL and OpenGL is actually
 		// the same, SDL uses SDL_PIXELFORMAT_RGB888 and OpenGL GL_BGR(A).
-		//glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 320, 240, GL_BGRA, GL_UNSIGNED_BYTE, texture_update_buffer);
+		// glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 320, 240, GL_BGRA, GL_UNSIGNED_BYTE, texture_update_buffer);
 		const GB_FrameBuffer fb = GB_GetFrameBuffer(&gb);
 		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 160, 144, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
-		//glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 160, 144, GL_RED, GL_UNSIGNED_BYTE, texture_update_buffer2);
+		// glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 160, 144, GL_RED, GL_UNSIGNED_BYTE, texture_update_buffer2);
 
 
 		// Ideally we could mix SDL_Renderer* with pure OpenGL calls, but that seems
@@ -698,7 +734,8 @@ main(int argc, char* argv[])
 		if (config.gui.show_gui)
 		{
 			GuiDraw(&config, &gb);
-			// ImGui::ShowDemoWindow(&show_gui);
+			static bool show_demo = true;
+			ImGui::ShowDemoWindow(&show_demo);
 		}
 		ImGui::Render();
 		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);

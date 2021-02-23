@@ -41,8 +41,8 @@ rem If that is used, I guess one should also call SDL_SetMainReady(), see:
 rem https://wiki.libsdl.org/SDL_SetMainReady
 
 set ImguiDir=..\external\imgui
-rem A unity build is faster than listing required ImGui files.
 
+rem A unity build is faster than listing required ImGui files.
 set CodeFiles=..\code\main.cpp ..\code\gb.c ..\code\imgui_unity_build.cpp
 
 if "%1" == "Clang" (
