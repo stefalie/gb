@@ -102,7 +102,7 @@ struct Ini
 		SDL_GameControllerButton select = SDL_CONTROLLER_BUTTON_BACK;
 
 		// The axes are currently not customizable (and also not read/written from/to the .ini file).
-		// But would you really want to map them to something else than the right stick?
+		// But would you really want to map them to something else than the left stick?
 		// TODO(stefalie): Deal with this.
 		SDL_GameControllerAxis axis_x = SDL_CONTROLLER_AXIS_LEFTX;
 		SDL_GameControllerAxis axis_y = SDL_CONTROLLER_AXIS_LEFTY;
@@ -308,12 +308,18 @@ struct Config
 
 	bool quit = false;
 
+	struct ModifyInputRequest
+	{
+		bool requested = false;
+	} modify_input_request;
+
 	struct Gui
 	{
 		bool show_gui = true;
 
 		bool pressed_escape = false;
 		bool show_quit_popup = false;
+		bool show_input_config_popup = false;
 		bool show_about_popup = false;
 
 		bool has_active_rom = false;
@@ -439,6 +445,10 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 				ImGui::MenuItem("Unthrottled", NULL, false);
 				ImGui::EndMenu();
 			}
+			if (ImGui::MenuItem("Configure Input"))
+			{
+				config->gui.show_input_config_popup = true;
+			}
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Debug"))
@@ -469,7 +479,8 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 
 	// Use the hit ESC key only to close the quit popup only if it wasn't used
 	// to close another popup.
-	const bool any_open_popups_except_quit = config->gui.show_about_popup/* || ...*/;
+	const bool any_open_popups_except_quit =
+			config->gui.show_about_popup || config->gui.show_input_config_popup /* || ...*/;
 	const bool esc_for_quit_popup = config->gui.pressed_escape && !any_open_popups_except_quit;
 	const bool close_quit_popup = config->gui.show_quit_popup && esc_for_quit_popup;
 	if (esc_for_quit_popup)
@@ -484,6 +495,150 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 	// TODO(stefalie): Is this really the best/only way to handle popups?
 
 	const ImGuiWindowFlags popup_flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+
+	// Input config popup
+	if (config->gui.show_input_config_popup)
+	{
+		ImGui::OpenPopup("Configure Input");
+	}
+	if (ImGui::BeginPopupModal("Configure Input", NULL, popup_flags))
+	{
+		ImGui::Text("Click the buttons to change the input bindings.");
+		// ImGui::Columns(2);
+		// ImGui::Text("Left/Right");
+		// ImGui::NextColumn();
+		// ImGui::Text("Left Stick X-Axis");
+		// ImGui::NextColumn();
+		// ImGui::Text("Up/Down");
+		// ImGui::NextColumn();
+		// ImGui::Text("Left Stick Y-Axis");
+		// ImGui::NextColumn();
+		// ImGui::Text("A");
+		// ImGui::NextColumn();
+		// ImGui::Text("Dunno");
+		// ImGui::NextColumn();
+		// ImGui::Columns(1);
+
+
+		ImGui::Columns(3);
+		Ini* ini = &config->ini;
+		char label[64];
+
+		ImGui::Text("");
+		ImGui::NextColumn();
+		ImGui::Text("Keyboard");
+		ImGui::NextColumn();
+		ImGui::Text("Controller");
+		ImGui::NextColumn();
+
+		ImGui::Separator();
+
+		ImGui::Text("Left");
+		ImGui::NextColumn();
+		snprintf(label, 64, "%s##left_key", SDL_GetKeyName(ini->keys.left));
+		ImGui::Button(label);
+		ImGui::NextColumn();
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+		// ImGui::Button("Left X-axis");
+		snprintf(label, 64, "%s##left_button", SDL_GameControllerGetStringForAxis(ini->controller.axis_x));
+		ImGui::Button(label);
+		ImGui::PopStyleVar();
+		ImGui::NextColumn();
+
+		ImGui::Text("Right");
+		ImGui::NextColumn();
+		snprintf(label, 64, "%s##right_key", SDL_GetKeyName(ini->keys.right));
+		ImGui::Button(label);
+		ImGui::NextColumn();
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+		ImGui::Button("Left X-axis");
+		ImGui::PopStyleVar();
+		ImGui::NextColumn();
+
+		ImGui::Text("Up");
+		ImGui::NextColumn();
+		snprintf(label, 64, "%s##up_key", SDL_GetKeyName(ini->keys.up));
+		ImGui::Button(label);
+		ImGui::NextColumn();
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+		ImGui::Button("Left Y-axis");
+		ImGui::PopStyleVar();
+		ImGui::NextColumn();
+
+		ImGui::Text("Down");
+		ImGui::NextColumn();
+		snprintf(label, 64, "%s##down_key", SDL_GetKeyName(ini->keys.down));
+		ImGui::Button(label);
+		ImGui::NextColumn();
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+		ImGui::Button("Left Y-axis");
+		ImGui::PopStyleVar();
+		ImGui::NextColumn();
+
+		ImGui::Text("Start");
+		ImGui::NextColumn();
+		snprintf(label, 64, "%s##start_key", SDL_GetKeyName(ini->keys.start));
+		ImGui::Button(label);
+		ImGui::NextColumn();
+		snprintf(label, 64, "%s##start_button", SDL_GameControllerGetStringForButton(ini->controller.start));
+		ImGui::Button(label);
+		ImGui::NextColumn();
+
+		ImGui::Text("Select");
+		ImGui::NextColumn();
+		snprintf(label, 64, "%s##select_key", SDL_GetKeyName(ini->keys.select));
+		ImGui::Button(label);
+		ImGui::NextColumn();
+		snprintf(label, 64, "%s##select_button", SDL_GameControllerGetStringForButton(ini->controller.select));
+		ImGui::Button(label);
+		ImGui::NextColumn();
+
+		ImGui::Text("A");
+		ImGui::NextColumn();
+		snprintf(label, 64, "%s##a_key", SDL_GetKeyName(ini->keys.a));
+		const bool is_active = config->modify_input_request.requested && true;
+		if (is_active)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.72f, 0.41f, 0.57f, 0.62f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.72f, 0.41f, 0.57f, 0.62f));
+		}
+		if (ImGui::Button(label))
+		{
+			config->modify_input_request.requested = !config->modify_input_request.requested;
+		}
+		if (is_active)
+		{
+			ImGui::PopStyleColor(2);
+		}
+		ImGui::NextColumn();
+		snprintf(label, 64, "%s##a_button", SDL_GameControllerGetStringForButton(ini->controller.a));
+		ImGui::Button(label);
+		ImGui::NextColumn();
+
+		ImGui::Text("B");
+		ImGui::NextColumn();
+		snprintf(label, 64, "%s##b_key", SDL_GetKeyName(ini->keys.b));
+		ImGui::Button(label);
+		ImGui::NextColumn();
+		snprintf(label, 64, "%s##b_button", SDL_GameControllerGetStringForButton(ini->controller.b));
+		ImGui::Button(label);
+		ImGui::NextColumn();
+
+		ImGui::Columns(1);
+
+		if (ImGui::Button("Done") || close_current_popup)
+		{
+			config->gui.show_input_config_popup = false;
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset"))
+		{
+			config->ini.keys = Ini::Keys();
+			config->ini.controller = Ini::Controller();
+		}
+		ImGui::EndPopup();
+	}
 
 	// About popup
 	if (config->gui.show_about_popup)
@@ -510,12 +665,12 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 	// Quit popup
 	if (config->gui.show_quit_popup)
 	{
-		ImGui::OpenPopup("Exit?");
+		ImGui::OpenPopup("Quit");
 	}
-	if (ImGui::BeginPopupModal("Exit?", NULL, popup_flags))
+	if (ImGui::BeginPopupModal("Quit", NULL, popup_flags))
 	{
 		ImGui::Text("Do you really want to quit GB?");
-		if (ImGui::Button("Exit"))
+		if (ImGui::Button("Quit"))
 		{
 			config->quit = true;
 			ImGui::CloseCurrentPopup();
@@ -649,6 +804,29 @@ main(int argc, char* argv[])
 		{
 			// SDL_Log("Event: %x\n", event.type);
 			ImGui_ImplSDL2_ProcessEvent(&event);
+
+			// Highjack (certain) inputs when the input config is modified.
+			if (config.modify_input_request.requested)
+			{
+				bool event_captured = false;
+
+				if (true /*config->modify_input_request.type == key*/ && (event.type == SDL_KEYDOWN) &&
+						(event.key.keysym.sym != SDLK_ESCAPE)  // Don't allow assigning the ESC key.
+				)
+				{
+					// TODO: Chose the right key
+					config.ini.keys.a = event.key.keysym.sym;
+					event_captured = true;
+				}
+
+				if (event_captured)
+				{
+					config.modify_input_request.requested = false;
+					continue;
+				}
+			}
+
+
 			switch (event.type)
 			{
 			case SDL_QUIT:
