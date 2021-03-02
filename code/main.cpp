@@ -73,6 +73,65 @@ EnableHighDpiAwareness()
 	}
 }
 
+struct Input
+{
+	enum InputType
+	{
+		TYPE_KEY,
+		TYPE_BUTTON,
+		TYPE_AXIS,
+	};
+
+	const char* name = NULL;
+	const char* nice_name = NULL;
+	InputType type;
+	union
+	{
+		SDL_Keycode key;
+		SDL_GameControllerButton button;
+		SDL_GameControllerAxis axis;
+	} sdl;
+};
+
+static Input default_inputs[] = {
+	// Keyboard
+	{ "key_a", "A", Input::TYPE_KEY, SDLK_x },
+	{ "key_b", "B", Input::TYPE_KEY, SDLK_z },
+	{ "key_start", "Start", Input::TYPE_KEY, SDLK_RETURN },
+	{ "key_select", "Select", Input::TYPE_KEY, SDLK_BACKSPACE },
+	{ "key_left", "Left", Input::TYPE_KEY, SDLK_LEFT },
+	{ "key_right", "Right", Input::TYPE_KEY, SDLK_RIGHT },
+	{ "key_up", "Up", Input::TYPE_KEY, SDLK_UP },
+	{ "key_down", "Down", Input::TYPE_KEY, SDLK_DOWN },
+	// Controller
+	{ "button_a", "A", Input::TYPE_BUTTON, SDL_CONTROLLER_BUTTON_B },
+	{ "button_b", "B", Input::TYPE_BUTTON, SDL_CONTROLLER_BUTTON_A },
+	{ "button_start", "Start", Input::TYPE_BUTTON, SDL_CONTROLLER_BUTTON_START },
+	{ "button_select", "Select", Input::TYPE_BUTTON, SDL_CONTROLLER_BUTTON_BACK },
+	{ "stick_horizontal", "Horizontal", Input::TYPE_AXIS, SDL_CONTROLLER_AXIS_LEFTX },
+	{ "stick_vertical", "Vertical", Input::TYPE_AXIS, SDL_CONTROLLER_AXIS_LEFTY },
+};
+static const size_t num_inputs = sizeof(default_inputs) / sizeof(default_inputs[0]);
+
+static const char*
+InputSdlName(const Input* input)
+{
+	const char* sdl_name = NULL;
+	switch (input->type)
+	{
+	case Input::TYPE_KEY:
+		sdl_name = SDL_GetKeyName(input->sdl.key);
+		break;
+	case Input::TYPE_BUTTON:
+		sdl_name = SDL_GameControllerGetStringForButton(input->sdl.button);
+		break;
+	case Input::TYPE_AXIS:
+		sdl_name = SDL_GameControllerGetStringForAxis(input->sdl.axis);
+		break;
+	}
+	return sdl_name;
+}
+
 struct Ini
 {
 	// TODO: If the opendialog initialDir actually persist between reboots, then we can remove
@@ -82,62 +141,23 @@ struct Ini
 	int mag_filter = 0;
 	int screen_size = 0;
 
-	struct Keys
-	{
-		SDL_Keycode a = SDLK_x;
-		SDL_Keycode b = SDLK_z;
-		SDL_Keycode start = SDLK_RETURN;
-		SDL_Keycode select = SDLK_BACKSPACE;
-		SDL_Keycode left = SDLK_LEFT;
-		SDL_Keycode right = SDLK_RIGHT;
-		SDL_Keycode up = SDLK_UP;
-		SDL_Keycode down = SDLK_DOWN;
-	} keys;
-
-	struct Controller
-	{
-		SDL_GameControllerButton a = SDL_CONTROLLER_BUTTON_B;
-		SDL_GameControllerButton b = SDL_CONTROLLER_BUTTON_A;
-		SDL_GameControllerButton start = SDL_CONTROLLER_BUTTON_START;
-		SDL_GameControllerButton select = SDL_CONTROLLER_BUTTON_BACK;
-
-		// The axes are currently not customizable (and also not read/written from/to the .ini file).
-		// But would you really want to map them to something else than the left stick?
-		// TODO(stefalie): Deal with this.
-		SDL_GameControllerAxis axis_x = SDL_CONTROLLER_AXIS_LEFTX;
-		SDL_GameControllerAxis axis_y = SDL_CONTROLLER_AXIS_LEFTY;
-	} controller;
+	Input inputs[14] = {
+		default_inputs[0],
+		default_inputs[1],
+		default_inputs[2],
+		default_inputs[3],
+		default_inputs[4],
+		default_inputs[5],
+		default_inputs[6],
+		default_inputs[7],
+		default_inputs[8],
+		default_inputs[9],
+		default_inputs[10],
+		default_inputs[11],
+		default_inputs[12],
+		default_inputs[13],
+	};
 };
-
-// TODO: I don't like these 2 functions, can they be merged into a key/value parser which is taken out of the ini
-// parser.
-static void
-IniLoadKeyboardKeyOrComplain(const char* val, SDL_Keycode* key)
-{
-	const SDL_Keycode ini_key = SDL_GetKeyFromName(val);
-	if (ini_key != SDLK_UNKNOWN)
-	{
-		*key = ini_key;
-	}
-	else
-	{
-		SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Warning: unknown keyboard key '%s' in config.ini.\n", val);
-	}
-}
-
-static void
-IniLoadButtonOrComplain(const char* val, SDL_GameControllerButton* button)
-{
-	const SDL_GameControllerButton ini_button = SDL_GameControllerGetButtonFromString(val);
-	if (ini_button != SDL_CONTROLLER_BUTTON_INVALID)
-	{
-		*button = ini_button;
-	}
-	else
-	{
-		SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Warning: unknown controller button '%s' in config.ini.\n", val);
-	}
-}
 
 // TODO(stefalie): Consider trimming whitespace off key and value.
 // TODO(stefalie): This doesn't deal with escaped special characters.
@@ -145,7 +165,7 @@ static Ini
 IniLoadOrInit(const char* ini_path)
 {
 	SDL_Log("pref path: %s\n", ini_path);  // TODO
-	Ini result;
+	Ini ini;
 
 	FILE* file = fopen(ini_path, "r");
 	if (file)
@@ -187,73 +207,83 @@ IniLoadOrInit(const char* ini_path)
 
 			if (!strcmp(key, "last_opened_path"))
 			{
-				strcpy(result.last_opened_path, val);
+				strcpy(ini.last_opened_path, val);
 			}
 			else if (!strcmp(key, "mag_filter"))
 			{
 				// TODO: List options.
-				result.mag_filter = atoi(val);
+				ini.mag_filter = atoi(val);
 			}
 			else if (!strcmp(key, "screen_size"))
 			{
 				// TODO
 			}
-			else if (!strcmp(key, "key_a"))
-			{
-				IniLoadKeyboardKeyOrComplain(val, &result.keys.a);
-			}
-			else if (!strcmp(key, "key_b"))
-			{
-				IniLoadKeyboardKeyOrComplain(val, &result.keys.b);
-			}
-			else if (!strcmp(key, "key_start"))
-			{
-				IniLoadKeyboardKeyOrComplain(val, &result.keys.start);
-			}
-			else if (!strcmp(key, "key_select"))
-			{
-				IniLoadKeyboardKeyOrComplain(val, &result.keys.select);
-			}
-			else if (!strcmp(key, "key_left"))
-			{
-				IniLoadKeyboardKeyOrComplain(val, &result.keys.left);
-			}
-			else if (!strcmp(key, "key_right"))
-			{
-				IniLoadKeyboardKeyOrComplain(val, &result.keys.right);
-			}
-			else if (!strcmp(key, "key_up"))
-			{
-				IniLoadKeyboardKeyOrComplain(val, &result.keys.up);
-			}
-			else if (!strcmp(key, "key_down"))
-			{
-				IniLoadKeyboardKeyOrComplain(val, &result.keys.down);
-			}
-			else if (!strcmp(key, "controller_a"))
-			{
-				IniLoadButtonOrComplain(val, &result.controller.a);
-			}
-			else if (!strcmp(key, "controller_b"))
-			{
-				IniLoadButtonOrComplain(val, &result.controller.b);
-			}
-			else if (!strcmp(key, "controller_start"))
-			{
-				IniLoadButtonOrComplain(val, &result.controller.start);
-			}
-			else if (!strcmp(key, "controller_select"))
-			{
-				IniLoadButtonOrComplain(val, &result.controller.select);
-			}
 			else
 			{
-				SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Warning: unknown key '%s' in config.ini.\n", key);
+				bool found_key = false;
+
+				for (int i = 0; i < num_inputs; ++i)
+				{
+					if (!strcmp(key, ini.inputs[i].name))
+					{
+						found_key = true;
+
+						bool unkown_sdl_input = false;
+
+						if (ini.inputs[i].type == Input::TYPE_KEY)
+						{
+							const SDL_Keycode sdl_key = SDL_GetKeyFromName(val);
+							if (sdl_key != SDLK_UNKNOWN)
+							{
+								ini.inputs[i].sdl.key = sdl_key;
+							}
+							else
+							{
+								unkown_sdl_input = true;
+							}
+						}
+						else if (ini.inputs[i].type == Input::TYPE_BUTTON)
+						{
+							const SDL_GameControllerButton sdl_button = SDL_GameControllerGetButtonFromString(val);
+							if (sdl_button != SDL_CONTROLLER_BUTTON_INVALID)
+							{
+								ini.inputs[i].sdl.button = sdl_button;
+							}
+							else
+							{
+								unkown_sdl_input = true;
+							}
+						}
+						else /* if (ini.inputs[i].type == Input::TYPE_AXIS) */
+						{
+							const SDL_GameControllerAxis sdl_axis = SDL_GameControllerGetAxisFromString(val);
+							if (sdl_axis != SDL_CONTROLLER_AXIS_INVALID)
+							{
+								ini.inputs[i].sdl.axis = sdl_axis;
+							}
+							else
+							{
+								unkown_sdl_input = true;
+							}
+						}
+
+						if (unkown_sdl_input)
+						{
+							SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+									"Warning: unknown input '%s' for '%s' in config.ini.\n", val, key);
+						}
+					}
+				}
+
+				if (!found_key)
+				{
+					SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Warning: unknown key '%s' in config.ini.\n", key);
+				}
 			}
 		}
 	}
 
-	return result;
+	return ini;
 }
 
 static void
@@ -268,18 +298,10 @@ IniSave(const char* ini_path, const Ini* ini)
 		fprintf(file, "mag_filter=%i\n", ini->mag_filter);
 		fprintf(file, "screen_size=%i\n", ini->screen_size);
 		fprintf(file, "[Input]\n");
-		fprintf(file, "key_a=%s\n", SDL_GetKeyName(ini->keys.a));
-		fprintf(file, "key_b=%s\n", SDL_GetKeyName(ini->keys.b));
-		fprintf(file, "key_select=%s\n", SDL_GetKeyName(ini->keys.select));
-		fprintf(file, "key_start=%s\n", SDL_GetKeyName(ini->keys.start));
-		fprintf(file, "key_left=%s\n", SDL_GetKeyName(ini->keys.left));
-		fprintf(file, "key_right=%s\n", SDL_GetKeyName(ini->keys.right));
-		fprintf(file, "key_up=%s\n", SDL_GetKeyName(ini->keys.up));
-		fprintf(file, "key_down=%s\n", SDL_GetKeyName(ini->keys.down));
-		fprintf(file, "controller_a=%s\n", SDL_GameControllerGetStringForButton(ini->controller.a));
-		fprintf(file, "controller_b=%s\n", SDL_GameControllerGetStringForButton(ini->controller.b));
-		fprintf(file, "controller_select=%s\n", SDL_GameControllerGetStringForButton(ini->controller.select));
-		fprintf(file, "controller_start=%s\n", SDL_GameControllerGetStringForButton(ini->controller.start));
+		for (int i = 0; i < num_inputs; ++i)
+		{
+			fprintf(file, "%s=%s\n", ini->inputs[i].name, InputSdlName(&ini->inputs[i]));
+		}
 		fclose(file);
 	}
 }
@@ -308,16 +330,14 @@ struct Config
 
 	bool quit = false;
 
-	struct ModifyInputRequest
-	{
-		bool requested = false;
-	} modify_input_request;
+	Input* modify_input = NULL;
 
 	struct Gui
 	{
 		bool show_gui = true;
 
 		bool pressed_escape = false;
+
 		bool show_quit_popup = false;
 		bool show_input_config_popup = false;
 		bool show_about_popup = false;
@@ -489,7 +509,6 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 		config->gui.show_quit_popup = true;
 	}
 
-	// Reset ESC.
 	config->gui.pressed_escape = false;
 
 	// TODO(stefalie): Is this really the best/only way to handle popups?
@@ -504,21 +523,6 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 	if (ImGui::BeginPopupModal("Configure Input", NULL, popup_flags))
 	{
 		ImGui::Text("Click the buttons to change the input bindings.");
-		// ImGui::Columns(2);
-		// ImGui::Text("Left/Right");
-		// ImGui::NextColumn();
-		// ImGui::Text("Left Stick X-Axis");
-		// ImGui::NextColumn();
-		// ImGui::Text("Up/Down");
-		// ImGui::NextColumn();
-		// ImGui::Text("Left Stick Y-Axis");
-		// ImGui::NextColumn();
-		// ImGui::Text("A");
-		// ImGui::NextColumn();
-		// ImGui::Text("Dunno");
-		// ImGui::NextColumn();
-		// ImGui::Columns(1);
-
 
 		ImGui::Columns(3);
 		Ini* ini = &config->ini;
@@ -533,96 +537,35 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 
 		ImGui::Separator();
 
-		ImGui::Text("Left");
-		ImGui::NextColumn();
-		snprintf(label, 64, "%s##left_key", SDL_GetKeyName(ini->keys.left));
-		ImGui::Button(label);
-		ImGui::NextColumn();
-		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-		// ImGui::Button("Left X-axis");
-		snprintf(label, 64, "%s##left_button", SDL_GameControllerGetStringForAxis(ini->controller.axis_x));
-		ImGui::Button(label);
-		ImGui::PopStyleVar();
-		ImGui::NextColumn();
-
-		ImGui::Text("Right");
-		ImGui::NextColumn();
-		snprintf(label, 64, "%s##right_key", SDL_GetKeyName(ini->keys.right));
-		ImGui::Button(label);
-		ImGui::NextColumn();
-		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-		ImGui::Button("Left X-axis");
-		ImGui::PopStyleVar();
-		ImGui::NextColumn();
-
-		ImGui::Text("Up");
-		ImGui::NextColumn();
-		snprintf(label, 64, "%s##up_key", SDL_GetKeyName(ini->keys.up));
-		ImGui::Button(label);
-		ImGui::NextColumn();
-		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-		ImGui::Button("Left Y-axis");
-		ImGui::PopStyleVar();
-		ImGui::NextColumn();
-
-		ImGui::Text("Down");
-		ImGui::NextColumn();
-		snprintf(label, 64, "%s##down_key", SDL_GetKeyName(ini->keys.down));
-		ImGui::Button(label);
-		ImGui::NextColumn();
-		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-		ImGui::Button("Left Y-axis");
-		ImGui::PopStyleVar();
-		ImGui::NextColumn();
-
-		ImGui::Text("Start");
-		ImGui::NextColumn();
-		snprintf(label, 64, "%s##start_key", SDL_GetKeyName(ini->keys.start));
-		ImGui::Button(label);
-		ImGui::NextColumn();
-		snprintf(label, 64, "%s##start_button", SDL_GameControllerGetStringForButton(ini->controller.start));
-		ImGui::Button(label);
-		ImGui::NextColumn();
-
-		ImGui::Text("Select");
-		ImGui::NextColumn();
-		snprintf(label, 64, "%s##select_key", SDL_GetKeyName(ini->keys.select));
-		ImGui::Button(label);
-		ImGui::NextColumn();
-		snprintf(label, 64, "%s##select_button", SDL_GameControllerGetStringForButton(ini->controller.select));
-		ImGui::Button(label);
-		ImGui::NextColumn();
-
-		ImGui::Text("A");
-		ImGui::NextColumn();
-		snprintf(label, 64, "%s##a_key", SDL_GetKeyName(ini->keys.a));
-		const bool is_active = config->modify_input_request.requested && true;
-		if (is_active)
+		const int input_modify_order[] = { 0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 12, 6, 13, 7, 13 };
+		for (int i = 0; i < 16; ++i)
 		{
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.72f, 0.41f, 0.57f, 0.62f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.72f, 0.41f, 0.57f, 0.62f));
-		}
-		if (ImGui::Button(label))
-		{
-			config->modify_input_request.requested = !config->modify_input_request.requested;
-		}
-		if (is_active)
-		{
-			ImGui::PopStyleColor(2);
-		}
-		ImGui::NextColumn();
-		snprintf(label, 64, "%s##a_button", SDL_GameControllerGetStringForButton(ini->controller.a));
-		ImGui::Button(label);
-		ImGui::NextColumn();
+			Input* input = &ini->inputs[input_modify_order[i]];
 
-		ImGui::Text("B");
-		ImGui::NextColumn();
-		snprintf(label, 64, "%s##b_key", SDL_GetKeyName(ini->keys.b));
-		ImGui::Button(label);
-		ImGui::NextColumn();
-		snprintf(label, 64, "%s##b_button", SDL_GameControllerGetStringForButton(ini->controller.b));
-		ImGui::Button(label);
-		ImGui::NextColumn();
+			if (i % 2 == 0)
+			{
+				ImGui::Text(input->nice_name);
+				ImGui::NextColumn();
+			}
+
+			snprintf(label, 64, "%s##modify_%i", InputSdlName(input), i);
+
+			const bool is_active = config->modify_input == input;
+			if (is_active)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.72f, 0.41f, 0.57f, 0.62f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.72f, 0.41f, 0.57f, 0.62f));
+			}
+			if (ImGui::Button(label))
+			{
+				config->modify_input = is_active ? NULL : input;
+			}
+			if (is_active)
+			{
+				ImGui::PopStyleColor(2);
+			}
+			ImGui::NextColumn();
+		}
 
 		ImGui::Columns(1);
 
@@ -634,8 +577,7 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 		ImGui::SameLine();
 		if (ImGui::Button("Reset"))
 		{
-			config->ini.keys = Ini::Keys();
-			config->ini.controller = Ini::Controller();
+			memcpy(config->ini.inputs, default_inputs, sizeof(default_inputs));
 		}
 		ImGui::EndPopup();
 	}
@@ -805,23 +747,37 @@ main(int argc, char* argv[])
 			// SDL_Log("Event: %x\n", event.type);
 			ImGui_ImplSDL2_ProcessEvent(&event);
 
+			// TODO: Deal with enter + ctrl
+			// Really?
+
 			// Highjack (certain) inputs when the input config is modified.
-			if (config.modify_input_request.requested)
+			if (config.modify_input)
 			{
 				bool event_captured = false;
 
-				if (true /*config->modify_input_request.type == key*/ && (event.type == SDL_KEYDOWN) &&
+				if (event.type == SDL_KEYDOWN && config.modify_input->type == Input::TYPE_KEY &&
 						(event.key.keysym.sym != SDLK_ESCAPE)  // Don't allow assigning the ESC key.
 				)
 				{
-					// TODO: Chose the right key
-					config.ini.keys.a = event.key.keysym.sym;
+					config.modify_input->sdl.key = event.key.keysym.sym;
+					event_captured = true;
+				}
+				else if (event.type == SDL_CONTROLLERBUTTONDOWN && config.modify_input->type == Input::TYPE_BUTTON)
+				{
+					config.modify_input->sdl.button = (SDL_GameControllerButton)event.cbutton.button;
+					event_captured = true;
+				}
+				else if (event.type == SDL_CONTROLLERAXISMOTION && config.modify_input->type == Input::TYPE_AXIS &&
+						(abs(event.caxis.value) > 20000)  // No idea if this sensitivity threshold is generally ok.
+				)
+				{
+					config.modify_input->sdl.axis = (SDL_GameControllerAxis)event.caxis.axis;
 					event_captured = true;
 				}
 
 				if (event_captured)
 				{
-					config.modify_input_request.requested = false;
+					config.modify_input = NULL;
 					continue;
 				}
 			}
@@ -845,72 +801,40 @@ main(int argc, char* argv[])
 				controller = NULL;
 				break;
 			case SDL_CONTROLLERBUTTONDOWN:
-				if (event.cbutton.button == config.ini.controller.a)
+				for (int i = 0; i < num_inputs; ++i)
 				{
-					SDL_Log("Pressed button 'A'.\n");
-				}
-				else if (event.cbutton.button == config.ini.controller.b)
-				{
-					SDL_Log("Pressed button 'B'.\n");
-				}
-				else if (event.cbutton.button == config.ini.controller.start)
-				{
-					SDL_Log("Pressed button 'Start'.\n");
-				}
-				else if (event.cbutton.button == config.ini.controller.select)
-				{
-					SDL_Log("Pressed button 'Select'.\n");
+					Input input = config.ini.inputs[i];
+					if (input.type == Input::TYPE_BUTTON && event.cbutton.button == input.sdl.button)
+					{
+						SDL_Log("Pressed button '%s'.\n", input.nice_name);
+					}
 				}
 				break;
 			case SDL_CONTROLLERBUTTONUP:
 				// TODO:
 				break;
 			case SDL_CONTROLLERAXISMOTION:
-				if (event.cbutton.button == config.ini.controller.axis_x)
+				for (int i = 0; i < num_inputs; ++i)
 				{
-					SDL_Log("Moved 'X-axis' by %i\n", event.caxis.value);
-				}
-				else if (event.cbutton.button == config.ini.controller.axis_y)
-				{
-					SDL_Log("Moved 'Y-axis' by %i\n", event.caxis.value);
+					Input input = config.ini.inputs[i];
+					if (input.type == Input::TYPE_AXIS && event.caxis.axis == input.sdl.axis)
+					{
+						SDL_Log("Moved '%s' by %i.\n", input.nice_name, event.caxis.value);
+					}
 				}
 				break;
 			case SDL_KEYDOWN:
+				for (int i = 0; i < num_inputs; ++i)
+				{
+					Input input = config.ini.inputs[i];
+					if (input.type == Input::TYPE_KEY && event.key.keysym.sym == input.sdl.key)
+					{
+						SDL_Log("Pressed key '%s'.\n", input.nice_name);
+					}
+				}
 				if (event.key.keysym.sym == SDLK_ESCAPE)
 				{
 					config.gui.pressed_escape = true;
-				}
-				else if (event.key.keysym.sym == config.ini.keys.a)
-				{
-					SDL_Log("Pressed key 'A'.\n");
-				}
-				else if (event.key.keysym.sym == config.ini.keys.b)
-				{
-					SDL_Log("Pressed key 'B'.\n");
-				}
-				else if (event.key.keysym.sym == config.ini.keys.start)
-				{
-					SDL_Log("Pressed key 'Start'.\n");
-				}
-				else if (event.key.keysym.sym == config.ini.keys.select)
-				{
-					SDL_Log("Pressed key 'Select'.\n");
-				}
-				else if (event.key.keysym.sym == config.ini.keys.left)
-				{
-					SDL_Log("Pressed key 'Left'.\n");
-				}
-				else if (event.key.keysym.sym == config.ini.keys.right)
-				{
-					SDL_Log("Pressed key 'Right'.\n");
-				}
-				else if (event.key.keysym.sym == config.ini.keys.up)
-				{
-					SDL_Log("Pressed key 'Up'.\n");
-				}
-				else if (event.key.keysym.sym == config.ini.keys.down)
-				{
-					SDL_Log("Pressed key 'Down'.\n");
 				}
 			case SDL_MOUSEMOTION:
 				// TODO: Show menu for a few secs if game is running. If not running, always show menu.
