@@ -656,30 +656,31 @@ static void
 DebuggerDraw(Config* config, GB_GameBoy* gb)
 {
 	(void)gb;  // TODO
+
+	ImGui::SetCurrentContext(config->handles.debug_imgui);
 	SDL_GL_MakeCurrent(config->handles.debug_window, config->handles.gl_context);
+	ImGui_ImplSDL2_InitForOpenGL(config->handles.debug_window, config->handles.gl_context);
+
+	ImGui_ImplOpenGL2_NewFrame();
+	ImGui_ImplSDL2_NewFrame(config->handles.debug_window);
+	ImGui::NewFrame();
+	static bool show_demo = true;
+	if (show_demo)
+	{
+		ImGui::ShowDemoWindow(&show_demo);
+	}
+	ImGui::Render();
 
 	glViewport(0, 0, config->debug.fb_width, config->debug.fb_height);
 	glClearColor(0.75f, 0.75f, 0.75f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
-
-	// ImGui::SetCurrentContext(config->handles.debug_imgui);
-	// ImGui_ImplOpenGL2_NewFrame();
-	// ImGui_ImplSDL2_NewFrame(config->handles.debug_window);
-	// ImGui::NewFrame();
-	// static bool show_demo = true;
-	// if (show_demo)
-	//{
-	//	ImGui::ShowDemoWindow(&show_demo);
-	//}
-	// ImGui::Render();
-	//// glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
-	// ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
-	// ImGui::SetCurrentContext(config->handles.imgui);
-
+	ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
 	SDL_GL_SwapWindow(config->handles.debug_window);
 
-	// Reset OpenGL context to main window.
+	// Switch contexts back.
+	ImGui::SetCurrentContext(config->handles.imgui);
 	SDL_GL_MakeCurrent(config->handles.window, config->handles.gl_context);
+	ImGui_ImplSDL2_InitForOpenGL(config->handles.window, config->handles.gl_context);
 }
 
 int
@@ -715,99 +716,93 @@ main(int argc, char* argv[])
 	Config config;
 	config.save_path = SDL_GetPrefPath(NULL, "GB");
 
-	// Main window
-	config.handles.window = SDL_CreateWindow("GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, fb_width, fb_height,
-			SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
-	if (!config.handles.window)
-	{
-		SDL_CheckError();
-		SDL_Quit();
-		exit(1);
+	{  // Main window
+		config.handles.window = SDL_CreateWindow("GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, fb_width,
+				fb_height, SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
+		if (!config.handles.window)
+		{
+			SDL_CheckError();
+			SDL_Quit();
+			exit(1);
+		}
 	}
 
-	// Debugger window
-	config.handles.debug_window = SDL_CreateWindow("GB Debugger", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-			config.debug.fb_width, config.debug.fb_height, SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
-	if (!config.handles.debug_window)
-	{
-		SDL_DestroyWindow(config.handles.window);
-		SDL_CheckError();
-		SDL_Quit();
-		exit(1);
+	{  // Debugger window
+		config.handles.debug_window = SDL_CreateWindow("GB Debugger", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+				config.debug.fb_width, config.debug.fb_height, SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
+		if (!config.handles.debug_window)
+		{
+			SDL_DestroyWindow(config.handles.window);
+			SDL_CheckError();
+			SDL_Quit();
+			exit(1);
+		}
+		SDL_HideWindow(config.handles.debug_window);
 	}
-	SDL_HideWindow(config.handles.debug_window);
 
 	config.handles.gl_context = SDL_GL_CreateContext(config.handles.window);
 	SDL_GL_MakeCurrent(config.handles.window, config.handles.gl_context);
 	SDL_GL_SetSwapInterval(1);  // Enable V-sync
 
-	//			SDL_GL_MakeCurrent(config->handles.debug_window, config->handles.gl_context);
-	//
-	//			// Both ImGui contexts need to share the FontAtlas. That's because the OpenGL2 backend
-	//			// has a 'static GLuint g_FontTexture'.
-	//			config->handles.debug_imgui = ImGui::CreateContext(ImGui::GetIO().Fonts);
-	//			ImGui::SetCurrentContext(config->handles.debug_imgui);
-	//
-	//			// SDL_Log("dpi scale: %f\n", dpi_scale);
-	//			//ImGui::GetStyle().ScaleAllSizes(1.0f);  // dpi_scale * 2.0f);
-	//			//ImGuiIO& io = ImGui::GetIO();
-	//			//io.IniFilename = NULL;
-	//			// io.Fonts->AddFontFromMemoryCompressedTTF(dmca_sans_serif_v0900_600_compressed_data,
-	//			//		dmca_sans_serif_v0900_600_compressed_size, 13.0f);
-	//			ImGui_ImplSDL2_InitForOpenGL(config->handles.debug_window, config->handles.gl_context);
-	//			ImGui_ImplOpenGL2_Init();
-	//
-	//			ImGui::StyleColorsClassic();
-	//			// ImGui::GetStyle().FrameRounding = 4.0f;
-	//			ImGui::SetCurrentContext(config->handles.imgui);
-	//			SDL_GL_MakeCurrent(config->handles.window, config->handles.gl_context);
-
-
 	config.handles.controller = NULL;
 
-	// Setup ImGui:
-	config.handles.imgui = ImGui::CreateContext();
-	ImGui::SetCurrentContext(config.handles.imgui);
-	SDL_Log("dpi scale: %f\n", dpi_scale);
-	ImGui::GetStyle().ScaleAllSizes(dpi_scale * 2.0f);
-	ImGuiIO& io = ImGui::GetIO();
-	io.IniFilename = NULL;
-	io.Fonts->AddFontFromMemoryCompressedTTF(
-			dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, 25.0f * dpi_scale);
-	ImGui_ImplSDL2_InitForOpenGL(config.handles.window, config.handles.gl_context);
-	ImGui_ImplOpenGL2_Init();
-	ImGui::StyleColorsClassic();
-	ImGui::GetStyle().FrameRounding = 8.0f * dpi_scale;
-	ImGui::GetStyle().WindowRounding = 8.0f * dpi_scale;
+	{  // Setup ImGui for main window
+		config.handles.imgui = ImGui::CreateContext();
+		ImGui::SetCurrentContext(config.handles.imgui);
+		ImGui::GetStyle().ScaleAllSizes(dpi_scale * 2.0f);
+		ImGuiIO& io = ImGui::GetIO();
+		io.IniFilename = NULL;
+		io.Fonts->AddFontFromMemoryCompressedTTF(dmca_sans_serif_v0900_600_compressed_data,
+				dmca_sans_serif_v0900_600_compressed_size, 25.0f * dpi_scale);
+		ImGui_ImplSDL2_InitForOpenGL(config.handles.window, config.handles.gl_context);
+		ImGui_ImplOpenGL2_Init();
+		ImGui::StyleColorsClassic();
+		ImGui::GetStyle().FrameRounding = 8.0f * dpi_scale;
+		ImGui::GetStyle().WindowRounding = 8.0f * dpi_scale;
+	}
 
-	//		// Both ImGui contexts need to share the FontAtlas. That's because the OpenGL2 backend
-	//		// has a 'static GLuint g_FontTexture'.
-	//		config->handles.debug_imgui = ImGui::CreateContext(ImGui::GetIO().Fonts);
-	//		ImGui::SetCurrentContext(config->handles.debug_imgui);
+	// Setup ImGui for debugger window
+	{
+		SDL_GL_MakeCurrent(config.handles.debug_window, config.handles.gl_context);
 
-	//		// SDL_Log("dpi scale: %f\n", dpi_scale);
-	//		// ImGui::GetStyle().ScaleAllSizes(1.0f);  // dpi_scale * 2.0f);
-	//		// ImGuiIO& io = ImGui::GetIO();
-	//		// io.IniFilename = NULL;
-	//		// io.Fonts->AddFontFromMemoryCompressedTTF(dmca_sans_serif_v0900_600_compressed_data,
-	//		//		dmca_sans_serif_v0900_600_compressed_size, 13.0f);
-	//		ImGui_ImplSDL2_InitForOpenGL(config->handles.debug_window, config->handles.gl_context);
-	//		ImGui_ImplOpenGL2_Init();
+		// Both ImGui contexts need to share the FontAtlas. That's because the OpenGL2 backend
+		// has a 'static GLuint g_FontTexture'.
+		config.handles.debug_imgui = ImGui::CreateContext(ImGui::GetIO().Fonts);
+		ImGui::SetCurrentContext(config.handles.debug_imgui);
 
-	//		ImGui::StyleColorsClassic();
-	//		// ImGui::GetStyle().FrameRounding = 4.0f;
-	//		ImGui::SetCurrentContext(config->handles.imgui);
+
+		// SDL_Log("dpi scale: %f\n", dpi_scale);
+		// ImGui::GetStyle().ScaleAllSizes(1.0f);  // dpi_scale * 2.0f);
+		// ImGuiIO& io = ImGui::GetIO();
+		// io.IniFilename = NULL;
+		// io.Fonts->AddFontFromMemoryCompressedTTF(dmca_sans_serif_v0900_600_compressed_data,
+		//		dmca_sans_serif_v0900_600_compressed_size, 13.0f);
+		ImGui_ImplSDL2_InitForOpenGL(config.handles.debug_window, config.handles.gl_context);
+		ImGui_ImplOpenGL2_Init();
+
+		// ImGui::StyleColorsClassic();
+		// ImGui::GetStyle().FrameRounding = 4.0f;
+
+		// Switch contexts back.
+		ImGui::SetCurrentContext(config.handles.imgui);
+		SDL_GL_MakeCurrent(config.handles.window, config.handles.gl_context);
+		// This is unfortunately necessary (at least with the OpenGL2 backend) as there
+		// is a 'static SDL_Window* g_Window'.
+		ImGui_ImplSDL2_InitForOpenGL(config.handles.window, config.handles.gl_context);
+	}
 
 	// OpenGL setup. Leave matrices as identity.
 	GLuint texture;
-	glGenTextures(1, &texture);
-	glBindTexture(GL_TEXTURE_2D, texture);
-	glTexImage2D(GL_TEXTURE_2D, 0, 1, 160, 144, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glEnable(GL_TEXTURE_2D);
+	{
+		glGenTextures(1, &texture);
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glTexImage2D(GL_TEXTURE_2D, 0, 1, 160, 144, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glEnable(GL_TEXTURE_2D);
+	}
 
 	// Load ini
 	const char* ini_name = "config.ini";
@@ -1016,7 +1011,7 @@ main(int argc, char* argv[])
 	ImGui_ImplOpenGL2_Shutdown();
 	ImGui_ImplSDL2_Shutdown();
 	ImGui::DestroyContext(config.handles.imgui);
-	//ImGui::DestroyContext(config.handles.debug_imgui);
+	ImGui::DestroyContext(config.handles.debug_imgui);
 
 	// Save ini
 	IniSave(ini_path, &config.ini);
