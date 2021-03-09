@@ -6,7 +6,8 @@
 // - ESC should be pause
 // - make input handle function seperate.
 // - make lambdas out of the OrComplainFunctions
-// - deal with pause state, you might also need the previous state (if you press esc and don't quit, you want to be back
+// - deal with pause state, you might also need the previous state (if you press
+// esc and don't quit, you want to be back
 //   in the state you were at before pressing esc).
 
 #define _CRT_SECURE_NO_WARNINGS
@@ -20,17 +21,18 @@
 #pragma warning(pop)
 #include <commdlg.h>  // For file open dialog
 
-// See note about SDL_MAIN_HANDLED in build_win_x64.bat
-// #define SDL_MAIN_HANDLED
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+// See note about SDL_MAIN_HANDLED in build_win_x64.bat
+// #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 #include <imgui/examples/imgui_impl_opengl2.h>
 #include <imgui/examples/imgui_impl_sdl.h>
 #include <imgui/imgui.h>
+
 #include "dmca_sans_serif_v0900_600.h"
 extern "C" {
 #include "gb.h"
@@ -91,7 +93,7 @@ struct Input
 		SDL_GameControllerButton button;
 		SDL_GameControllerAxis axis;
 	} sdl;
-};
+} asdf;
 
 static Input default_inputs[] = {
 	// Keyboard
@@ -134,10 +136,10 @@ InputSdlName(const Input* input)
 
 struct Ini
 {
-	// TODO: If the opendialog initialDir actually persist between reboots, then we can remove
-	// this option and set 'lpstrInitialDir' to NULL. And that then raises the question if we even need the ini loading
-	// code. Meh :-(
-	char last_opened_path[1024] = {};
+	// TODO: If the opendialog initialDir actually persist between reboots, then
+	// we can remove this option and set 'lpstrInitialDir' to NULL. And that then
+	// raises the question if we even need the ini loading code. Meh :-(
+	// char last_opened_path[1024] = {};
 	int mag_filter = 0;
 	int screen_size = 0;
 
@@ -205,11 +207,12 @@ IniLoadOrInit(const char* ini_path)
 				continue;
 			}
 
-			if (!strcmp(key, "last_opened_path"))
+			/*if (!strcmp(key, "last_opened_path"))
 			{
 				strcpy(ini.last_opened_path, val);
 			}
-			else if (!strcmp(key, "mag_filter"))
+			else*/
+			if (!strcmp(key, "mag_filter"))
 			{
 				// TODO: List options.
 				ini.mag_filter = atoi(val);
@@ -294,7 +297,7 @@ IniSave(const char* ini_path, const Ini* ini)
 	if (file)
 	{
 		fprintf(file, "[General]\n");
-		fprintf(file, "last_opened_path=%s\n", ini->last_opened_path);
+		// fprintf(file, "last_opened_path=%s\n", ini->last_opened_path);
 		fprintf(file, "mag_filter=%i\n", ini->mag_filter);
 		fprintf(file, "screen_size=%i\n", ini->screen_size);
 		fprintf(file, "[Input]\n");
@@ -345,6 +348,26 @@ struct Config
 		bool has_active_rom = false;
 		int save_slot = 1;
 	} gui;
+
+	struct Debugger
+	{
+		bool show = false;
+		int fb_width = 1024;
+		int fb_height = 768;
+
+	} debug;
+
+	struct Handles
+	{
+		SDL_Window* window = NULL;
+		SDL_GLContext gl_context = NULL;
+		SDL_GameController* controller = NULL;
+		ImGuiContext* imgui = NULL;
+
+		SDL_Window* debug_window = NULL;
+		SDL_GLContext debug_gl_context = NULL;
+		ImGuiContext* debug_imgui = NULL;
+	} handles;
 };
 
 static Rom
@@ -473,7 +496,10 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 		}
 		if (ImGui::BeginMenu("Debug"))
 		{
-			ImGui::MenuItem("Open Debugger", NULL, false);
+			if (ImGui::MenuItem("Open Debugger", NULL, false))
+			{
+				config->debug.show = true;
+			}
 			ImGui::MenuItem("Step", "F10");
 			ImGui::EndMenu();
 		}
@@ -627,6 +653,84 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 	}
 }
 
+static void
+DebuggerCreateDestroyDraw(Config* config, GB_GameBoy* gb)
+{
+	(void)gb;  // TODO
+
+	// Create or delete debugger window/context on the fly as needed.
+	if (!config->handles.debug_window && config->debug.show)
+	{
+		config->handles.debug_window = SDL_CreateWindow("GB Debugger", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+				config->debug.fb_width, config->debug.fb_height, SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
+		if (!config->handles.debug_window)
+		{
+			SDL_CheckError();
+		}
+		else
+		{
+			config->handles.debug_gl_context = SDL_GL_CreateContext(config->handles.debug_window);
+			SDL_GL_MakeCurrent(config->handles.debug_window, config->handles.debug_gl_context);
+			SDL_GL_SetSwapInterval(1);  // Enable V-sync
+
+			config->handles.debug_imgui = ImGui::CreateContext();
+			ImGui::SetCurrentContext(config->handles.debug_imgui);
+
+			// SDL_Log("dpi scale: %f\n", dpi_scale);
+			ImGui::GetStyle().ScaleAllSizes(1.0f);  // dpi_scale * 2.0f);
+					ImGuiIO& io = ImGui::GetIO();
+			io.IniFilename = NULL;
+			//io.Fonts->AddFontFromMemoryCompressedTTF(dmca_sans_serif_v0900_600_compressed_data,
+			//		dmca_sans_serif_v0900_600_compressed_size, 13.0f);
+			ImGui_ImplSDL2_InitForOpenGL(config->handles.debug_window, config->handles.debug_gl_context);
+			ImGui_ImplOpenGL2_Init();
+
+			ImGui::StyleColorsClassic();
+			//ImGui::GetStyle().FrameRounding = 4.0f;
+
+			SDL_GL_MakeCurrent(config->handles.window, config->handles.gl_context);
+		}
+	}
+	else if (config->handles.debug_window && !config->debug.show)
+	{
+		SDL_GL_MakeCurrent(config->handles.debug_window, config->handles.debug_gl_context);
+
+		ImGui::DestroyContext(config->handles.debug_imgui);
+		config->handles.debug_imgui = NULL;
+		SDL_GL_DeleteContext(config->handles.debug_gl_context);
+		SDL_DestroyWindow(config->handles.debug_window);
+		config->handles.debug_gl_context = NULL;
+		config->handles.debug_window = NULL;
+
+		SDL_GL_MakeCurrent(config->handles.window, config->handles.gl_context);
+	}
+
+	if (config->debug.show)
+	{
+		SDL_GL_MakeCurrent(config->handles.debug_window, config->handles.debug_gl_context);
+		glViewport(0, 0, config->debug.fb_width, config->debug.fb_height);
+		glClearColor(0.75f, 0.75f, 0.75f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
+
+		ImGui::SetCurrentContext(config->handles.debug_imgui);
+		ImGui_ImplOpenGL2_NewFrame();
+		ImGui_ImplSDL2_NewFrame(config->handles.debug_window);
+		ImGui::NewFrame();
+		static bool show_demo = true;
+		if (show_demo)
+		{
+			ImGui::ShowDemoWindow(&show_demo);
+		}
+		ImGui::Render();
+		// glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+		ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
+		ImGui::SetCurrentContext(config->handles.imgui);
+
+		SDL_GL_SwapWindow(config->handles.debug_window);
+		SDL_GL_MakeCurrent(config->handles.window, config->handles.gl_context);
+	}
+}
+
 int
 main(int argc, char* argv[])
 {
@@ -634,8 +738,8 @@ main(int argc, char* argv[])
 	(void)argv;
 	EnableHighDpiAwareness();
 	// The high DPI behavior is a bit strange, at least on Windows.
-	// Both SDL_GetWindowSize and SDL_GL_GetDrawableSize always return the same size
-	// which is in contradiction with their docs:
+	// Both SDL_GetWindowSize and SDL_GL_GetDrawableSize always return the same
+	// size which is in contradiction with their docs:
 	// https://wiki.libsdl.org/SDL_GetWindowSize
 	// https://wiki.libsdl.org/SDL_GL_GetDrawableSize
 	// With high DPI enabled, the window on the screen simply appears smaller.
@@ -657,56 +761,49 @@ main(int argc, char* argv[])
 	const int fb_width = (int)(window_width * dpi_scale);
 	const int fb_height = (int)(window_height * dpi_scale);
 
-	SDL_Window* window = SDL_CreateWindow("GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, fb_width, fb_height,
+	Config config;
+	config.save_path = SDL_GetPrefPath(NULL, "GB");
+
+	config.handles.window = SDL_CreateWindow("GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, fb_width, fb_height,
 			SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
-	if (!window)
+	if (!config.handles.window)
 	{
 		SDL_CheckError();
 		SDL_Quit();
 		exit(1);
 	}
-
-	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-	// SDL_GL_MakeCurrent(window, gl_context);  // Not necessary. TODO
+	config.handles.gl_context = SDL_GL_CreateContext(config.handles.window);
 	SDL_GL_SetSwapInterval(1);  // Enable V-sync
 
-	SDL_GameController* controller = NULL;
+	config.handles.controller = NULL;
 
 	// Setup ImGui:
-	ImGui::CreateContext();
+	config.handles.imgui = ImGui::CreateContext();
+	ImGui::SetCurrentContext(config.handles.imgui);
 	SDL_Log("dpi scale: %f\n", dpi_scale);
 	ImGui::GetStyle().ScaleAllSizes(dpi_scale * 2.0f);
 	ImGuiIO& io = ImGui::GetIO();
-	io.IniFilename = nullptr;
-	io.Fonts->AddFontFromMemoryCompressedTTF(
-			dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, 25.0f * dpi_scale);
-	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
+	io.IniFilename = NULL;
+	//io.Fonts->AddFontFromMemoryCompressedTTF(
+	//		dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, 25.0f * dpi_scale);
+	ImGui_ImplSDL2_InitForOpenGL(config.handles.window, config.handles.gl_context);
 	ImGui_ImplOpenGL2_Init();
 	ImGui::StyleColorsClassic();
 	ImGui::GetStyle().FrameRounding = 4.0f;
-	// TODO(stefalie): This should be true when no ROM is loaded or if the game is paused
-	// or if the mouse has been moved no longer than 2-3 s ago.
+
+	// TODO(stefalie): This should be true when no ROM is loaded or if the game is
+	// paused or if the mouse has been moved no longer than 2-3 s ago.
 
 	// OpenGL setup. Leave matrices as identity.
 	GLuint texture;
 	glGenTextures(1, &texture);
 	glBindTexture(GL_TEXTURE_2D, texture);
-	// glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 320, 240, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
 	glTexImage2D(GL_TEXTURE_2D, 0, 1, 160, 144, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);  // Is already default.
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glEnable(GL_TEXTURE_2D);
-
-	// TODO
-	// Use pixel-perfect window 1x, 2x, 3x, 4x
-	// Linear interpolate for fullscreen.
-	uint32_t texture_update_buffer[320 * 240];
-	uint8_t texture_update_buffer2[160 * 144];
-
-	Config config;
-	config.save_path = SDL_GetPrefPath(NULL, "gb");
 
 	// Load ini
 	const char* ini_name = "config.ini";
@@ -719,24 +816,6 @@ main(int argc, char* argv[])
 
 	GB_GameBoy gb = {};
 	GB_Init(&gb);
-
-
-	// SDL_GameController* controller = NULL;
-	// for (int i = 0; i < SDL_NumJoysticks(); ++i)
-	//{
-	//	if (SDL_IsGameController(i))
-	//	{
-	//		controller = SDL_GameControllerOpen(i);
-	//		if (controller)
-	//		{
-	//			break;
-	//		}
-	//		else
-	//		{
-	//			fprintf(stderr, "Could not open gamecontroller %i: %s\n", i, SDL_GetError());
-	//		}
-	//	}
-	//}
 
 	// Main Loop
 	while (!config.quit)
@@ -768,7 +847,8 @@ main(int argc, char* argv[])
 					event_captured = true;
 				}
 				else if (event.type == SDL_CONTROLLERAXISMOTION && config.modify_input->type == Input::TYPE_AXIS &&
-						(abs(event.caxis.value) > 20000)  // No idea if this sensitivity threshold is generally ok.
+						(abs(event.caxis.value) > 20000)  // No idea if this sensitivity
+														  // threshold is generally ok.
 				)
 				{
 					config.modify_input->sdl.axis = (SDL_GameControllerAxis)event.caxis.axis;
@@ -782,23 +862,35 @@ main(int argc, char* argv[])
 				}
 			}
 
-
 			switch (event.type)
 			{
 			case SDL_QUIT:
 				config.gui.show_quit_popup = true;
 				break;
-			case SDL_CONTROLLERDEVICEADDED:
-				// TODO(stefalie): This allows only for 1 controller, the user should be able to chose.
-				if (!controller)
+			case SDL_WINDOWEVENT:
+				if (event.window.event == SDL_WINDOWEVENT_CLOSE &&
+						SDL_GetWindowFromID(event.window.windowID) == config.handles.window)
 				{
-					controller = SDL_GameControllerOpen(event.cdevice.which);
+					config.gui.show_quit_popup = true;
+				}
+				else if (event.window.event == SDL_WINDOWEVENT_CLOSE &&
+						SDL_GetWindowFromID(event.window.windowID) == config.handles.debug_window)
+				{
+					config.debug.show = false;
+				}
+				break;
+			case SDL_CONTROLLERDEVICEADDED:
+				// TODO(stefalie): This allows only for 1 controller, the user should
+				// be able to chose.
+				if (!config.handles.controller)
+				{
+					config.handles.controller = SDL_GameControllerOpen(event.cdevice.which);
 				}
 				break;
 			case SDL_CONTROLLERDEVICEREMOVED:
-				assert(controller);
-				SDL_GameControllerClose(controller);
-				controller = NULL;
+				assert(config.handles.controller);
+				SDL_GameControllerClose(config.handles.controller);
+				config.handles.controller = NULL;
 				break;
 			case SDL_CONTROLLERBUTTONDOWN:
 				for (int i = 0; i < num_inputs; ++i)
@@ -837,62 +929,50 @@ main(int argc, char* argv[])
 					config.gui.pressed_escape = true;
 				}
 			case SDL_MOUSEMOTION:
-				// TODO: Show menu for a few secs if game is running. If not running, always show menu.
+				// TODO: Show menu for a few secs if game is running. If not running,
+				// always show menu.
 				break;
 			case SDL_MOUSEBUTTONDOWN:
 				break;
 			}
 		}
 
-		// TODO: Don't use ticks, use perf counters as shown in the Imgui example.
-		const int tick = SDL_GetTicks();
-		for (int i = 0; i < 240; i++)
-		{
-			for (int j = 0; j < 320; j++)
+		{  // Draw framebuffer
+			// TODO: Don't use ticks, use perf counters as shown in the Imgui example.
+			// const int tick = SDL_GetTicks();
+
+			// NOTE: While the binary layout between SDL and OpenGL is actually
+			// the same, SDL uses SDL_PIXELFORMAT_RGB888 and OpenGL GL_BGR(A).
+			// glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 320, 240, GL_BGRA,
+			// GL_UNSIGNED_BYTE, texture_update_buffer);
+			const GB_FrameBuffer fb = GB_GetFrameBuffer(&gb);
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 160, 144, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
+
+			// Ideally we could mix SDL_Renderer* with pure OpenGL calls, but that seems
+			// to be tricker than it should be.
+			glClear(GL_COLOR_BUFFER_BIT);
+			glBegin(GL_TRIANGLE_STRIP);
 			{
-				texture_update_buffer[i * 320 + j] = i * i + j * j + tick;
+				// Tex coords are flipped upside down. SDL uses upper left, OpenGL
+				// lower left as origin.
+				glTexCoord2f(0.0f, 0.0f);
+				glVertex2f(-1.0f, 1.0);
+
+				glTexCoord2f(0.0f, 1.0f);
+				glVertex2f(-1.0f, -1.0f);
+
+				glTexCoord2f(1.0f, 0.0f);
+				glVertex2f(1.0f, 1.0f);
+
+				glTexCoord2f(1.0f, 1.0f);
+				glVertex2f(1.0f, -1.0f);
 			}
+			glEnd();
 		}
-
-		for (int i = 0; i < 144; i++)
-		{
-			for (int j = 0; j < 160; j++)
-			{
-				texture_update_buffer2[i * 160 + j] = (uint8_t)(i + j);
-			}
-		}
-		// NOTE: While the binary layout between SDL and OpenGL is actually
-		// the same, SDL uses SDL_PIXELFORMAT_RGB888 and OpenGL GL_BGR(A).
-		// glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 320, 240, GL_BGRA, GL_UNSIGNED_BYTE, texture_update_buffer);
-		const GB_FrameBuffer fb = GB_GetFrameBuffer(&gb);
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 160, 144, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
-		// glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 160, 144, GL_RED, GL_UNSIGNED_BYTE, texture_update_buffer2);
-
-
-		// Ideally we could mix SDL_Renderer* with pure OpenGL calls, but that seems
-		// to be tricker than it should be.
-		glClear(GL_COLOR_BUFFER_BIT);
-		glBegin(GL_TRIANGLE_STRIP);
-		{
-			// Tex coords are flipped upside down. SDL uses upper left, OpenGL
-			// lower left as origin.
-			glTexCoord2f(0.0f, 0.0f);
-			glVertex2f(-1.0f, 1.0);
-
-			glTexCoord2f(0.0f, 1.0f);
-			glVertex2f(-1.0f, -1.0f);
-
-			glTexCoord2f(1.0f, 0.0f);
-			glVertex2f(1.0f, 1.0f);
-
-			glTexCoord2f(1.0f, 1.0f);
-			glVertex2f(1.0f, -1.0f);
-		}
-		glEnd();
 
 		// ImGui
 		ImGui_ImplOpenGL2_NewFrame();
-		ImGui_ImplSDL2_NewFrame(window);
+		ImGui_ImplSDL2_NewFrame(config.handles.window);
 		ImGui::NewFrame();
 		if (config.gui.show_gui)
 		{
@@ -905,18 +985,18 @@ main(int argc, char* argv[])
 		}
 		ImGui::Render();
 		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
-		// glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
-		// glClear(GL_COLOR_BUFFER_BIT);
 		ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
 
-		SDL_GL_SwapWindow(window);
+		SDL_GL_SwapWindow(config.handles.window);
+
+		DebuggerCreateDestroyDraw(&config, &gb);
 	}
 
 	glDeleteTextures(1, &texture);
 
 	ImGui_ImplOpenGL2_Shutdown();
 	ImGui_ImplSDL2_Shutdown();
-	ImGui::DestroyContext();
+	ImGui::DestroyContext(config.handles.imgui);
 
 	// Save ini
 	IniSave(ini_path, &config.ini);
@@ -929,12 +1009,13 @@ main(int argc, char* argv[])
 	free(ini_path);
 	SDL_free(config.save_path);
 
-	if (controller)
+	if (config.handles.controller)
 	{
-		SDL_GameControllerClose(controller);
+		SDL_GameControllerClose(config.handles.controller);
 	}
-	SDL_GL_DeleteContext(gl_context);
-	SDL_DestroyWindow(window);
+	SDL_GL_DeleteContext(config.handles.gl_context);
+	SDL_DestroyWindow(config.handles.window);
+
 	SDL_Quit();
 
 	return 0;
