@@ -29,8 +29,8 @@
 // #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
-#include <imgui/examples/imgui_impl_opengl2.h>
-#include <imgui/examples/imgui_impl_sdl.h>
+#include <imgui/backends/imgui_impl_opengl2.h>
+#include <imgui/backends/imgui_impl_sdl.h>
 #include <imgui/imgui.h>
 
 #include "dmca_sans_serif_v0900_600.h"
@@ -365,7 +365,6 @@ struct Config
 		ImGuiContext* imgui = NULL;
 
 		SDL_Window* debug_window = NULL;
-		SDL_GLContext debug_gl_context = NULL;
 		ImGuiContext* debug_imgui = NULL;
 	} handles;
 };
@@ -669,37 +668,36 @@ DebuggerCreateDestroyDraw(Config* config, GB_GameBoy* gb)
 		}
 		else
 		{
-			config->handles.debug_gl_context = SDL_GL_CreateContext(config->handles.debug_window);
-			SDL_GL_MakeCurrent(config->handles.debug_window, config->handles.debug_gl_context);
-			SDL_GL_SetSwapInterval(1);  // Enable V-sync
+			SDL_GL_MakeCurrent(config->handles.debug_window, config->handles.gl_context);
 
-			config->handles.debug_imgui = ImGui::CreateContext();
+			// Both ImGui contexts need to share the FontAtlas. That's because the OpenGL2 backend
+			// has a 'static GLuint g_FontTexture'.
+			config->handles.debug_imgui = ImGui::CreateContext(ImGui::GetIO().Fonts);
 			ImGui::SetCurrentContext(config->handles.debug_imgui);
 
 			// SDL_Log("dpi scale: %f\n", dpi_scale);
-			ImGui::GetStyle().ScaleAllSizes(1.0f);  // dpi_scale * 2.0f);
-					ImGuiIO& io = ImGui::GetIO();
-			io.IniFilename = NULL;
-			//io.Fonts->AddFontFromMemoryCompressedTTF(dmca_sans_serif_v0900_600_compressed_data,
+			//ImGui::GetStyle().ScaleAllSizes(1.0f);  // dpi_scale * 2.0f);
+			//ImGuiIO& io = ImGui::GetIO();
+			//io.IniFilename = NULL;
+			// io.Fonts->AddFontFromMemoryCompressedTTF(dmca_sans_serif_v0900_600_compressed_data,
 			//		dmca_sans_serif_v0900_600_compressed_size, 13.0f);
-			ImGui_ImplSDL2_InitForOpenGL(config->handles.debug_window, config->handles.debug_gl_context);
+			ImGui_ImplSDL2_InitForOpenGL(config->handles.debug_window, config->handles.gl_context);
 			ImGui_ImplOpenGL2_Init();
 
 			ImGui::StyleColorsClassic();
-			//ImGui::GetStyle().FrameRounding = 4.0f;
+			// ImGui::GetStyle().FrameRounding = 4.0f;
+		ImGui::SetCurrentContext(config->handles.imgui);
 
 			SDL_GL_MakeCurrent(config->handles.window, config->handles.gl_context);
 		}
 	}
 	else if (config->handles.debug_window && !config->debug.show)
 	{
-		SDL_GL_MakeCurrent(config->handles.debug_window, config->handles.debug_gl_context);
+		SDL_GL_MakeCurrent(config->handles.debug_window, config->handles.gl_context);
 
 		ImGui::DestroyContext(config->handles.debug_imgui);
 		config->handles.debug_imgui = NULL;
-		SDL_GL_DeleteContext(config->handles.debug_gl_context);
 		SDL_DestroyWindow(config->handles.debug_window);
-		config->handles.debug_gl_context = NULL;
 		config->handles.debug_window = NULL;
 
 		SDL_GL_MakeCurrent(config->handles.window, config->handles.gl_context);
@@ -707,7 +705,7 @@ DebuggerCreateDestroyDraw(Config* config, GB_GameBoy* gb)
 
 	if (config->debug.show)
 	{
-		SDL_GL_MakeCurrent(config->handles.debug_window, config->handles.debug_gl_context);
+		SDL_GL_MakeCurrent(config->handles.debug_window, config->handles.gl_context);
 		glViewport(0, 0, config->debug.fb_width, config->debug.fb_height);
 		glClearColor(0.75f, 0.75f, 0.75f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
@@ -784,8 +782,8 @@ main(int argc, char* argv[])
 	ImGui::GetStyle().ScaleAllSizes(dpi_scale * 2.0f);
 	ImGuiIO& io = ImGui::GetIO();
 	io.IniFilename = NULL;
-	//io.Fonts->AddFontFromMemoryCompressedTTF(
-	//		dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, 25.0f * dpi_scale);
+	io.Fonts->AddFontFromMemoryCompressedTTF(
+			dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, 25.0f * dpi_scale);
 	ImGui_ImplSDL2_InitForOpenGL(config.handles.window, config.handles.gl_context);
 	ImGui_ImplOpenGL2_Init();
 	ImGui::StyleColorsClassic();
@@ -937,6 +935,8 @@ main(int argc, char* argv[])
 			}
 		}
 
+
+		glViewport(0, 0, fb_width, fb_height);  // TODO
 		{  // Draw framebuffer
 			// TODO: Don't use ticks, use perf counters as shown in the Imgui example.
 			// const int tick = SDL_GetTicks();
@@ -984,7 +984,6 @@ main(int argc, char* argv[])
 			}
 		}
 		ImGui::Render();
-		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
 		ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
 
 		SDL_GL_SwapWindow(config.handles.window);
