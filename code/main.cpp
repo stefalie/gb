@@ -366,6 +366,7 @@ struct Config
 
 		SDL_Window* debug_window = NULL;
 		ImGuiContext* debug_imgui = NULL;
+		ImFont* debug_font = NULL;
 	} handles;
 };
 
@@ -664,11 +665,13 @@ DebuggerDraw(Config* config, GB_GameBoy* gb)
 	ImGui_ImplOpenGL2_NewFrame();
 	ImGui_ImplSDL2_NewFrame(config->handles.debug_window);
 	ImGui::NewFrame();
+	ImGui::PushFont(config->handles.debug_font);
 	static bool show_demo = true;
 	if (show_demo)
 	{
 		ImGui::ShowDemoWindow(&show_demo);
 	}
+	ImGui::PopFont();
 	ImGui::Render();
 
 	glViewport(0, 0, config->debug.fb_width, config->debug.fb_height);
@@ -749,16 +752,19 @@ main(int argc, char* argv[])
 	{  // Setup ImGui for main window
 		config.handles.imgui = ImGui::CreateContext();
 		ImGui::SetCurrentContext(config.handles.imgui);
-		ImGui::GetStyle().ScaleAllSizes(dpi_scale * 2.0f);
+
+		const float main_window_scale = 2.0f * dpi_scale;
+		ImGui::GetStyle().ScaleAllSizes(main_window_scale);
 		ImGuiIO& io = ImGui::GetIO();
 		io.IniFilename = NULL;
-		io.Fonts->AddFontFromMemoryCompressedTTF(dmca_sans_serif_v0900_600_compressed_data,
-				dmca_sans_serif_v0900_600_compressed_size, 25.0f * dpi_scale);
+		const float main_font_size = 13.0f * main_window_scale;
+		io.Fonts->AddFontFromMemoryCompressedTTF(
+				dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, main_font_size);
 		ImGui_ImplSDL2_InitForOpenGL(config.handles.window, config.handles.gl_context);
 		ImGui_ImplOpenGL2_Init();
 		ImGui::StyleColorsClassic();
-		ImGui::GetStyle().FrameRounding = 8.0f * dpi_scale;
-		ImGui::GetStyle().WindowRounding = 8.0f * dpi_scale;
+		ImGui::GetStyle().FrameRounding = 4.0f * main_window_scale;
+		ImGui::GetStyle().WindowRounding = 4.0f * main_window_scale;
 	}
 
 	// Setup ImGui for debugger window
@@ -770,18 +776,18 @@ main(int argc, char* argv[])
 		config.handles.debug_imgui = ImGui::CreateContext(ImGui::GetIO().Fonts);
 		ImGui::SetCurrentContext(config.handles.debug_imgui);
 
-
-		// SDL_Log("dpi scale: %f\n", dpi_scale);
-		// ImGui::GetStyle().ScaleAllSizes(1.0f);  // dpi_scale * 2.0f);
-		// ImGuiIO& io = ImGui::GetIO();
-		// io.IniFilename = NULL;
-		// io.Fonts->AddFontFromMemoryCompressedTTF(dmca_sans_serif_v0900_600_compressed_data,
-		//		dmca_sans_serif_v0900_600_compressed_size, 13.0f);
+		const float debug_window_scale = 1.2f * dpi_scale;
+		ImGui::GetStyle().ScaleAllSizes(debug_window_scale);
+		ImGuiIO& io = ImGui::GetIO();
+		io.IniFilename = NULL;
+		const float debug_font_size = 13.0f * debug_window_scale;
+		config.handles.debug_font = io.Fonts->AddFontFromMemoryCompressedTTF(
+				dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, debug_font_size);
 		ImGui_ImplSDL2_InitForOpenGL(config.handles.debug_window, config.handles.gl_context);
 		ImGui_ImplOpenGL2_Init();
-
-		// ImGui::StyleColorsClassic();
-		// ImGui::GetStyle().FrameRounding = 4.0f;
+		ImGui::StyleColorsClassic();
+		ImGui::GetStyle().FrameRounding = 4.0f * debug_window_scale;
+		ImGui::GetStyle().WindowRounding = 4.0f * debug_window_scale;
 
 		// Switch contexts back.
 		ImGui::SetCurrentContext(config.handles.imgui);
