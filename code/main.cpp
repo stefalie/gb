@@ -32,6 +32,7 @@
 #include <imgui/backends/imgui_impl_opengl2.h>
 #include <imgui/backends/imgui_impl_sdl.h>
 #include <imgui/imgui.h>
+#include <imgui/imgui_internal.h>
 
 #include "dmca_sans_serif_v0900_600.h"
 extern "C" {
@@ -397,7 +398,7 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 	{
 		if (ImGui::BeginMenu("File"))
 		{
-			if (ImGui::MenuItem("Open ROM", "Ctrl+O"))
+			if (ImGui::MenuItem("Open ROM"))
 			{
 				char file_path[MAX_PATH] = {};
 
@@ -442,7 +443,7 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 		if (ImGui::BeginMenu("System"))
 		{
 			ImGui::MenuItem("Reset", NULL, false, config->gui.has_active_rom);
-			ImGui::MenuItem("Pause", "Ctrl+P", false, config->gui.has_active_rom);
+			ImGui::MenuItem("Pause", "Space", false, config->gui.has_active_rom);
 			ImGui::Separator();
 			ImGui::MenuItem("Save", "F5", false, config->gui.has_active_rom);
 			ImGui::MenuItem("Load", "F7", false, config->gui.has_active_rom);
@@ -483,8 +484,8 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 			if (ImGui::BeginMenu("Speed"))
 			{
 				ImGui::MenuItem("Default", NULL, true);
-				ImGui::MenuItem("Faster", "Ctrl++");
-				ImGui::MenuItem("Slower", "Ctrl+-");
+				ImGui::MenuItem("Faster");
+				ImGui::MenuItem("Slower");
 				ImGui::MenuItem("Unthrottled", NULL, false);
 				ImGui::EndMenu();
 			}
@@ -669,18 +670,18 @@ DebuggerDraw(Config* config, GB_GameBoy* gb)
 	ImGui::NewFrame();
 	ImGui::PushFont(config->handles.debug_font);
 
-	static bool show_demo2 = true;
-	if (show_demo2)
-	{
-		ImGui::ShowDemoWindow(&show_demo2);
-	}
+	bool reset_dock = false;
 
 	// Menu
 	if (ImGui::BeginMainMenuBar())
 	{
 		if (ImGui::BeginMenu("File"))
 		{
-			if (ImGui::MenuItem("Exit", "Esc"))
+			if (ImGui::MenuItem("Reset Layout"))
+			{
+				reset_dock = true;
+			}
+			if (ImGui::MenuItem("Exit"))
 			{
 				config->debug.show = false;
 			}
@@ -689,59 +690,75 @@ DebuggerDraw(Config* config, GB_GameBoy* gb)
 	}
 	ImGui::EndMainMenuBar();
 
-	// if (true)
-	//{  // Dock
-	//	// ImGui::Begin("Dock");
-	//	// ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
-	//	//, ImGuiDockNodeFlags_NoDockingInCentralNode);
-	//	// ImGuiID dock_id = ImGui::GetWindowDockID();
-	//	// ImGui::SetNextWindowDockID(dock_id);
+	{  // Dock
+		// Unfortunately we can't use DockSpaceOverViewport(...) here because
+		// it internally creates a window and defines a dock space id. But we
+		// need inject the docker builder code in between these two steps.
+		// The code here is replicated from DockSpaceOverViewport(...).
 
-	//	ImGuiID dockspaceId = ImGui::GetID("tracyDockspace");
-	//	ImGui::DockSpace(dockspaceId, ImVec2(0, 0));  //, ImGuiDockNodeFlags_NoDockingInCentralNode);
-	//	// if (ImGuiDockNode* node = ImGui::DockBuilderGetCentralNode(dockspaceId))
-	//	//{
-	//	//	node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
-	//	//}
-	//	// ImGui::SetNextWindowDockID(dockspaceId);
-	//	ImGui::Begin("Dock1");
-	//	ImGui::Text("text text text 1");
-	//	ImGui::End();
-	//	ImGui::Begin("Dock2");
-	//	ImGui::Text("text text text 2");
-	//	ImGui::End();
-	//	// ImGui::SetNextWindowSize( ImVec2( 520, 800 ), ImGuiCond_FirstUseEver );
+		const ImGuiViewport* viewport = ImGui::GetMainViewport();
+		ImGui::SetNextWindowPos(viewport->WorkPos);
+		ImGui::SetNextWindowSize(viewport->WorkSize);
+		ImGui::SetNextWindowViewport(viewport->ID);
 
-	//	// ImGui::End();
-	//}
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+				ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoBringToFrontOnFocus |
+				ImGuiWindowFlags_NoNavFocus;
 
-	if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_DockingEnable)
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+		ImGui::Begin("dockspace window", NULL, flags);
+		ImGui::PopStyleVar(3);
+
+		ImGuiID dockspace_id = ImGui::GetID("dockspace");
+
+		if (!ImGui::DockBuilderGetNode(dockspace_id) || reset_dock)
+		{
+			ImGui::DockBuilderRemoveNode(dockspace_id);
+			ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+
+			ImGuiID dock_main_id = dockspace_id;
+			ImGuiID dock_id_prop = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.50f, NULL, &dock_main_id);
+			ImGuiID dock_id_bottom =
+					ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.50f, NULL, &dock_main_id);
+
+			ImGui::DockBuilderDockWindow("Log2", dock_id_bottom);
+			ImGui::DockBuilderDockWindow("Properties", dock_id_prop);
+			ImGui::DockBuilderDockWindow("Mesh", dock_id_prop);
+			ImGui::DockBuilderDockWindow("Extra", dock_id_prop);
+			ImGui::DockBuilderFinish(dockspace_id);
+		}
+
+		ImGui::DockSpace(dockspace_id);
+		ImGui::End();
+	}
+
 	{
-		ImGui::Begin("Dock Main", NULL, ImGuiWindowFlags_NoDocking);
-		// ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
-		//, ImGuiDockNodeFlags_NoDockingInCentralNode);
-		// ImGuiID dock_id = ImGui::GetWindowDockID();
-		// ImGui::SetNextWindowDockID(dock_id);
+		ImGui::Begin("Log2");
+		ImGui::Text("text text text log");
+		ImGui::Text("text text text log2");
+		ImGui::Button("Hello button");
+		ImGui::End();
 
-		ImGuiID dockspaceId = ImGui::GetID("tracyDockspace");
-		// ImGui::DockSpace(dockspaceId);//, ImVec2(0, 0));  //, ImGuiDockNodeFlags_NoDockingInCentralNode);
-		ImGui::DockSpace(dockspaceId);  //, ImVec2(0, 0), ImGuiDockNodeFlags_None);
-		// if (ImGuiDockNode* node = ImGui::DockBuilderGetCentralNode(dockspaceId))
-		//{
-		//	node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
-		//}
-		ImGui::SetNextWindowDockID(dockspaceId, ImGuiCond_FirstUseEver);
-		ImGui::Begin("Dock1");
-		ImGui::Text("text text text 1");
+		ImGui::Begin("Properties");
+		ImGui::Text("text text text props");
 		ImGui::End();
-		ImGui::SetNextWindowDockID(dockspaceId, ImGuiCond_FirstUseEver);
-		ImGui::SetNextWindowSize(ImVec2(900, 0), ImGuiCond_FirstUseEver);
-		ImGui::Begin("Dock2");
-		ImGui::Text("text text text 2");
-		ImGui::End();
-		// ImGui::SetNextWindowSize( ImVec2( 520, 800 ), ImGuiCond_FirstUseEver );
 
+		ImGui::Begin("Mesh");
+		ImGui::Text("text text text mesh");
 		ImGui::End();
+
+		ImGui::Begin("Extra");
+		ImGui::Text("text text text extra");
+		ImGui::End();
+	}
+
+	// TODO
+	static bool show_demo2 = true;
+	if (show_demo2)
+	{
+		ImGui::ShowDemoWindow(&show_demo2);
 	}
 
 	ImGui::PopFont();
@@ -915,11 +932,25 @@ main(int argc, char* argv[])
 	// Main Loop
 	while (!config.quit)
 	{
+		// Make sure the right ImGui context gets the event.
+		if (SDL_GetWindowFlags(config.handles.debug_window) & SDL_WINDOW_INPUT_FOCUS)
+		{
+			ImGui::SetCurrentContext(config.handles.debug_imgui);
+		}
+
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
 		{
-			// SDL_Log("Event: %x\n", event.type);
 			ImGui_ImplSDL2_ProcessEvent(&event);
+
+			// TODO: Not needed for GB I think. Also modal poup wants input and then doesn't give us the keys anymore.
+			// BAD.
+			// ImGuiIO& io = ImGui::GetIO(); if ((io.WantCaptureMouse && (event.type == SDL_MOUSEWHEEL ||
+			// event.type == SDL_MOUSEBUTTONDOWN)) ||
+			//		(io.WantCaptureKeyboard && (event.type == SDL_KEYUP || event.type == SDL_KEYDOWN)))
+			//{
+			//	continue;
+			//}
 
 			// TODO: Deal with enter + ctrl
 			// Really?
@@ -966,6 +997,7 @@ main(int argc, char* argv[])
 				if (event.window.event == SDL_WINDOWEVENT_CLOSE &&
 						SDL_GetWindowFromID(event.window.windowID) == config.handles.window)
 				{
+					SDL_RaiseWindow(config.handles.window);  // Make sure window gets focuses when closed from taskbar.
 					config.gui.show_quit_popup = true;
 				}
 				else if (event.window.event == SDL_WINDOWEVENT_CLOSE &&
@@ -1034,6 +1066,7 @@ main(int argc, char* argv[])
 				break;
 			}
 		}
+		ImGui::SetCurrentContext(config.handles.imgui);  // Reset (if changed)
 
 
 		glViewport(0, 0, fb_width, fb_height);  // TODO
@@ -1077,11 +1110,6 @@ main(int argc, char* argv[])
 		if (config.gui.show_gui)
 		{
 			GuiDraw(&config, &gb);
-			static bool show_demo = true;
-			if (show_demo)
-			{
-				ImGui::ShowDemoWindow(&show_demo);
-			}
 		}
 		ImGui::Render();
 		ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
