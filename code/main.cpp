@@ -54,7 +54,7 @@ _SDL_CheckError(const char* file, int line)
 #define SDL_CheckError() ((void)0)
 #endif
 
-// Programatically enable high-DPI mode:
+// Programmatically enable high-DPI mode:
 // https://nlguillemot.wordpress.com/2016/12/11/high-dpi-rendering/
 // https://discourse.libsdl.org/t/sdl-getdesktopdisplaymode-resolution-reported-in-windows-10-when-using-app-scaling/22389/3
 typedef HRESULT(WINAPI SetProcessDpiAwarenessType)(PROCESS_DPI_AWARENESS dpi_awareness);
@@ -136,7 +136,7 @@ InputSdlName(const Input* input)
 
 struct Ini
 {
-	// TODO: If the opendialog initialDir actually persist between reboots, then
+	// TODO: If the open dialog initialDir actually persist between reboots, then
 	// we can remove this option and set 'lpstrInitialDir' to NULL. And that then
 	// raises the question if we even need the ini loading code. Meh :-(
 	// char last_opened_path[1024] = {};
@@ -352,9 +352,6 @@ struct Config
 	struct Debugger
 	{
 		bool show = false;
-		int fb_width = 1024;
-		int fb_height = 768;
-
 	} debug;
 
 	struct Handles
@@ -363,6 +360,7 @@ struct Config
 		SDL_GLContext gl_context = NULL;
 		SDL_GameController* controller = NULL;
 		ImGuiContext* imgui = NULL;
+		ImFont* font = NULL;
 
 		SDL_Window* debug_window = NULL;
 		ImGuiContext* debug_imgui = NULL;
@@ -393,6 +391,8 @@ LoadRomFromFile(const char* file_path)
 static void
 GuiDraw(Config* config, GB_GameBoy* gb)
 {
+	ImGui::PushFont(config->handles.font);
+
 	if (ImGui::BeginMainMenuBar())
 	{
 		if (ImGui::BeginMenu("File"))
@@ -519,12 +519,12 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 	}
 	ImGui::EndMainMenuBar();
 
-	// The current (if any) popup will be closed if ESC is hit or the window
-	// is closed. This is applies for all popups except the quit popup.
+	// The current (if any) pop-up will be closed if ESC is hit or the window
+	// is closed. This is applies for all pop-ups except the quit popup.
 	const bool close_current_popup = config->gui.pressed_escape || config->gui.show_quit_popup;
 
 	// Use the hit ESC key only to close the quit popup only if it wasn't used
-	// to close another popup.
+	// to close another pop-up.
 	const bool any_open_popups_except_quit =
 			config->gui.show_about_popup || config->gui.show_input_config_popup /* || ...*/;
 	const bool esc_for_quit_popup = config->gui.pressed_escape && !any_open_popups_except_quit;
@@ -630,7 +630,7 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 		ImGui::EndPopup();
 	}
 
-	// Quit popup
+	// Quit pop-up
 	if (config->gui.show_quit_popup)
 	{
 		ImGui::OpenPopup("Quit");
@@ -651,6 +651,8 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 		}
 		ImGui::EndPopup();
 	}
+
+	ImGui::PopFont();
 }
 
 static void
@@ -666,15 +668,88 @@ DebuggerDraw(Config* config, GB_GameBoy* gb)
 	ImGui_ImplSDL2_NewFrame(config->handles.debug_window);
 	ImGui::NewFrame();
 	ImGui::PushFont(config->handles.debug_font);
-	static bool show_demo = true;
-	if (show_demo)
+
+	static bool show_demo2 = true;
+	if (show_demo2)
 	{
-		ImGui::ShowDemoWindow(&show_demo);
+		ImGui::ShowDemoWindow(&show_demo2);
 	}
+
+	// Menu
+	if (ImGui::BeginMainMenuBar())
+	{
+		if (ImGui::BeginMenu("File"))
+		{
+			if (ImGui::MenuItem("Exit", "Esc"))
+			{
+				config->debug.show = false;
+			}
+			ImGui::EndMenu();
+		}
+	}
+	ImGui::EndMainMenuBar();
+
+	// if (true)
+	//{  // Dock
+	//	// ImGui::Begin("Dock");
+	//	// ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+	//	//, ImGuiDockNodeFlags_NoDockingInCentralNode);
+	//	// ImGuiID dock_id = ImGui::GetWindowDockID();
+	//	// ImGui::SetNextWindowDockID(dock_id);
+
+	//	ImGuiID dockspaceId = ImGui::GetID("tracyDockspace");
+	//	ImGui::DockSpace(dockspaceId, ImVec2(0, 0));  //, ImGuiDockNodeFlags_NoDockingInCentralNode);
+	//	// if (ImGuiDockNode* node = ImGui::DockBuilderGetCentralNode(dockspaceId))
+	//	//{
+	//	//	node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+	//	//}
+	//	// ImGui::SetNextWindowDockID(dockspaceId);
+	//	ImGui::Begin("Dock1");
+	//	ImGui::Text("text text text 1");
+	//	ImGui::End();
+	//	ImGui::Begin("Dock2");
+	//	ImGui::Text("text text text 2");
+	//	ImGui::End();
+	//	// ImGui::SetNextWindowSize( ImVec2( 520, 800 ), ImGuiCond_FirstUseEver );
+
+	//	// ImGui::End();
+	//}
+
+	if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_DockingEnable)
+	{
+		ImGui::Begin("Dock Main", NULL, ImGuiWindowFlags_NoDocking);
+		// ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+		//, ImGuiDockNodeFlags_NoDockingInCentralNode);
+		// ImGuiID dock_id = ImGui::GetWindowDockID();
+		// ImGui::SetNextWindowDockID(dock_id);
+
+		ImGuiID dockspaceId = ImGui::GetID("tracyDockspace");
+		// ImGui::DockSpace(dockspaceId);//, ImVec2(0, 0));  //, ImGuiDockNodeFlags_NoDockingInCentralNode);
+		ImGui::DockSpace(dockspaceId);  //, ImVec2(0, 0), ImGuiDockNodeFlags_None);
+		// if (ImGuiDockNode* node = ImGui::DockBuilderGetCentralNode(dockspaceId))
+		//{
+		//	node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+		//}
+		ImGui::SetNextWindowDockID(dockspaceId, ImGuiCond_FirstUseEver);
+		ImGui::Begin("Dock1");
+		ImGui::Text("text text text 1");
+		ImGui::End();
+		ImGui::SetNextWindowDockID(dockspaceId, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize(ImVec2(900, 0), ImGuiCond_FirstUseEver);
+		ImGui::Begin("Dock2");
+		ImGui::Text("text text text 2");
+		ImGui::End();
+		// ImGui::SetNextWindowSize( ImVec2( 520, 800 ), ImGuiCond_FirstUseEver );
+
+		ImGui::End();
+	}
+
 	ImGui::PopFont();
 	ImGui::Render();
 
-	glViewport(0, 0, config->debug.fb_width, config->debug.fb_height);
+	int fb_width, fb_height;
+	SDL_GL_GetDrawableSize(config->handles.debug_window, &fb_width, &fb_height);
+	glViewport(0, 0, fb_width, fb_height);
 	glClearColor(0.75f, 0.75f, 0.75f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 	ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
@@ -731,8 +806,10 @@ main(int argc, char* argv[])
 	}
 
 	{  // Debugger window
+		const int fb_debug_width = (int)(1280 * dpi_scale);
+		const int fb_debug_height = (int)(960 * dpi_scale);
 		config.handles.debug_window = SDL_CreateWindow("GB Debugger", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-				config.debug.fb_width, config.debug.fb_height, SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
+				fb_debug_width, fb_debug_height, SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
 		if (!config.handles.debug_window)
 		{
 			SDL_DestroyWindow(config.handles.window);
@@ -749,17 +826,15 @@ main(int argc, char* argv[])
 
 	config.handles.controller = NULL;
 
-	{  // Setup ImGui for main window
+	// Setup ImGui for main window
+	const float main_window_scale = 2.0f * dpi_scale;
+	{
 		config.handles.imgui = ImGui::CreateContext();
 		ImGui::SetCurrentContext(config.handles.imgui);
 
-		const float main_window_scale = 2.0f * dpi_scale;
 		ImGui::GetStyle().ScaleAllSizes(main_window_scale);
 		ImGuiIO& io = ImGui::GetIO();
 		io.IniFilename = NULL;
-		const float main_font_size = 13.0f * main_window_scale;
-		io.Fonts->AddFontFromMemoryCompressedTTF(
-				dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, main_font_size);
 		ImGui_ImplSDL2_InitForOpenGL(config.handles.window, config.handles.gl_context);
 		ImGui_ImplOpenGL2_Init();
 		ImGui::StyleColorsClassic();
@@ -768,6 +843,7 @@ main(int argc, char* argv[])
 	}
 
 	// Setup ImGui for debugger window
+	const float debug_window_scale = 1.2f * dpi_scale;
 	{
 		SDL_GL_MakeCurrent(config.handles.debug_window, config.handles.gl_context);
 
@@ -776,13 +852,10 @@ main(int argc, char* argv[])
 		config.handles.debug_imgui = ImGui::CreateContext(ImGui::GetIO().Fonts);
 		ImGui::SetCurrentContext(config.handles.debug_imgui);
 
-		const float debug_window_scale = 1.2f * dpi_scale;
 		ImGui::GetStyle().ScaleAllSizes(debug_window_scale);
 		ImGuiIO& io = ImGui::GetIO();
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 		io.IniFilename = NULL;
-		const float debug_font_size = 13.0f * debug_window_scale;
-		config.handles.debug_font = io.Fonts->AddFontFromMemoryCompressedTTF(
-				dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, debug_font_size);
 		ImGui_ImplSDL2_InitForOpenGL(config.handles.debug_window, config.handles.gl_context);
 		ImGui_ImplOpenGL2_Init();
 		ImGui::StyleColorsClassic();
@@ -795,6 +868,23 @@ main(int argc, char* argv[])
 		// This is unfortunately necessary (at least with the OpenGL2 backend) as there
 		// is a 'static SDL_Window* g_Window'.
 		ImGui_ImplSDL2_InitForOpenGL(config.handles.window, config.handles.gl_context);
+	}
+
+	{  // ImGui fonts
+		// Doesn't matter which context, only accessing shared fonts.
+		ImGuiIO& io = ImGui::GetIO();
+
+		// First set the debug font. It will be used for newly created windows as default.
+		// Docking might create new windows in NewFrame() if a new dock space is created
+		// from floating elements. It's not possible to do PushFont before doing NewFrame,
+		// that's why we choose the smaller debugger font as the default.
+		const float debug_font_size = 13.0f * debug_window_scale;
+		config.handles.debug_font = io.Fonts->AddFontFromMemoryCompressedTTF(
+				dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, debug_font_size);
+
+		const float main_font_size = 13.0f * main_window_scale;
+		config.handles.font = io.Fonts->AddFontFromMemoryCompressedTTF(
+				dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, main_font_size);
 	}
 
 	// OpenGL setup. Leave matrices as identity.
@@ -931,7 +1021,10 @@ main(int argc, char* argv[])
 				}
 				if (event.key.keysym.sym == SDLK_ESCAPE)
 				{
-					config.gui.pressed_escape = true;
+					if (SDL_GetWindowFlags(config.handles.window) & SDL_WINDOW_INPUT_FOCUS)
+					{
+						config.gui.pressed_escape = true;
+					}
 				}
 			case SDL_MOUSEMOTION:
 				// TODO: Show menu for a few secs if game is running. If not running,
