@@ -707,7 +707,7 @@ DebuggerDraw(Config* config, GB_GameBoy* gb)
 
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.2f, 0.2f));
 		ImGui::Begin("dockspace window", NULL, flags);
 		ImGui::PopStyleVar(3);
 
@@ -717,16 +717,18 @@ DebuggerDraw(Config* config, GB_GameBoy* gb)
 		{
 			ImGui::DockBuilderRemoveNode(dockspace_id);
 			ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+			ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
 
-			ImGuiID dock_main_id = dockspace_id;
-			ImGuiID dock_id_prop = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.50f, NULL, &dock_main_id);
-			ImGuiID dock_id_bottom =
-					ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.50f, NULL, &dock_main_id);
+			ImGuiID dock_tmp_id = dockspace_id;
+			ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Left, 0.50f, NULL, &dock_tmp_id);
+			ImGuiID dock_id_right_bottom =
+					ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Down, 0.50f, NULL, &dock_tmp_id);
+			ImGuiID dock_id_right_top = dock_tmp_id;
 
-			ImGui::DockBuilderDockWindow("Log2", dock_id_bottom);
-			ImGui::DockBuilderDockWindow("Properties", dock_id_prop);
-			ImGui::DockBuilderDockWindow("Mesh", dock_id_prop);
-			ImGui::DockBuilderDockWindow("Extra", dock_id_prop);
+			ImGui::DockBuilderDockWindow("Left Tab 1", dock_id_left);
+			ImGui::DockBuilderDockWindow("Left Tab 2", dock_id_left);
+			ImGui::DockBuilderDockWindow("Right", dock_id_right_top);
+			ImGui::DockBuilderDockWindow("Sprites", dock_id_right_bottom);
 			ImGui::DockBuilderFinish(dockspace_id);
 		}
 
@@ -735,22 +737,21 @@ DebuggerDraw(Config* config, GB_GameBoy* gb)
 	}
 
 	{
-		ImGui::Begin("Log2");
-		ImGui::Text("text text text log");
-		ImGui::Text("text text text log2");
+		ImGui::Begin("Left Tab 1");
+		ImGui::Text("Lorem ipsum ...");
 		ImGui::Button("Hello button");
 		ImGui::End();
 
-		ImGui::Begin("Properties");
-		ImGui::Text("text text text props");
+		ImGui::Begin("Left Tab 2");
+		ImGui::Text("text text text left");
 		ImGui::End();
 
-		ImGui::Begin("Mesh");
-		ImGui::Text("text text text mesh");
+		ImGui::Begin("Right");
+		ImGui::Text("text text text right");
 		ImGui::End();
 
-		ImGui::Begin("Extra");
-		ImGui::Text("text text text extra");
+		ImGui::Begin("Sprites");
+		ImGui::Text("bla bla bla");
 		ImGui::End();
 	}
 
