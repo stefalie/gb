@@ -15,10 +15,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <shellapi.h>  // For opening the website
-#pragma warning(push)
-#pragma warning(disable : 5105)
-#include <ShellScalingAPI.h>  // For DPI scaling
-#pragma warning(pop)
 #include <commdlg.h>  // For file open dialog
 
 #include <assert.h>
@@ -55,27 +51,6 @@ _SDL_CheckError(const char* file, int line)
 #define SDL_CheckError() ((void)0)
 #endif
 
-// Programmatically enable high-DPI mode:
-// https://nlguillemot.wordpress.com/2016/12/11/high-dpi-rendering/
-// https://discourse.libsdl.org/t/sdl-getdesktopdisplaymode-resolution-reported-in-windows-10-when-using-app-scaling/22389/3
-typedef HRESULT(WINAPI SetProcessDpiAwarenessType)(PROCESS_DPI_AWARENESS dpi_awareness);
-static void
-EnableHighDpiAwareness()
-{
-	void* shcore_dll = SDL_LoadObject("Shcore.dll");
-	assert(shcore_dll);
-	if (shcore_dll)
-	{
-		SetProcessDpiAwarenessType* SetProcessDpiAwareness =
-				(SetProcessDpiAwarenessType*)SDL_LoadFunction(shcore_dll, "SetProcessDpiAwareness");
-		assert(SetProcessDpiAwareness);
-		if (SetProcessDpiAwareness)
-		{
-			SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
-		}
-	}
-}
-
 struct Input
 {
 	enum InputType
@@ -94,7 +69,7 @@ struct Input
 		SDL_GameControllerButton button;
 		SDL_GameControllerAxis axis;
 	} sdl;
-} asdf;
+};
 
 static Input default_inputs[] = {
 	// Keyboard
@@ -388,6 +363,10 @@ LoadRomFromFile(const char* file_path)
 
 	return result;
 }
+
+struct GL
+{
+} gl;
 
 static void
 GuiDraw(Config* config, GB_GameBoy* gb)
@@ -784,7 +763,7 @@ main(int argc, char* argv[])
 {
 	(void)argc;
 	(void)argv;
-	EnableHighDpiAwareness();
+	SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
 	// The high DPI behavior is a bit strange, at least on Windows.
 	// Both SDL_GetWindowSize and SDL_GL_GetDrawableSize always return the same
 	// size which is in contradiction with their docs:
