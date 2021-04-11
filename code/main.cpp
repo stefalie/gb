@@ -14,8 +14,9 @@
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+
+#include <commdlg.h>   // For file open dialog
 #include <shellapi.h>  // For opening the website
-#include <commdlg.h>  // For file open dialog
 
 #include <assert.h>
 #include <stdbool.h>
@@ -73,21 +74,21 @@ struct Input
 
 static Input default_inputs[] = {
 	// Keyboard
-	{ "key_a", "A", Input::TYPE_KEY, SDLK_x },
-	{ "key_b", "B", Input::TYPE_KEY, SDLK_z },
-	{ "key_start", "Start", Input::TYPE_KEY, SDLK_RETURN },
-	{ "key_select", "Select", Input::TYPE_KEY, SDLK_BACKSPACE },
-	{ "key_left", "Left", Input::TYPE_KEY, SDLK_LEFT },
-	{ "key_right", "Right", Input::TYPE_KEY, SDLK_RIGHT },
-	{ "key_up", "Up", Input::TYPE_KEY, SDLK_UP },
-	{ "key_down", "Down", Input::TYPE_KEY, SDLK_DOWN },
+	{ "key_a", "A", Input::TYPE_KEY, { SDLK_x } },
+	{ "key_b", "B", Input::TYPE_KEY, { SDLK_z } },
+	{ "key_start", "Start", Input::TYPE_KEY, { SDLK_RETURN } },
+	{ "key_select", "Select", Input::TYPE_KEY, { SDLK_BACKSPACE } },
+	{ "key_left", "Left", Input::TYPE_KEY, { SDLK_LEFT } },
+	{ "key_right", "Right", Input::TYPE_KEY, { SDLK_RIGHT } },
+	{ "key_up", "Up", Input::TYPE_KEY, { SDLK_UP } },
+	{ "key_down", "Down", Input::TYPE_KEY, { SDLK_DOWN } },
 	// Controller
-	{ "button_a", "A", Input::TYPE_BUTTON, SDL_CONTROLLER_BUTTON_B },
-	{ "button_b", "B", Input::TYPE_BUTTON, SDL_CONTROLLER_BUTTON_A },
-	{ "button_start", "Start", Input::TYPE_BUTTON, SDL_CONTROLLER_BUTTON_START },
-	{ "button_select", "Select", Input::TYPE_BUTTON, SDL_CONTROLLER_BUTTON_BACK },
-	{ "stick_horizontal", "Horizontal", Input::TYPE_AXIS, SDL_CONTROLLER_AXIS_LEFTX },
-	{ "stick_vertical", "Vertical", Input::TYPE_AXIS, SDL_CONTROLLER_AXIS_LEFTY },
+	{ "button_a", "A", Input::TYPE_BUTTON, { SDL_CONTROLLER_BUTTON_B } },
+	{ "button_b", "B", Input::TYPE_BUTTON, { SDL_CONTROLLER_BUTTON_A } },
+	{ "button_start", "Start", Input::TYPE_BUTTON, { SDL_CONTROLLER_BUTTON_START } },
+	{ "button_select", "Select", Input::TYPE_BUTTON, { SDL_CONTROLLER_BUTTON_BACK } },
+	{ "stick_horizontal", "Horizontal", Input::TYPE_AXIS, { SDL_CONTROLLER_AXIS_LEFTX } },
+	{ "stick_vertical", "Vertical", Input::TYPE_AXIS, { SDL_CONTROLLER_AXIS_LEFTY } },
 };
 static const size_t num_inputs = sizeof(default_inputs) / sizeof(default_inputs[0]);
 
@@ -201,7 +202,7 @@ IniLoadOrInit(const char* ini_path)
 			{
 				bool found_key = false;
 
-				for (int i = 0; i < num_inputs; ++i)
+				for (size_t i = 0; i < num_inputs; ++i)
 				{
 					if (!strcmp(key, ini.inputs[i].name))
 					{
@@ -277,7 +278,7 @@ IniSave(const char* ini_path, const Ini* ini)
 		fprintf(file, "mag_filter=%i\n", ini->mag_filter);
 		fprintf(file, "screen_size=%i\n", ini->screen_size);
 		fprintf(file, "[Input]\n");
-		for (int i = 0; i < num_inputs; ++i)
+		for (size_t i = 0; i < num_inputs; ++i)
 		{
 			fprintf(file, "%s=%s\n", ini->inputs[i].name, InputSdlName(&ini->inputs[i]));
 		}
@@ -550,7 +551,7 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 
 			if (i % 2 == 0)
 			{
-				ImGui::Text(input->nice_name);
+				ImGui::Text("%s", input->nice_name);
 				ImGui::NextColumn();
 			}
 
@@ -1000,7 +1001,7 @@ main(int argc, char* argv[])
 				config.handles.controller = NULL;
 				break;
 			case SDL_CONTROLLERBUTTONDOWN:
-				for (int i = 0; i < num_inputs; ++i)
+				for (size_t i = 0; i < num_inputs; ++i)
 				{
 					Input input = config.ini.inputs[i];
 					if (input.type == Input::TYPE_BUTTON && event.cbutton.button == input.sdl.button)
@@ -1013,7 +1014,7 @@ main(int argc, char* argv[])
 				// TODO:
 				break;
 			case SDL_CONTROLLERAXISMOTION:
-				for (int i = 0; i < num_inputs; ++i)
+				for (size_t i = 0; i < num_inputs; ++i)
 				{
 					Input input = config.ini.inputs[i];
 					if (input.type == Input::TYPE_AXIS && event.caxis.axis == input.sdl.axis)
@@ -1023,7 +1024,7 @@ main(int argc, char* argv[])
 				}
 				break;
 			case SDL_KEYDOWN:
-				for (int i = 0; i < num_inputs; ++i)
+				for (size_t i = 0; i < num_inputs; ++i)
 				{
 					Input input = config.ini.inputs[i];
 					if (input.type == Input::TYPE_KEY && event.key.keysym.sym == input.sdl.key)
