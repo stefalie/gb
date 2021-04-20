@@ -365,9 +365,16 @@ LoadRomFromFile(const char* file_path)
 	return result;
 }
 
-struct GL
-{
-} gl;
+#define GL_API_LIST(ENTRY)                                                                          \
+	ENTRY(void, glUseProgram, GLuint program)                                                       \
+	ENTRY(GLuint, glCreateShaderProgramv, GLenum type, GLsizei count, const GLchar* const* strings) \
+	ENTRY(void, glUniform1ui, GLint location, GLuint v0)
+
+#define GL_API_DECL_ENTRY(return_type, name, ...)          \
+	typedef return_type __stdcall name##Proc(__VA_ARGS__); \
+	name##Proc* name;
+GL_API_LIST(GL_API_DECL_ENTRY)
+#undef GL_API_DECL_ENTRY
 
 static void
 GuiDraw(Config* config, GB_GameBoy* gb)
@@ -885,6 +892,14 @@ main(int argc, char* argv[])
 				dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, main_font_size);
 	}
 
+	{  // Load OpenGL extensions.
+#define GL_API_GETPTR_ENTRY(return_type, name, ...) \
+	name = (name##Proc*)wglGetProcAddress(#name);   \
+	assert(name);
+		GL_API_LIST(GL_API_GETPTR_ENTRY)
+#undef GL_API_GETPTR_ENTRY
+	}
+
 	// OpenGL setup. Leave matrices as identity.
 	GLuint texture;
 	{
@@ -954,8 +969,7 @@ main(int argc, char* argv[])
 					event_captured = true;
 				}
 				else if (event.type == SDL_CONTROLLERAXISMOTION && config.modify_input->type == Input::TYPE_AXIS &&
-						(abs(event.caxis.value) > 20000)  // No idea if this sensitivity
-														  // threshold is generally ok.
+						(abs(event.caxis.value) > 20000)  // No idea if this sensitivity threshold is generally ok.
 				)
 				{
 					config.modify_input->sdl.axis = (SDL_GameControllerAxis)event.caxis.axis;
@@ -1049,9 +1063,9 @@ main(int argc, char* argv[])
 		}
 		ImGui::SetCurrentContext(config.handles.imgui);  // Reset (if changed)
 
+		{  // OpenGL drawing
+			glViewport(0, 0, fb_width, fb_height);
 
-		glViewport(0, 0, fb_width, fb_height);  // TODO
-		{                                       // Draw framebuffer
 			// TODO: Don't use ticks, use perf counters as shown in the Imgui example.
 			// const int tick = SDL_GetTicks();
 
