@@ -52,6 +52,43 @@ _SDL_CheckError(const char* file, int line)
 #define SDL_CheckError() ((void)0)
 #endif
 
+void
+_glCheckError(const char* file, int line)
+{
+	GLenum error;
+	while ((error = glGetError()) != GL_NO_ERROR)
+	{
+		const char* error_str;
+		switch (error)
+		{
+#define CASE(error)         \
+	case error:             \
+		error_str = #error; \
+		break
+			CASE(GL_NO_ERROR);
+			CASE(GL_INVALID_ENUM);
+			CASE(GL_INVALID_VALUE);
+			CASE(GL_INVALID_OPERATION);
+			CASE(GL_INVALID_FRAMEBUFFER_OPERATION);
+			CASE(GL_OUT_OF_MEMORY);
+			CASE(GL_STACK_UNDERFLOW);
+			CASE(GL_STACK_OVERFLOW);
+#undef CASE
+		default:
+			error_str = "Unknown GL error number, should never happen.";
+			break;
+		}
+
+		SDL_LogCritical(SDL_LOG_CATEGORY_ERROR, "ERROR: file %s, line %i: %s.\n", file, line, error_str);
+	}
+}
+
+#ifndef NDEBUG
+#define glCheckError() _glCheckError(__FILE__, __LINE__)
+#else
+#define glCheckError() ((void)0)
+#endif
+
 struct Input
 {
 	enum InputType
@@ -365,10 +402,17 @@ LoadRomFromFile(const char* file_path)
 	return result;
 }
 
-#define GL_API_LIST(ENTRY)                                                                          \
-	ENTRY(void, glUseProgram, GLuint program)                                                       \
-	ENTRY(GLuint, glCreateShaderProgramv, GLenum type, GLsizei count, const GLchar* const* strings) \
-	ENTRY(void, glUniform1ui, GLint location, GLuint v0)
+// TODO(stefalie): Consider using only OpenGL 2.1 compatible functions.
+// glCreateShaderProgram needs OpenGL 4.5
+// the ui version of glUniform needs OpenGL 3
+#define GL_API_LIST(ENTRY)                                                                                \
+	ENTRY(void, glUseProgram, GLuint program)                                                             \
+	ENTRY(GLuint, glCreateShaderProgramv, GLenum type, GLsizei count, const GLchar* const* strings)       \
+	ENTRY(void, glGetProgramiv, GLuint program, GLenum pname, GLint* params)                              \
+	ENTRY(void, glGetProgramInfoLog, GLuint program, GLsizei maxLength, GLsizei* length, GLchar* infoLog) \
+	ENTRY(GLint, glGetUniformLocation, GLuint program, const GLchar* name)                                \
+	ENTRY(void, glUniform1i, GLint location, GLint v0)                                                    \
+	ENTRY(void, glUniform2i, GLint location, GLint v0, GLint v1)
 
 #define GL_API_DECL_ENTRY(return_type, name, ...)          \
 	typedef return_type __stdcall name##Proc(__VA_ARGS__); \
@@ -766,6 +810,21 @@ DebuggerDraw(Config* config, GB_GameBoy* gb)
 	ImGui_ImplSDL2_InitForOpenGL(config->handles.window, config->handles.gl_context);
 }
 
+static const char* fragment_shader_source =
+		"uniform ivec2 main_win_fb_size;\n"
+		"uniform sampler2D gameboy_fb_tex;\n"
+		"\n"
+		"void\n"
+		"main()\n"
+		"{\n"
+		//"	vec2 uv = gl_FragCoord.xy / vec2(main_win_fb_size);\n"
+		"	vec2 uv = fract(gl_FragCoord.xy / vec2(textureSize(gameboy_fb_tex, 0)));\n"
+		"	uv.y = 1.0 - uv.y;  // Image is upside down in tex memory.\n"
+		"\n"
+		"	float pixel_intensity = texture2D(gameboy_fb_tex, uv).r;\n"
+		"	gl_FragColor = vec4(uv, 0.0, 1.0) * vec4(vec3(pixel_intensity), 1.0);\n"
+		"}\n";
+
 int
 main(int argc, char* argv[])
 {
@@ -901,8 +960,27 @@ main(int argc, char* argv[])
 	}
 
 	// OpenGL setup. Leave matrices as identity.
+	GLuint shader_program;
+	GLint main_fb_size_loc;
+	GLint gb_fb_tex_loc;
 	GLuint texture;
 	{
+		shader_program = glCreateShaderProgramv(GL_FRAGMENT_SHADER, 1, &fragment_shader_source);
+		GLint is_linked;
+		glGetProgramiv(shader_program, GL_LINK_STATUS, &is_linked);
+		if (!is_linked)
+		{
+			char info_log[8192];
+			glGetProgramInfoLog(shader_program, sizeof(info_log), NULL, info_log);
+			SDL_LogCritical(SDL_LOG_CATEGORY_ERROR, "ERROR: Shader compilation:\n%s.\n", info_log);
+		}
+		assert(is_linked);
+
+		main_fb_size_loc = glGetUniformLocation(shader_program, "main_win_fb_size");
+		// assert(main_fb_size_loc != -1);
+		gb_fb_tex_loc = glGetUniformLocation(shader_program, "gameboy_fb_tex");
+		assert(gb_fb_tex_loc != -1);
+
 		glGenTextures(1, &texture);
 		glBindTexture(GL_TEXTURE_2D, texture);
 		glTexImage2D(GL_TEXTURE_2D, 0, 1, 160, 144, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
@@ -911,6 +989,7 @@ main(int argc, char* argv[])
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glEnable(GL_TEXTURE_2D);
+		glCheckError();
 	}
 
 	// Load ini
@@ -1069,33 +1148,15 @@ main(int argc, char* argv[])
 			// TODO: Don't use ticks, use perf counters as shown in the Imgui example.
 			// const int tick = SDL_GetTicks();
 
-			// NOTE: While the binary layout between SDL and OpenGL is actually
-			// the same, SDL uses SDL_PIXELFORMAT_RGB888 and OpenGL GL_BGR(A).
-			// glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 320, 240, GL_BGRA,
-			// GL_UNSIGNED_BYTE, texture_update_buffer);
 			const GB_FrameBuffer fb = GB_GetFrameBuffer(&gb);
 			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 160, 144, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
 
-			// Ideally we could mix SDL_Renderer* with pure OpenGL calls, but that seems
-			// to be tricker than it should be.
-			glClear(GL_COLOR_BUFFER_BIT);
-			glBegin(GL_TRIANGLE_STRIP);
-			{
-				// Tex coords are flipped upside down. SDL uses upper left, OpenGL
-				// lower left as origin.
-				glTexCoord2f(0.0f, 0.0f);
-				glVertex2f(-1.0f, 1.0);
-
-				glTexCoord2f(0.0f, 1.0f);
-				glVertex2f(-1.0f, -1.0f);
-
-				glTexCoord2f(1.0f, 0.0f);
-				glVertex2f(1.0f, 1.0f);
-
-				glTexCoord2f(1.0f, 1.0f);
-				glVertex2f(1.0f, -1.0f);
-			}
-			glEnd();
+			glUseProgram(shader_program);
+			glUniform2i(main_fb_size_loc, fb_width, fb_height);
+			glUniform1i(gb_fb_tex_loc, 0);  // Tex unit 0
+			glRects(-1, -1, 1, 1);
+			glUseProgram(0);
+			glCheckError();
 		}
 
 		// ImGui
