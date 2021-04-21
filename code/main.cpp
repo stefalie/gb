@@ -810,6 +810,11 @@ DebuggerDraw(Config* config, GB_GameBoy* gb)
 	ImGui_ImplSDL2_InitForOpenGL(config->handles.window, config->handles.gl_context);
 }
 
+// TODO: options:
+// - stretch
+// - stretch with correct aspect ratio
+// - integral scale stretch
+// renable window scaling
 static const char* fragment_shader_source =
 		"uniform ivec2 main_win_fb_size;\n"
 		"uniform sampler2D gameboy_fb_tex;\n"
@@ -817,8 +822,8 @@ static const char* fragment_shader_source =
 		"void\n"
 		"main()\n"
 		"{\n"
-		//"	vec2 uv = gl_FragCoord.xy / vec2(main_win_fb_size);\n"
-		"	vec2 uv = fract(gl_FragCoord.xy / vec2(textureSize(gameboy_fb_tex, 0)));\n"
+		"	vec2 uv = gl_FragCoord.xy / vec2(main_win_fb_size);\n"
+		//"	vec2 uv = fract(gl_FragCoord.xy / vec2(textureSize(gameboy_fb_tex, 0)));\n"
 		"	uv.y = 1.0 - uv.y;  // Image is upside down in tex memory.\n"
 		"\n"
 		"	float pixel_intensity = texture2D(gameboy_fb_tex, uv).r;\n"
@@ -951,20 +956,19 @@ main(int argc, char* argv[])
 				dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, main_font_size);
 	}
 
-	{  // Load OpenGL extensions.
-#define GL_API_GETPTR_ENTRY(return_type, name, ...) \
-	name = (name##Proc*)wglGetProcAddress(#name);   \
-	assert(name);
-		GL_API_LIST(GL_API_GETPTR_ENTRY)
-#undef GL_API_GETPTR_ENTRY
-	}
-
 	// OpenGL setup. Leave matrices as identity.
 	GLuint shader_program;
 	GLint main_fb_size_loc;
 	GLint gb_fb_tex_loc;
 	GLuint texture;
 	{
+		// Load OpenGL extensions.
+#define GL_API_GETPTR_ENTRY(return_type, name, ...) \
+	name = (name##Proc*)wglGetProcAddress(#name);   \
+	assert(name);
+		GL_API_LIST(GL_API_GETPTR_ENTRY)
+#undef GL_API_GETPTR_ENTRY
+
 		shader_program = glCreateShaderProgramv(GL_FRAGMENT_SHADER, 1, &fragment_shader_source);
 		GLint is_linked;
 		glGetProgramiv(shader_program, GL_LINK_STATUS, &is_linked);
@@ -979,13 +983,13 @@ main(int argc, char* argv[])
 		main_fb_size_loc = glGetUniformLocation(shader_program, "main_win_fb_size");
 		// assert(main_fb_size_loc != -1);
 		gb_fb_tex_loc = glGetUniformLocation(shader_program, "gameboy_fb_tex");
-		assert(gb_fb_tex_loc != -1);
+		//assert(gb_fb_tex_loc != -1);
 
 		glGenTextures(1, &texture);
 		glBindTexture(GL_TEXTURE_2D, texture);
 		glTexImage2D(GL_TEXTURE_2D, 0, 1, 160, 144, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glEnable(GL_TEXTURE_2D);
