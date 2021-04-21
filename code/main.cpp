@@ -41,7 +41,7 @@ _SDL_CheckError(const char* file, int line)
 {
 	if (strcmp(SDL_GetError(), "") != 0)
 	{
-		SDL_LogCritical(SDL_LOG_CATEGORY_ERROR, "ERROR: file %s, line %i: %s.\n", file, line, SDL_GetError());
+		SDL_LogCritical(SDL_LOG_CATEGORY_ERROR, "File %s, line %i: %s.\n", file, line, SDL_GetError());
 		SDL_ClearError();
 	}
 }
@@ -79,7 +79,7 @@ _glCheckError(const char* file, int line)
 			break;
 		}
 
-		SDL_LogCritical(SDL_LOG_CATEGORY_ERROR, "ERROR: file %s, line %i: %s.\n", file, line, error_str);
+		SDL_LogCritical(SDL_LOG_CATEGORY_ERROR, "File %s, line %i: %s.\n", file, line, error_str);
 	}
 }
 
@@ -459,7 +459,7 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 					else
 					{
 						// TODO: Show error overlay instead.
-						SDL_LogCritical(SDL_LOG_CATEGORY_ERROR, "ERROR: Couldn't load ROM '%s'.\n", ofn.lpstrFile);
+						SDL_LogCritical(SDL_LOG_CATEGORY_ERROR, "Couldn't load ROM '%s'.\n", ofn.lpstrFile);
 					}
 				}
 			}
@@ -810,24 +810,48 @@ DebuggerDraw(Config* config, GB_GameBoy* gb)
 	ImGui_ImplSDL2_InitForOpenGL(config->handles.window, config->handles.gl_context);
 }
 
+#define STRINGIFY(str) STRINGIFY2(str)
+#define STRINGIFY2(str) #str
+
 // TODO: options:
 // - stretch
 // - stretch with correct aspect ratio
 // - integral scale stretch
-// renable window scaling
 static const char* fragment_shader_source =
+		"#line " STRINGIFY(__LINE__) "\n"
+		"\n"
 		"uniform ivec2 main_win_fb_size;\n"
 		"uniform sampler2D gameboy_fb_tex;\n"
+		"// TODO(stefalie): Pass the size fo gameboy_fb_tex as uniform or accept 'textureSize(...)\n"
+		"// not available below version 130' warning (or 'gl_FragColor not available above version 130').\n"
 		"\n"
-		"void\n"
-		"main()\n"
+		"void main()\n"
 		"{\n"
-		"	vec2 uv = gl_FragCoord.xy / vec2(main_win_fb_size);\n"
-		//"	vec2 uv = fract(gl_FragCoord.xy / vec2(textureSize(gameboy_fb_tex, 0)));\n"
-		"	uv.y = 1.0 - uv.y;  // Image is upside down in tex memory.\n"
+		"	vec2 scale = vec2(main_win_fb_size) / vec2(textureSize(gameboy_fb_tex, 0));\n"
+		"	vec2 translate = vec2(0.0);\n"
+		"	if (1 > 0)  // TODO: Just control this via viewport.\n"
+		"	{\n"
+		"		float min_scale = min(scale.x, scale.y);\n"
+		"		translate = (1.0 - min_scale / scale) * vec2(main_win_fb_size) * 0.5;\n"
+		"		scale = vec2(min_scale);\n"
+		"	}\n"
 		"\n"
-		"	float pixel_intensity = texture2D(gameboy_fb_tex, uv).r;\n"
-		"	gl_FragColor = vec4(uv, 0.0, 1.0) * vec4(vec3(pixel_intensity), 1.0);\n"
+		"	vec2 mag_coord = (gl_FragCoord.xy - translate) / scale;\n"
+		"	mag_coord -= vec2(0.5);  // Temporarily remove the half texel offset.\n"
+		"	vec2 mag_base = floor(mag_coord);\n"
+		"	vec2 x = mag_coord - mag_base;\n"
+		"	mag_base += vec2(0.5);  // Re-add the offset towards the center of the texel.\n"
+		"\n"
+		"	// Interpolate only over one screen pixel exactly in the middle between 'scale'-sized magnified pixels.\n"
+		"	// Line equation (origin in the middle of a pixel in mag space): scale * x - 0.5 * (scale - 1.0)\n"
+		"	vec2 mag_sample_uv = mag_base + clamp(x * scale - 0.5 * (scale - 1.0), 0.0, 1.0);\n"
+		"	mag_sample_uv /= vec2(textureSize(gameboy_fb_tex, 0));\n"
+		"\n"
+		"	mag_sample_uv.y = 1.0 - mag_sample_uv.y;  // Image is upside down in tex memory.\n"
+		"	float pixel_intensity = texture2D(gameboy_fb_tex, mag_sample_uv).r;\n"
+		"\n"
+		"	// TODO: Tone mapping etc.\n"
+		"	gl_FragColor = vec4(vec3(pixel_intensity), 1.0);\n"
 		"}\n";
 
 int
@@ -857,15 +881,15 @@ main(int argc, char* argv[])
 	const int scale_factor = 6;
 	const int window_width = 160 * scale_factor;
 	const int window_height = 144 * scale_factor;
-	const int fb_width = (int)(window_width * dpi_scale);
-	const int fb_height = (int)(window_height * dpi_scale);
 
 	Config config;
 	config.save_path = SDL_GetPrefPath(NULL, "GB");
 
 	{  // Main window
+		const int fb_width = (int)(window_width * dpi_scale);
+		const int fb_height = (int)(window_height * dpi_scale);
 		config.handles.window = SDL_CreateWindow("GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, fb_width,
-				fb_height, SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
+				fb_height, SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
 		if (!config.handles.window)
 		{
 			SDL_CheckError();
@@ -972,18 +996,25 @@ main(int argc, char* argv[])
 		shader_program = glCreateShaderProgramv(GL_FRAGMENT_SHADER, 1, &fragment_shader_source);
 		GLint is_linked;
 		glGetProgramiv(shader_program, GL_LINK_STATUS, &is_linked);
+		char info_log[8192];
+		GLsizei info_log_length;
+		glGetProgramInfoLog(shader_program, sizeof(info_log), &info_log_length, info_log);
 		if (!is_linked)
 		{
-			char info_log[8192];
-			glGetProgramInfoLog(shader_program, sizeof(info_log), NULL, info_log);
-			SDL_LogCritical(SDL_LOG_CATEGORY_ERROR, "ERROR: Shader compilation:\n%s.\n", info_log);
+			SDL_LogCritical(SDL_LOG_CATEGORY_ERROR, "Shader compilation:\n%s.\n", info_log);
 		}
+#ifndef NDEBUG
+		else if (info_log_length > 0)
+		{
+			SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Shader compilation:\n%s.\n", info_log);
+		}
+#endif
 		assert(is_linked);
 
 		main_fb_size_loc = glGetUniformLocation(shader_program, "main_win_fb_size");
 		// assert(main_fb_size_loc != -1);
 		gb_fb_tex_loc = glGetUniformLocation(shader_program, "gameboy_fb_tex");
-		//assert(gb_fb_tex_loc != -1);
+		// assert(gb_fb_tex_loc != -1);
 
 		glGenTextures(1, &texture);
 		glBindTexture(GL_TEXTURE_2D, texture);
@@ -1147,7 +1178,11 @@ main(int argc, char* argv[])
 		ImGui::SetCurrentContext(config.handles.imgui);  // Reset (if changed)
 
 		{  // OpenGL drawing
+			int fb_width, fb_height;
+			SDL_GL_GetDrawableSize(config.handles.window, &fb_width, &fb_height);
 			glViewport(0, 0, fb_width, fb_height);
+			glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+			glClear(GL_COLOR_BUFFER_BIT);
 
 			// TODO: Don't use ticks, use perf counters as shown in the Imgui example.
 			// const int tick = SDL_GetTicks();
