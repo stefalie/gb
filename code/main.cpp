@@ -1,7 +1,6 @@
 // Copyright (C) 2021 Stefan Lienhard
 
 // TODO:
-// - fullscreen
 // - UI timeout
 // - ESC should be pause
 // - make input handle function seperate.
@@ -450,7 +449,7 @@ LoadRomFromFile(const char* file_path)
 	return result;
 }
 
-// TODO(stefalie): Consider using only OpenGL 2.1 compatible functions, glCreateShaderProgram needs OpenGL 4.5.
+// TODO(stefalie): Consider using only OpenGL 2.1 compatible functions, glCreateShaderProgram needs OpenGL 4.1.
 #define GL_API_LIST(ENTRY)                                                                                \
 	ENTRY(void, glUseProgram, GLuint program)                                                             \
 	ENTRY(GLuint, glCreateShaderProgramv, GLenum type, GLsizei count, const GLchar* const* strings)       \
@@ -566,7 +565,18 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 				{
 					// TODO(stefalie): Handle Alt+Enter
 					config->gui.fullscreen = !config->gui.fullscreen;
-					// TODO: switch to fullscreen
+					if (config->gui.fullscreen)
+					{
+						// TODO(stefalie): Consider using SDL_WINDOW_FULLSCREEN_DESKTOP instead.
+						// I thought that proper fullscreen requires setting SDL_SetWindowDisplayMode(...),
+						// and that these different modes need to be querried first. But hey, it seems to work as is.
+						// See: https://discourse.libsdl.org/t/correct-way-to-swap-from-window-to-fullscreen/24270
+						SDL_SetWindowFullscreen(config->handles.window, SDL_WINDOW_FULLSCREEN);
+					}
+					else
+					{
+						SDL_SetWindowFullscreen(config->handles.window, 0);
+					}
 				}
 				ImGui::EndMenu();
 			}
