@@ -1,7 +1,7 @@
 // Copyright (C) 2021 Stefan Lienhard
 
 // TODO:
-// - Reset control in GUI.
+// - fullscreen
 // - UI timeout
 // - ESC should be pause
 // - make input handle function seperate.
@@ -109,7 +109,7 @@ struct Input
 	} sdl;
 };
 
-static Input default_inputs[] = {
+static const Input default_inputs[] = {
 	// Keyboard
 	{ "key_a", "A", Input::TYPE_KEY, { SDLK_x } },
 	{ "key_b", "B", Input::TYPE_KEY, { SDLK_z } },
@@ -148,6 +148,24 @@ InputSdlName(const Input* input)
 	return sdl_name;
 }
 
+enum Stretch
+{
+	STRETCH_NORMAL,
+	STRETCH_ASPECT_CORRECT,
+	STRETCH_INTEGRAL_SCALE,
+};
+static const struct
+{
+	Stretch type;
+	const char* name = NULL;
+	const char* nice_name = NULL;
+} stretch_options[] = {
+	{ STRETCH_NORMAL, "normal", "Stretch" },
+	{ STRETCH_ASPECT_CORRECT, "aspect_correct", "Aspect Correct Stretch" },
+	{ STRETCH_INTEGRAL_SCALE, "integral_scale", "Integral Scale Stretch" },
+};
+static const size_t num_stretch_options = sizeof(stretch_options) / sizeof(stretch_options[0]);
+
 struct Ini
 {
 	// TODO: If the open dialog initialDir actually persist between reboots, then
@@ -156,6 +174,8 @@ struct Ini
 	// char last_opened_path[1024] = {};
 	int mag_filter = 0;
 	int screen_size = 0;
+
+	Stretch stretch = STRETCH_NORMAL;
 
 	Input inputs[14] = {
 		default_inputs[0],
@@ -234,6 +254,24 @@ IniLoadOrInit(const char* ini_path)
 			else if (!strcmp(key, "screen_size"))
 			{
 				// TODO
+			}
+			else if (!strcmp(key, "stretch"))
+			{
+				bool found_val = false;
+				for (size_t i = 0; i < num_stretch_options; ++i)
+				{
+					if (!strcmp(val, stretch_options[i].name))
+					{
+						found_val = true;
+						ini.stretch = stretch_options[i].type;
+						break;
+					}
+				}
+				if (!found_val)
+				{
+					SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+							"Warning: invalid value '%s' for 'stretch' in config.ini.\n", val);
+				}
 			}
 			else
 			{
@@ -314,6 +352,14 @@ IniSave(const char* ini_path, const Ini* ini)
 		// fprintf(file, "last_opened_path=%s\n", ini->last_opened_path);
 		fprintf(file, "mag_filter=%i\n", ini->mag_filter);
 		fprintf(file, "screen_size=%i\n", ini->screen_size);
+		for (size_t i = 0; i < num_stretch_options; ++i)
+		{
+			if (ini->stretch == stretch_options[i].type)
+			{
+				fprintf(file, "stretch=%s\n", stretch_options[i].name);
+				break;
+			}
+		}
 		fprintf(file, "[Input]\n");
 		for (size_t i = 0; i < num_inputs; ++i)
 		{
@@ -360,7 +406,9 @@ struct Config
 		bool show_about_popup = false;
 
 		bool has_active_rom = false;
+
 		int save_slot = 1;
+		bool fullscreen = false;
 	} gui;
 
 	struct Debugger
@@ -402,9 +450,7 @@ LoadRomFromFile(const char* file_path)
 	return result;
 }
 
-// TODO(stefalie): Consider using only OpenGL 2.1 compatible functions.
-// glCreateShaderProgram needs OpenGL 4.5
-// the ui version of glUniform needs OpenGL 3
+// TODO(stefalie): Consider using only OpenGL 2.1 compatible functions, glCreateShaderProgram needs OpenGL 4.5.
 #define GL_API_LIST(ENTRY)                                                                                \
 	ENTRY(void, glUseProgram, GLuint program)                                                             \
 	ENTRY(GLuint, glCreateShaderProgramv, GLenum type, GLsizei count, const GLchar* const* strings)       \
@@ -419,6 +465,15 @@ LoadRomFromFile(const char* file_path)
 	name##Proc* name;
 GL_API_LIST(GL_API_DECL_ENTRY)
 #undef GL_API_DECL_ENTRY
+
+static void
+ImGuiOpenCenteredPopup(const char* name)
+{
+	// See https://github.com/ocornut/imgui/issues/2405
+	const ImVec2 display_size_half = { ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f };
+	ImGui::SetNextWindowPos(display_size_half, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	ImGui::OpenPopup(name);
+}
 
 static void
 GuiDraw(Config* config, GB_GameBoy* gb)
@@ -497,10 +552,22 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 		{
 			if (ImGui::BeginMenu("Screen Size"))
 			{
-				ImGui::MenuItem("1x", NULL, false);
-				ImGui::MenuItem("2x", NULL, false);
-				ImGui::MenuItem("3x", NULL, true);
-				ImGui::MenuItem("Fullscreen", NULL, false);
+
+				for (size_t i = 0; i < num_stretch_options; ++i)
+				{
+					if (ImGui::MenuItem(
+								stretch_options[i].nice_name, NULL, config->ini.stretch == stretch_options[i].type))
+					{
+						config->ini.stretch = stretch_options[i].type;
+					}
+				}
+				ImGui::Separator();
+				if (ImGui::MenuItem("Fullscreen", NULL, config->gui.fullscreen))
+				{
+					// TODO(stefalie): Handle Alt+Enter
+					config->gui.fullscreen = !config->gui.fullscreen;
+					// TODO: switch to fullscreen
+				}
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Magnification Filter"))
@@ -571,12 +638,13 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 
 	// TODO(stefalie): Is this really the best/only way to handle popups?
 
-	const ImGuiWindowFlags popup_flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+	const ImGuiWindowFlags popup_flags =
+			ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 
 	// Input config popup
 	if (config->gui.show_input_config_popup)
 	{
-		ImGui::OpenPopup("Configure Input");
+		ImGuiOpenCenteredPopup("Configure Input");
 	}
 	if (ImGui::BeginPopupModal("Configure Input", NULL, popup_flags))
 	{
@@ -643,7 +711,7 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 	// About popup
 	if (config->gui.show_about_popup)
 	{
-		ImGui::OpenPopup("About GB");
+		ImGuiOpenCenteredPopup("About GB");
 	}
 	if (ImGui::BeginPopupModal("About GB", NULL, popup_flags))
 	{
@@ -665,7 +733,7 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 	// Quit pop-up
 	if (config->gui.show_quit_popup)
 	{
-		ImGui::OpenPopup("Quit");
+		ImGuiOpenCenteredPopup("Quit");
 	}
 	if (ImGui::BeginPopupModal("Quit", NULL, popup_flags))
 	{
@@ -813,30 +881,26 @@ DebuggerDraw(Config* config, GB_GameBoy* gb)
 #define STRINGIFY(str) STRINGIFY2(str)
 #define STRINGIFY2(str) #str
 
-// TODO: options:
-// - stretch
-// - stretch with correct aspect ratio
-// - integral scale stretch
+// Pixel perfect pixel art magnification filter.
+// I believe this even works for minification in so far that it actually applies low pass filtering.
 static const char* fragment_shader_source =
 		"#line " STRINGIFY(__LINE__) "\n"
 		"\n"
-		"uniform ivec2 main_win_fb_size;\n"
+		//"uniform int i_time;\n"
+		"uniform ivec2 viewport_size;\n"
+		"uniform ivec2 viewport_pos;\n"
 		"uniform sampler2D gameboy_fb_tex;\n"
 		"// TODO(stefalie): Pass the size fo gameboy_fb_tex as uniform or accept 'textureSize(...)\n"
 		"// not available below version 130' warning (or 'gl_FragColor not available above version 130').\n"
 		"\n"
 		"void main()\n"
 		"{\n"
-		"	vec2 scale = vec2(main_win_fb_size) / vec2(textureSize(gameboy_fb_tex, 0));\n"
-		"	vec2 translate = vec2(0.0);\n"
-		"	if (1 > 0)  // TODO: Just control this via viewport.\n"
-		"	{\n"
-		"		float min_scale = min(scale.x, scale.y);\n"
-		"		translate = (1.0 - min_scale / scale) * vec2(main_win_fb_size) * 0.5;\n"
-		"		scale = vec2(min_scale);\n"
-		"	}\n"
+		"	vec2 scale = vec2(viewport_size) / vec2(textureSize(gameboy_fb_tex, 0));\n"
 		"\n"
-		"	vec2 mag_coord = (gl_FragCoord.xy - translate) / scale;\n"
+		//"	float time = float(i_time) * 0.001;\n"
+		//"	scale = scale + ((cos((time + 8.0) / 3.7) + 1.0) / 2.0) * 1.0 * scale;\n"
+		"\n"
+		"	vec2 mag_coord = (gl_FragCoord.xy - vec2(viewport_pos)) / scale;\n"
 		"	mag_coord -= vec2(0.5);  // Temporarily remove the half texel offset.\n"
 		"	vec2 mag_base = floor(mag_coord);\n"
 		"	vec2 x = mag_coord - mag_base;\n"
@@ -982,7 +1046,8 @@ main(int argc, char* argv[])
 
 	// OpenGL setup. Leave matrices as identity.
 	GLuint shader_program;
-	GLint main_fb_size_loc;
+	GLint viewport_size_loc;
+	GLint viewport_pos_loc;
 	GLint gb_fb_tex_loc;
 	GLuint texture;
 	{
@@ -1011,10 +1076,12 @@ main(int argc, char* argv[])
 #endif
 		assert(is_linked);
 
-		main_fb_size_loc = glGetUniformLocation(shader_program, "main_win_fb_size");
-		// assert(main_fb_size_loc != -1);
+		viewport_size_loc = glGetUniformLocation(shader_program, "viewport_size");
+		viewport_pos_loc = glGetUniformLocation(shader_program, "viewport_pos");
 		gb_fb_tex_loc = glGetUniformLocation(shader_program, "gameboy_fb_tex");
-		// assert(gb_fb_tex_loc != -1);
+		assert(viewport_size_loc != -1);
+		assert(viewport_pos_loc != -1);
+		assert(gb_fb_tex_loc != -1);
 
 		glGenTextures(1, &texture);
 		glBindTexture(GL_TEXTURE_2D, texture);
@@ -1184,15 +1251,54 @@ main(int argc, char* argv[])
 			glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 			glClear(GL_COLOR_BUFFER_BIT);
 
+			int x = 0;
+			int y = 0;
+			int w = fb_width;
+			int h = fb_height;
+
+			const int default_width = 160;   // TODO get from elsewhere
+			const int default_height = 144;  // TODO get from elsewhere
+			if (config.ini.stretch == STRETCH_ASPECT_CORRECT)
+			{
+				const float default_aspect_ratio = (float)default_width / default_height;  // TODO get from elsewhere
+				const float aspect_ratio = (float)fb_width / fb_height;
+				const float scale_x = default_aspect_ratio / aspect_ratio;
+				if (scale_x <= 1.0)
+				{
+					w = (int)roundf(scale_x * fb_width);
+					x = (fb_width - w) / 2;
+				}
+				else
+				{
+					h = (int)roundf(fb_height / scale_x);
+					y = (fb_height - h) / 2;
+				}
+				glViewport(x, y, w, h);
+			}
+			else if (config.ini.stretch == STRETCH_INTEGRAL_SCALE)
+			{
+				// We could filter with GL_NEAREST for this, but meh.
+				const int scale_x = fb_width / default_width;
+				const int scale_y = fb_height / default_height;
+				const int scale = scale_x < scale_y ? scale_x : scale_y;  // No imin in C
+				w = default_width * scale;
+				h = default_height * scale;
+				x = (fb_width - w) / 2;
+				y = (fb_height - h) / 2;
+				glViewport(x, y, w, h);
+			}
+
 			// TODO: Don't use ticks, use perf counters as shown in the Imgui example.
-			// const int tick = SDL_GetTicks();
+			const int tick = SDL_GetTicks();  // TODO
 
 			const GB_FrameBuffer fb = GB_GetFrameBuffer(&gb);
 			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 160, 144, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
 
 			glUseProgram(shader_program);
-			glUniform2i(main_fb_size_loc, fb_width, fb_height);
+			glUniform2i(viewport_size_loc, w, h);
+			glUniform2i(viewport_pos_loc, x, y);
 			glUniform1i(gb_fb_tex_loc, 0);  // Tex unit 0
+			// glUniform1i(glGetUniformLocation(shader_program, "i_time"), tick);  // TODO
 			glRects(-1, -1, 1, 1);
 			glUseProgram(0);
 			glCheckError();
@@ -1235,7 +1341,6 @@ main(int argc, char* argv[])
 	ImGui::DestroyContext(config.handles.imgui);
 	ImGui::DestroyContext(config.handles.debug_imgui);
 
-	// Save ini
 	IniSave(ini_path, &config.ini);
 
 	// Cleanup
