@@ -2,6 +2,7 @@
 
 // TODO:
 // - UI timeout
+// - pause popup
 // - ESC should be pause
 // - make input handle function seperate.
 // - make lambdas out of the OrComplainFunctions
@@ -407,6 +408,7 @@ struct Config
 		bool has_active_rom = false;
 
 		int save_slot = 1;
+		bool toggle_fullscreen = false;
 		bool fullscreen = false;
 	} gui;
 
@@ -563,20 +565,7 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 				ImGui::Separator();
 				if (ImGui::MenuItem("Fullscreen", NULL, config->gui.fullscreen))
 				{
-					// TODO(stefalie): Handle Alt+Enter
-					config->gui.fullscreen = !config->gui.fullscreen;
-					if (config->gui.fullscreen)
-					{
-						// TODO(stefalie): Consider using SDL_WINDOW_FULLSCREEN_DESKTOP instead.
-						// I thought that proper fullscreen requires setting SDL_SetWindowDisplayMode(...),
-						// and that these different modes need to be querried first. But hey, it seems to work as is.
-						// See: https://discourse.libsdl.org/t/correct-way-to-swap-from-window-to-fullscreen/24270
-						SDL_SetWindowFullscreen(config->handles.window, SDL_WINDOW_FULLSCREEN);
-					}
-					else
-					{
-						SDL_SetWindowFullscreen(config->handles.window, 0);
-					}
+					config->gui.toggle_fullscreen = true;
 				}
 				ImGui::EndMenu();
 			}
@@ -1139,8 +1128,7 @@ main(int argc, char* argv[])
 			//	continue;
 			//}
 
-			// TODO: Deal with enter + ctrl
-			// Really?
+			// TODO(stefalie): Deal with Ctrl+? combinations to open ROM files. etc.
 
 			// Highjack (certain) inputs when the input config is modified.
 			if (config.modify_input)
@@ -1229,19 +1217,26 @@ main(int argc, char* argv[])
 				}
 				break;
 			case SDL_KEYDOWN:
-				for (size_t i = 0; i < num_inputs; ++i)
-				{
-					Input input = config.ini.inputs[i];
-					if (input.type == Input::TYPE_KEY && event.key.keysym.sym == input.sdl.key)
-					{
-						SDL_Log("Pressed key '%s'.\n", input.nice_name);
-					}
-				}
 				if (event.key.keysym.sym == SDLK_ESCAPE)
 				{
 					if (SDL_GetWindowFlags(config.handles.window) & SDL_WINDOW_INPUT_FOCUS)
 					{
 						config.gui.pressed_escape = true;
+					}
+				}
+				else if (event.key.keysym.sym == SDLK_RETURN && (SDL_GetModState() & KMOD_LALT))
+				{
+					config.gui.toggle_fullscreen = true;
+				}
+				else
+				{
+					for (size_t i = 0; i < num_inputs; ++i)
+					{
+						Input input = config.ini.inputs[i];
+						if (input.type == Input::TYPE_KEY && event.key.keysym.sym == input.sdl.key)
+						{
+							SDL_Log("Pressed key '%s'.\n", input.nice_name);
+						}
 					}
 				}
 			case SDL_MOUSEMOTION:
@@ -1299,7 +1294,7 @@ main(int argc, char* argv[])
 			}
 
 			// TODO: Don't use ticks, use perf counters as shown in the Imgui example.
-			const int tick = SDL_GetTicks();  // TODO
+			// const int tick = SDL_GetTicks();  // TODO
 
 			const GB_FrameBuffer fb = GB_GetFrameBuffer(&gb);
 			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 160, 144, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
@@ -1326,6 +1321,24 @@ main(int argc, char* argv[])
 		ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
 
 		SDL_GL_SwapWindow(config.handles.window);
+
+		if (config.gui.toggle_fullscreen)
+		{
+			config.gui.toggle_fullscreen = false;
+			config.gui.fullscreen = !config.gui.fullscreen;
+			if (config.gui.fullscreen)
+			{
+				// TODO(stefalie): Consider using SDL_WINDOW_FULLSCREEN_DESKTOP instead.
+				// I thought that proper fullscreen requires setting SDL_SetWindowDisplayMode(...),
+				// and that these different modes need to be querried first. But hey, it seems to work as is.
+				// See: https://discourse.libsdl.org/t/correct-way-to-swap-from-window-to-fullscreen/24270
+				SDL_SetWindowFullscreen(config.handles.window, SDL_WINDOW_FULLSCREEN);
+			}
+			else
+			{
+				SDL_SetWindowFullscreen(config.handles.window, 0);
+			}
+		}
 
 		if (config.debug.show)
 		{
