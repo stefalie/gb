@@ -15,7 +15,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
-#include <commdlg.h>   // For file open dialog
+#include <commdlg.h>  // For file open dialog
 #include <shellapi.h>  // For opening the website
 
 #include <assert.h>
@@ -166,16 +166,30 @@ static const struct
 };
 static const size_t num_stretch_options = sizeof(stretch_options) / sizeof(stretch_options[0]);
 
+static const struct
+{
+	gb_MagFilter type;
+	const char* name = NULL;
+	const char* nice_name = NULL;
+} mag_options[] = {
+	{ GB_MAG_FILTER_NONE, "none", "None" },
+	{ GB_MAG_FILTER_EPX_SCALE2X_ADVMAME2X, "epx_scale2x_advmame2x", "EPX/Scale2x/AdvMAME2x" },
+	{ GB_MAG_FILTER_SCALE3X_ADVMAME3X_SCALEF, "scale3x_advmame3x_scalef", "Scale3x/AdvMAME3x/ScaleF" },
+	{ GB_MAG_FILTER_SCALE4X_ADVMAME4X, "scale4x_advmame4x", "Scale4x/AdvMAME4x" },
+	{ GB_MAG_FILTER_HQ2X, "hq2x", "hq2x" },
+	{ GB_MAG_FILTER_HQ3X, "hq3x", "hq3x" },
+	{ GB_MAG_FILTER_HQ4X, "hq4x", "hq4x" },
+	{ GB_MAG_FILTER_XBR, "xbr", "xBR" },
+	{ GB_MAG_FILTER_SUPERXBR, "super_xbr", "Super xBR" },
+};
+static const size_t num_mag_options = sizeof(mag_options) / sizeof(mag_options[0]);
+
 struct Ini
 {
-	// TODO: If the open dialog initialDir actually persist between reboots, then
-	// we can remove this option and set 'lpstrInitialDir' to NULL. And that then
-	// raises the question if we even need the ini loading code. Meh :-(
-	// char last_opened_path[1024] = {};
-	int mag_filter = 0;
 	int screen_size = 0;
 
 	Stretch stretch = STRETCH_NORMAL;
+	gb_MagFilter mag_filter = GB_MAG_FILTER_NONE;
 
 	Input inputs[14] = {
 		default_inputs[0],
@@ -241,17 +255,7 @@ IniLoadOrInit(const char* ini_path)
 				continue;
 			}
 
-			/*if (!strcmp(key, "last_opened_path"))
-			{
-				strcpy(ini.last_opened_path, val);
-			}
-			else*/
-			if (!strcmp(key, "mag_filter"))
-			{
-				// TODO: List options.
-				ini.mag_filter = atoi(val);
-			}
-			else if (!strcmp(key, "screen_size"))
+			if (!strcmp(key, "screen_size"))
 			{
 				// TODO
 			}
@@ -271,6 +275,24 @@ IniLoadOrInit(const char* ini_path)
 				{
 					SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
 							"Warning: invalid value '%s' for 'stretch' in config.ini.\n", val);
+				}
+			}
+			else if (!strcmp(key, "mag_filter"))
+			{
+				bool found_val = false;
+				for (size_t i = 0; i < num_mag_options; ++i)
+				{
+					if (!strcmp(val, mag_options[i].name))
+					{
+						found_val = true;
+						ini.mag_filter = mag_options[i].type;
+						break;
+					}
+				}
+				if (!found_val)
+				{
+					SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+							"Warning: invalid value '%s' for 'mag_filter' in config.ini.\n", val);
 				}
 			}
 			else
@@ -349,14 +371,20 @@ IniSave(const char* ini_path, const Ini* ini)
 	if (file)
 	{
 		fprintf(file, "[General]\n");
-		// fprintf(file, "last_opened_path=%s\n", ini->last_opened_path);
-		fprintf(file, "mag_filter=%i\n", ini->mag_filter);
 		fprintf(file, "screen_size=%i\n", ini->screen_size);
 		for (size_t i = 0; i < num_stretch_options; ++i)
 		{
 			if (ini->stretch == stretch_options[i].type)
 			{
 				fprintf(file, "stretch=%s\n", stretch_options[i].name);
+				break;
+			}
+		}
+		for (size_t i = 0; i < num_mag_options; ++i)
+		{
+			if (ini->mag_filter == mag_options[i].type)
+			{
+				fprintf(file, "mag_filter=%s\n", mag_options[i].name);
 				break;
 			}
 		}
@@ -410,6 +438,8 @@ struct Config
 		int save_slot = 1;
 		bool toggle_fullscreen = false;
 		bool fullscreen = false;
+
+		bool mag_filter_changed = true;
 	} gui;
 
 	struct Debugger
@@ -477,7 +507,7 @@ ImGuiOpenCenteredPopup(const char* name)
 }
 
 static void
-GuiDraw(Config* config, GB_GameBoy* gb)
+GuiDraw(Config* config, gb_GameBoy* gb)
 {
 	ImGui::PushFont(config->handles.font);
 
@@ -509,8 +539,8 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 							free(config->rom.data);
 						}
 						config->rom = rom;
-						GB_LoadRom(gb, config->rom.data);
-						GB_Reset(gb);
+						gb_LoadRom(gb, config->rom.data);
+						gb_Reset(gb);
 					}
 					else
 					{
@@ -571,11 +601,14 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 			}
 			if (ImGui::BeginMenu("Magnification Filter"))
 			{
-				ImGui::MenuItem("Nearest", NULL, true);
-				ImGui::MenuItem("EPX/Scale2x/AdvMAME2x", NULL, true);
-				ImGui::MenuItem("Scale3x/AdvMAME3x/ScaleF", NULL, false);
-				ImGui::MenuItem("hqnx", NULL, false);
-				ImGui::MenuItem("Super xBR", NULL, false);
+				for (size_t i = 0; i < num_mag_options; ++i)
+				{
+					if (ImGui::MenuItem(mag_options[i].nice_name, NULL, config->ini.mag_filter == mag_options[i].type))
+					{
+						config->ini.mag_filter = mag_options[i].type;
+						config->gui.mag_filter_changed = true;
+					}
+				}
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Speed"))
@@ -755,7 +788,7 @@ GuiDraw(Config* config, GB_GameBoy* gb)
 }
 
 static void
-DebuggerDraw(Config* config, GB_GameBoy* gb)
+DebuggerDraw(Config* config, gb_GameBoy* gb)
 {
 	(void)gb;  // TODO
 
@@ -885,6 +918,7 @@ DebuggerDraw(Config* config, GB_GameBoy* gb)
 static const char* fragment_shader_source =
 		"#line " STRINGIFY(__LINE__) "\n"
 		"\n"
+		// TODO
 		//"uniform int i_time;\n"
 		"uniform ivec2 viewport_size;\n"
 		"uniform ivec2 viewport_pos;\n"
@@ -896,6 +930,7 @@ static const char* fragment_shader_source =
 		"{\n"
 		"	vec2 scale = vec2(viewport_size) / vec2(textureSize(gameboy_fb_tex, 0));\n"
 		"\n"
+		// TODO
 		//"	float time = float(i_time) * 0.001;\n"
 		//"	scale = scale + ((cos((time + 8.0) / 3.7) + 1.0) / 2.0) * 1.0 * scale;\n"
 		"\n"
@@ -1084,7 +1119,7 @@ main(int argc, char* argv[])
 
 		glGenTextures(1, &texture);
 		glBindTexture(GL_TEXTURE_2D, texture);
-		glTexImage2D(GL_TEXTURE_2D, 0, 1, 160, 144, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		// The texture object itself is lazily (re-)allocated later on when needed.
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -1102,8 +1137,9 @@ main(int argc, char* argv[])
 	ini_path[ini_path_len] = '\0';
 	config.ini = IniLoadOrInit(ini_path);
 
-	GB_GameBoy gb = {};
-	GB_Init(&gb);
+	gb_GameBoy gb = {};
+	gb_Init(&gb);
+	uint8_t* pixels = (uint8_t*)malloc(gb_MaxMagFramebufferSizeInBytes());
 
 	// Main Loop
 	while (!config.quit)
@@ -1261,7 +1297,7 @@ main(int argc, char* argv[])
 			int w = fb_width;
 			int h = fb_height;
 
-			const int default_width = 160;   // TODO get from elsewhere
+			const int default_width = 160;  // TODO get from elsewhere
 			const int default_height = 144;  // TODO get from elsewhere
 			if (config.ini.stretch == STRETCH_ASPECT_CORRECT)
 			{
@@ -1296,8 +1332,17 @@ main(int argc, char* argv[])
 			// TODO: Don't use ticks, use perf counters as shown in the Imgui example.
 			// const int tick = SDL_GetTicks();  // TODO
 
-			const GB_FrameBuffer fb = GB_GetFrameBuffer(&gb);
-			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 160, 144, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
+			const gb_Framebuffer fb = gb_MagFramebuffer(&gb, config.ini.mag_filter, pixels);
+			if (config.gui.mag_filter_changed)
+			{
+				// Re-alloc texture when mag filter changed as the size is most likely different.
+				glTexImage2D(GL_TEXTURE_2D, 0, 1, fb.width, fb.height, 0, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
+				config.gui.mag_filter_changed = false;
+			}
+			else
+			{
+				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, fb.width, fb.height, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
+			}
 
 			glUseProgram(shader_program);
 			glUniform2i(viewport_size_loc, w, h);
@@ -1367,6 +1412,7 @@ main(int argc, char* argv[])
 	IniSave(ini_path, &config.ini);
 
 	// Cleanup
+	free(pixels);
 	if (config.rom.data)
 	{
 		free(config.rom.data);

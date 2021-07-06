@@ -1,30 +1,9 @@
 // Copyright (C) 2021 Stefan Lienhard
 
 #include "gb.h"
-#include <stdio.h>
-
-void
-GB_Init(GB_GameBoy* gb)
-{
-	(void)gb;
-	printf("GB Init!\n");
-}
-
-void
-GB_Reset(GB_GameBoy* gb)
-{
-	(void)gb;
-	printf("GB Reset!\n");
-}
-
-bool
-GB_LoadRom(GB_GameBoy* gb, const uint8_t* rom)
-{
-	(void)gb;
-	(void)rom;
-	printf("GB Load ROM!\n");
-	return false;
-}
+#include <assert.h>
+#include <stdio.h>  // TODO rem
+#include <string.h>  // TODO rem
 
 // Dummy image to test image mag filters.
 // TODO(stefalie): Remove once the emulator can actually generate images.
@@ -1243,13 +1222,326 @@ static uint8_t gb_tetris_splash_screen[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
-GB_FrameBuffer
-GB_GetFrameBuffer(const GB_GameBoy* gb /* GB_MagFilter mag_filter*/)
+void
+gb_Init(gb_GameBoy* gb)
+{
+	*gb = (gb_GameBoy){ 0 };
+	memcpy(gb->framebuffer.pixels, gb_tetris_splash_screen, sizeof(gb->framebuffer.pixels));
+	printf("GB Init!\n");
+}
+
+void
+gb_Reset(gb_GameBoy* gb)
 {
 	(void)gb;
-	return (GB_FrameBuffer){
-		.width = 160,
-		.height = 144,
-		.pixels = gb_tetris_splash_screen,
+	printf("GB Reset!\n");
+}
+
+bool
+gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom)
+{
+	(void)gb;
+	(void)rom;
+	printf("GB Load ROM!\n");
+	return false;
+}
+
+uint32_t
+gb_MagFramebufferSizeInBytes(gb_MagFilter mag_filter)
+{
+	const uint32_t num_pixels = GB_FRAMEBUFFER_WIDTH * GB_FRAMEBUFFER_HEIGHT;
+
+	switch (mag_filter)
+	{
+	case GB_MAG_FILTER_NONE:
+		return num_pixels;
+	case GB_MAG_FILTER_EPX_SCALE2X_ADVMAME2X:
+	case GB_MAG_FILTER_XBR:
+		return num_pixels * (2 * 2);
+	case GB_MAG_FILTER_SCALE3X_ADVMAME3X_SCALEF:
+		return num_pixels * (3 * 3);
+	case GB_MAG_FILTER_SCALE4X_ADVMAME4X:
+		// Needs storage for the temporary intermediate buffer. Smarter people might
+		// be able to do it in place.
+		return gb_MagFramebufferSizeInBytes(GB_MAG_FILTER_EPX_SCALE2X_ADVMAME2X) + num_pixels * (4 * 4);
+	case GB_MAG_FILTER_HQ2X:
+		return num_pixels * 4;  // TODO
+	case GB_MAG_FILTER_HQ3X:
+		return num_pixels * 4;  // TODO
+	case GB_MAG_FILTER_HQ4X:
+		return num_pixels * 8;  // TODO
+	// case GB_MAG_FILTER_XBR:
+	//	return num_pixels * 8;  // TODO
+	case GB_MAG_FILTER_SUPERXBR:
+		return num_pixels * 8;  // TODO
+	default:
+		assert(false);
+		return 0;
+	}
+}
+
+uint32_t
+gb_MaxMagFramebufferSizeInBytes()
+{
+	uint32_t bytes = 0;
+	for (int i = 0; i < GB_MAG_FILTER_MAX_VALUE; ++i)
+	{
+		const uint32_t new_bytes = gb_MagFramebufferSizeInBytes(i);
+		if (new_bytes > bytes)
+		{
+			bytes = new_bytes;
+		}
+	}
+	return bytes;
+}
+
+static int
+gb__Clamp(int val, int min, int max)
+{
+	if (val < min)
+	{
+		return min;
+	}
+	if (val > max)
+	{
+		return max;
+	}
+	return val;
+}
+
+static uint8_t
+gb__SrcPixel(const gb_Framebuffer input, int x, int y)
+{
+	x = gb__Clamp(x, 0, input.width - 1);
+	y = gb__Clamp(y, 0, input.height - 1);
+	return input.pixels[y * input.width + x];
+}
+
+// TODO(stefalie): None of the magnification filters below are optimized.
+// Often reading pixel values can be done in the outer loop and be reused in subsequent
+// iterations of the inner loop.
+
+// Uses notation from:
+// McGuire, Gagiu; 2021; MMPX Style-Preserving Pixel-Art Magnification
+static gb_Framebuffer
+gb__MagFramebufferEpxScale2xAdvMame2x(const gb_Framebuffer input, uint8_t* pixels)
+{
+	for (int y = 0; y < input.height; ++y)
+	{
+		for (int x = 0; x < input.width; ++x)
+		{
+			const uint8_t B = gb__SrcPixel(input, x + 0, y - 1);
+			const uint8_t D = gb__SrcPixel(input, x - 1, y + 0);  // Read in outer loop, and then as prev E.
+			const uint8_t E = gb__SrcPixel(input, x + 0, y + 0);  // Read in outer loop, and then as prev F.
+			const uint8_t F = gb__SrcPixel(input, x + 1, y + 0);
+			const uint8_t H = gb__SrcPixel(input, x + 0, y + 1);
+
+			uint8_t J = E, K = E, L = E, M = E;
+
+			if (D == B && D != H && D != F)
+			{
+				J = D;
+			}
+			if (B == F && B != D && B != H)
+			{
+				K = B;
+			}
+			if (H == D && H != F && H != B)
+			{
+				L = H;
+			}
+			if (F == H && F != B && F != D)
+			{
+				M = F;
+			}
+
+			int dst_idx = (y * 2) * 2 * input.width + (2 * x);
+			pixels[dst_idx++] = J;
+			pixels[dst_idx] = K;
+			dst_idx += 2 * input.width - 1;
+			pixels[dst_idx++] = L;
+			pixels[dst_idx] = M;
+		}
+	}
+
+	return (gb_Framebuffer){
+		.width = 2 * input.width,
+		.height = 2 * input.height,
+		.pixels = pixels,
 	};
 }
+
+// Uses notation from:
+// https://en.wikipedia.org/wiki/Pixel-art_scaling_algorithms#Scale3%C3%97/AdvMAME3%C3%97_and_ScaleFX
+// (The input notation is identical to:
+// McGuire, Gagiu; 2021; MMPX Style-Preserving Pixel-Art Magnification)
+static gb_Framebuffer gb__MagFramebufferScale3xAdvMame3xScaleF(gb_Framebuffer input, uint8_t* pixels)
+{
+	for (int y = 0; y < input.height; ++y)
+	{
+		for (int x = 0; x < input.width; ++x)
+		{
+			const uint8_t A = gb__SrcPixel(input, x - 1, y - 1);
+			const uint8_t B = gb__SrcPixel(input, x + 0, y - 1);
+			const uint8_t C = gb__SrcPixel(input, x + 1, y - 1);
+			const uint8_t D = gb__SrcPixel(input, x - 1, y + 0);
+			const uint8_t E = gb__SrcPixel(input, x + 0, y + 0);
+			const uint8_t F = gb__SrcPixel(input, x + 1, y + 0);
+			const uint8_t G = gb__SrcPixel(input, x - 1, y + 1);
+			const uint8_t H = gb__SrcPixel(input, x + 0, y + 1);
+			const uint8_t I = gb__SrcPixel(input, x + 1, y + 1);
+
+			uint8_t _1 = E, _2 = E, _3 = E, _4 = E, _5 = E, _6 = E, _7 = E, _8 = E, _9 = E;
+
+			const bool upper_left = D == B && D != H && B != F;
+			const bool upper_right = B == F && B != D && F != H;
+			const bool bottom_left = H == D && H != F && D != B;
+			const bool bottom_right = F == H && F != B && H != D;
+
+			if (upper_left)
+			{
+				_1 = D;
+			}
+			if ((upper_left && E != C) || (upper_right && E != A))
+			{
+				_2 = B;
+			}
+			if (upper_right)
+			{
+				_3 = F;
+			}
+			if ((bottom_left && E != A) || (upper_left && E != G))
+			{
+				_4 = D;
+			}
+			if ((upper_right && E != I) || (bottom_right && E != C))
+			{
+				_6 = F;
+			}
+			if (bottom_left)
+			{
+				_7 = D;
+			}
+			if ((bottom_right && E != G) || (bottom_left && E != I))
+			{
+				_8 = H;
+			}
+			if (bottom_right)
+			{
+				_9 = F;
+			}
+
+			int dst_idx = (y * 3) * 3 * input.width + (3 * x);
+			pixels[dst_idx++] = _1;
+			pixels[dst_idx++] = _2;
+			pixels[dst_idx] = _3;
+			dst_idx += 3 * input.width - 2;
+			pixels[dst_idx++] = _4;
+			pixels[dst_idx++] = _5;
+			pixels[dst_idx] = _6;
+			dst_idx += 3 * input.width - 2;
+			pixels[dst_idx++] = _7;
+			pixels[dst_idx++] = _8;
+			pixels[dst_idx] = _9;
+		}
+	}
+
+	return (gb_Framebuffer){
+		.width = 3 * input.width,
+		.height = 3 * input.height,
+		.pixels = pixels,
+	};
+}
+
+static gb_Framebuffer
+gb__MagFramebufferScale4xAdvMame4x(const gb_Framebuffer input, uint8_t* pixels)
+{
+	// Run Scale2x twice.
+	uint8_t* pixels2x = pixels + (4 * input.width) * (4 * input.height);
+	const gb_Framebuffer fb2x = gb__MagFramebufferEpxScale2xAdvMame2x(input, pixels2x);
+	return gb__MagFramebufferEpxScale2xAdvMame2x(fb2x, pixels);
+}
+
+static gb_Framebuffer
+gb__MagFramebufferXbr(const gb_Framebuffer input, uint8_t* pixels)
+{
+	for (int x = 0; x < 2 * input.width; ++x)
+	{
+		for (int y = 0; y < 2 * input.height; ++y)
+		{
+			if ((x & 1) && (y & 1))
+			{
+				pixels[y * 2 * input.width + x] = input.pixels[y / 2 * input.width + x / 2];
+			}
+			else
+			{
+				pixels[y * 2 * input.width + x] = 255;
+			}
+		}
+	}
+
+	return (gb_Framebuffer){
+		.width = 2 * GB_FRAMEBUFFER_WIDTH,
+		.height = 2 * GB_FRAMEBUFFER_HEIGHT,
+		.pixels = pixels,
+	};
+}
+
+static gb_Framebuffer
+gb__MagFramebufferTODO(const gb_Framebuffer input, uint8_t* pixels)
+{
+	for (int x = 0; x < 2 * input.width; ++x)
+	{
+		for (int y = 0; y < 2 * input.height; ++y)
+		{
+			if ((x & 1) && (y & 1))
+			{
+				pixels[y * 2 * input.width + x] = input.pixels[y / 2 * input.width + x / 2];
+			}
+			else
+			{
+				pixels[y * 2 * input.width + x] = 255;
+			}
+		}
+	}
+
+	return (gb_Framebuffer){
+		.width = 2 * GB_FRAMEBUFFER_WIDTH,
+		.height = 2 * GB_FRAMEBUFFER_HEIGHT,
+		.pixels = pixels,
+	};
+}
+
+gb_Framebuffer
+gb_MagFramebuffer(const gb_GameBoy* gb, gb_MagFilter mag_filter, uint8_t* pixels)
+{
+	const gb_Framebuffer input = {
+		.width = GB_FRAMEBUFFER_WIDTH,
+		.height = GB_FRAMEBUFFER_HEIGHT,
+		.pixels = gb->framebuffer.pixels,
+	};
+
+	switch (mag_filter)
+	{
+	case GB_MAG_FILTER_NONE:
+		// Returns the internal pixel buffer.
+		return input;
+	case GB_MAG_FILTER_EPX_SCALE2X_ADVMAME2X:
+		return gb__MagFramebufferEpxScale2xAdvMame2x(input, pixels);
+	case GB_MAG_FILTER_SCALE3X_ADVMAME3X_SCALEF:
+		return gb__MagFramebufferScale3xAdvMame3xScaleF(input, pixels);
+	case GB_MAG_FILTER_SCALE4X_ADVMAME4X:
+		return gb__MagFramebufferScale4xAdvMame4x(input, pixels);
+	case GB_MAG_FILTER_HQ2X:
+	case GB_MAG_FILTER_HQ3X:
+	case GB_MAG_FILTER_HQ4X:
+	case GB_MAG_FILTER_XBR:
+		return gb__MagFramebufferXbr(input, pixels);
+	case GB_MAG_FILTER_SUPERXBR:
+		return gb__MagFramebufferTODO(input, pixels);
+	default:
+		assert(false);
+		return (gb_Framebuffer){ 0 };
+	}
+}
+
