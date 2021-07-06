@@ -184,12 +184,26 @@ static const struct
 };
 static const size_t num_mag_options = sizeof(mag_options) / sizeof(mag_options[0]);
 
+float
+DpiScale()
+{
+	float ddpi, hdpi, vdpi;
+	SDL_GetDisplayDPI(0, &ddpi, &hdpi, &vdpi);
+	(void)hdpi;
+	(void)vdpi;
+	const float dpi_scale = ddpi / 96.0f;
+	return dpi_scale;
+}
+
+const uint32_t window_default_scale_factor = 5;
+
 struct Ini
 {
-	int screen_size = 0;
+	uint32_t window_width = window_default_scale_factor * GB_FRAMEBUFFER_WIDTH;
+	uint32_t window_height = window_default_scale_factor * GB_FRAMEBUFFER_HEIGHT;
 
-	Stretch stretch = STRETCH_NORMAL;
-	gb_MagFilter mag_filter = GB_MAG_FILTER_NONE;
+	Stretch stretch = STRETCH_ASPECT_CORRECT;
+	gb_MagFilter mag_filter = GB_MAG_FILTER_NONE;  // TODO
 
 	Input inputs[14] = {
 		default_inputs[0],
@@ -255,9 +269,13 @@ IniLoadOrInit(const char* ini_path)
 				continue;
 			}
 
-			if (!strcmp(key, "screen_size"))
+			if (!strcmp(key, "window_width"))
 			{
-				// TODO
+				ini.window_width = atoi(val);
+			}
+			else if (!strcmp(key, "window_height"))
+			{
+				ini.window_height = atoi(val);
 			}
 			else if (!strcmp(key, "stretch"))
 			{
@@ -371,7 +389,8 @@ IniSave(const char* ini_path, const Ini* ini)
 	if (file)
 	{
 		fprintf(file, "[General]\n");
-		fprintf(file, "screen_size=%i\n", ini->screen_size);
+		fprintf(file, "window_width=%i\n", ini->window_width);
+		fprintf(file, "window_height=%i\n", ini->window_height);
 		for (size_t i = 0; i < num_stretch_options; ++i)
 		{
 			if (ini->stretch == stretch_options[i].type)
@@ -413,7 +432,6 @@ enum State
 
 struct Config
 {
-	char* save_path = NULL;
 	Ini ini;
 
 	Rom rom;
@@ -596,6 +614,13 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 				if (ImGui::MenuItem("Fullscreen", NULL, config->gui.fullscreen))
 				{
 					config->gui.toggle_fullscreen = true;
+				}
+				if (ImGui::MenuItem("Reset Window Size", NULL, false))
+				{
+					const float dpi_scale = DpiScale();
+					const int win_width = (int)(window_default_scale_factor * GB_FRAMEBUFFER_WIDTH * dpi_scale);
+					const int win_height = (int)(window_default_scale_factor * GB_FRAMEBUFFER_HEIGHT * dpi_scale);
+					SDL_SetWindowSize(config->handles.window, win_width, win_height);
 				}
 				ImGui::EndMenu();
 			}
@@ -886,12 +911,12 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		ImGui::End();
 	}
 
-	// TODO
-	static bool show_demo2 = true;
-	if (show_demo2)
-	{
-		ImGui::ShowDemoWindow(&show_demo2);
-	}
+	// ImGui demo window
+	// static bool show_demo = true;
+	// if (show_demo)
+	// {
+	// 	ImGui::ShowDemoWindow(&show_demo);
+	// }
 
 	ImGui::PopFont();
 	ImGui::Render();
@@ -971,21 +996,24 @@ main(int argc, char* argv[])
 		exit(1);
 	}
 
-	float ddpi, hdpi, vdpi;
-	SDL_GetDisplayDPI(0, &ddpi, &hdpi, &vdpi);
-	(void)hdpi;
-	(void)vdpi;
-	const float dpi_scale = ddpi / 96.0f;
-	const int scale_factor = 6;
-	const int window_width = 160 * scale_factor;
-	const int window_height = 144 * scale_factor;
 
 	Config config;
-	config.save_path = SDL_GetPrefPath(NULL, "GB");
+	const char* save_path = SDL_GetPrefPath(NULL, "GB");
+
+	// Load ini
+	const char* ini_name = "config.ini";
+	const size_t ini_path_len = strlen(save_path) + strlen(ini_name);
+	char* ini_path = (char*)malloc(ini_path_len + 1);
+	strcpy(ini_path, save_path);
+	strcat(ini_path, ini_name);
+	ini_path[ini_path_len] = '\0';
+	config.ini = IniLoadOrInit(ini_path);
+
+	const float dpi_scale = DpiScale();
 
 	{  // Main window
-		const int fb_width = (int)(window_width * dpi_scale);
-		const int fb_height = (int)(window_height * dpi_scale);
+		const int fb_width = (int)(config.ini.window_width * dpi_scale);
+		const int fb_height = (int)(config.ini.window_height * dpi_scale);
 		config.handles.window = SDL_CreateWindow("GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, fb_width,
 				fb_height, SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
 		if (!config.handles.window)
@@ -1018,7 +1046,7 @@ main(int argc, char* argv[])
 	config.handles.controller = NULL;
 
 	// Setup ImGui for main window
-	const float main_window_scale = 2.0f * dpi_scale;
+	const float main_window_scale = 1.8f * dpi_scale;
 	{
 		config.handles.imgui = ImGui::CreateContext();
 		ImGui::SetCurrentContext(config.handles.imgui);
@@ -1128,15 +1156,6 @@ main(int argc, char* argv[])
 		glCheckError();
 	}
 
-	// Load ini
-	const char* ini_name = "config.ini";
-	const size_t ini_path_len = strlen(config.save_path) + strlen(ini_name);
-	char* ini_path = (char*)malloc(ini_path_len + 1);
-	strcpy(ini_path, config.save_path);
-	strcat(ini_path, ini_name);
-	ini_path[ini_path_len] = '\0';
-	config.ini = IniLoadOrInit(ini_path);
-
 	gb_GameBoy gb = {};
 	gb_Init(&gb);
 	uint8_t* pixels = (uint8_t*)malloc(gb_MaxMagFramebufferSizeInBytes());
@@ -1204,7 +1223,14 @@ main(int argc, char* argv[])
 				config.gui.show_quit_popup = true;
 				break;
 			case SDL_WINDOWEVENT:
-				if (event.window.event == SDL_WINDOWEVENT_CLOSE &&
+				if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED &&
+						SDL_GetWindowFromID(event.window.windowID) == config.handles.window)
+				{
+					// This can cause 1 pixel off rounding errors.
+					config.ini.window_width = (int)(event.window.data1 / dpi_scale);
+					config.ini.window_height = (int)(event.window.data2 / dpi_scale);
+				}
+				else if (event.window.event == SDL_WINDOWEVENT_CLOSE &&
 						SDL_GetWindowFromID(event.window.windowID) == config.handles.window)
 				{
 					SDL_RaiseWindow(config.handles.window);  // Make sure window gets focuses when closed from taskbar.
@@ -1418,7 +1444,7 @@ main(int argc, char* argv[])
 		free(config.rom.data);
 	}
 	free(ini_path);
-	SDL_free(config.save_path);
+	SDL_free(save_path);
 
 	if (config.handles.controller)
 	{

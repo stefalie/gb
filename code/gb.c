@@ -1375,7 +1375,8 @@ gb__MagFramebufferEpxScale2xAdvMame2x(const gb_Framebuffer input, uint8_t* pixel
 // https://en.wikipedia.org/wiki/Pixel-art_scaling_algorithms#Scale3%C3%97/AdvMAME3%C3%97_and_ScaleFX
 // (The input notation is identical to:
 // McGuire, Gagiu; 2021; MMPX Style-Preserving Pixel-Art Magnification)
-static gb_Framebuffer gb__MagFramebufferScale3xAdvMame3xScaleF(gb_Framebuffer input, uint8_t* pixels)
+static gb_Framebuffer
+gb__MagFramebufferScale3xAdvMame3xScaleF(gb_Framebuffer input, uint8_t* pixels)
 {
 	for (int y = 0; y < input.height; ++y)
 	{

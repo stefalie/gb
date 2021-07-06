@@ -8,5 +8,6 @@
 #include <imgui/backends/imgui_impl_opengl2.cpp>
 #include <imgui/backends/imgui_impl_sdl.cpp>
 
-#include <imgui/imgui_demo.cpp>
+// ImGui demo window
+// #include <imgui/imgui_demo.cpp>
 
