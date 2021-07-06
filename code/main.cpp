@@ -61,8 +61,8 @@ _glCheckError(const char* file, int line)
 		const char* error_str;
 		switch (error)
 		{
-#define CASE(error)         \
-	case error:             \
+#define CASE(error) \
+	case error: \
 		error_str = #error; \
 		break
 			CASE(GL_NO_ERROR);
@@ -500,16 +500,16 @@ LoadRomFromFile(const char* file_path)
 }
 
 // TODO(stefalie): Consider using only OpenGL 2.1 compatible functions, glCreateShaderProgram needs OpenGL 4.1.
-#define GL_API_LIST(ENTRY)                                                                                \
-	ENTRY(void, glUseProgram, GLuint program)                                                             \
-	ENTRY(GLuint, glCreateShaderProgramv, GLenum type, GLsizei count, const GLchar* const* strings)       \
-	ENTRY(void, glGetProgramiv, GLuint program, GLenum pname, GLint* params)                              \
+#define GL_API_LIST(ENTRY) \
+	ENTRY(void, glUseProgram, GLuint program) \
+	ENTRY(GLuint, glCreateShaderProgramv, GLenum type, GLsizei count, const GLchar* const* strings) \
+	ENTRY(void, glGetProgramiv, GLuint program, GLenum pname, GLint* params) \
 	ENTRY(void, glGetProgramInfoLog, GLuint program, GLsizei maxLength, GLsizei* length, GLchar* infoLog) \
-	ENTRY(GLint, glGetUniformLocation, GLuint program, const GLchar* name)                                \
-	ENTRY(void, glUniform1i, GLint location, GLint v0)                                                    \
+	ENTRY(GLint, glGetUniformLocation, GLuint program, const GLchar* name) \
+	ENTRY(void, glUniform1i, GLint location, GLint v0) \
 	ENTRY(void, glUniform2i, GLint location, GLint v0, GLint v1)
 
-#define GL_API_DECL_ENTRY(return_type, name, ...)          \
+#define GL_API_DECL_ENTRY(return_type, name, ...) \
 	typedef return_type __stdcall name##Proc(__VA_ARGS__); \
 	name##Proc* name;
 GL_API_LIST(GL_API_DECL_ENTRY)
@@ -1115,7 +1115,7 @@ main(int argc, char* argv[])
 	{
 		// Load OpenGL extensions.
 #define GL_API_GETPTR_ENTRY(return_type, name, ...) \
-	name = (name##Proc*)wglGetProcAddress(#name);   \
+	name = (name##Proc*)wglGetProcAddress(#name); \
 	assert(name);
 		GL_API_LIST(GL_API_GETPTR_ENTRY)
 #undef GL_API_GETPTR_ENTRY
