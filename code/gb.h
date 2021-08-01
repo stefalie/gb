@@ -43,23 +43,30 @@ typedef struct gb_Framebuffer
 	const uint8_t* pixels;
 } gb_Framebuffer;
 
-typedef struct
-{
-	uint8_t r, g, b;
-} gb_Pixel;
-
 // Magnification filters for the framebuffer
+// For general overview, see:
+// https://en.wikipedia.org/wiki/Pixel-art_scaling_algorithms
 typedef enum gb_MagFilter
 {
 	GB_MAG_FILTER_NONE,
 	GB_MAG_FILTER_EPX_SCALE2X_ADVMAME2X,
 	GB_MAG_FILTER_SCALE3X_ADVMAME3X_SCALEF,
 	GB_MAG_FILTER_SCALE4X_ADVMAME4X,
-	GB_MAG_FILTER_HQ2X,
-	GB_MAG_FILTER_HQ3X,
-	GB_MAG_FILTER_HQ4X,
-	GB_MAG_FILTER_XBR,
-	GB_MAG_FILTER_SUPERXBR,
+	GB_MAG_FILTER_XBR2,
+	// TODO(stefalie): I'm too tired, but eventually I should add some more filters:
+	// - HQ2x, HQ3x, HQ4x
+	// - XBR at higher resolution
+	// - SuperXBR (both referenced from Wikipedia):
+	//   - https://drive.google.com/file/d/0B_yrhrCRtu8GYkxreElSaktxS3M/view?pref=2&pli=1&resourcekey=0-mKvLmDc8GWdBuPWpPN_wQg
+	//   - https://pastebin.com/cbH8ZQQT
+	// - McGuire, Gagiu; 2021; MMPX Style-Preserving Pixel-Art Magnification
+	// GB_MAG_FILTER_HQ2X,
+	// GB_MAG_FILTER_HQ3X,
+	// GB_MAG_FILTER_HQ4X,
+	// GB_MAG_FILTER_XBR3,
+	// GB_MAG_FILTER_XBR4,
+	// GB_MAG_FILTER_SUPERXBR,
+	// GB_MAG_FILTER_MMX,
 	GB_MAG_FILTER_MAX_VALUE,
 } gb_MagFilter;
 
@@ -72,10 +79,7 @@ uint32_t
 gb_MaxMagFramebufferSizeInBytes();
 
 // Magnify 'gb's default framebuffer with a given filter and stores in user
-// provided buffer. Summaries of the different filters can be found here:
-// - https://en.wikipedia.org/wiki/Pixel-art_scaling_algorithms
-// - https://www.scale2x.it
-// - McGuire, Gagiu; 2021; MMPX Style-Preserving Pixel-Art Magnification
+// provided buffer.
 gb_Framebuffer
 gb_MagFramebuffer(const gb_GameBoy* gb, gb_MagFilter mag_filter, uint8_t* pixels);
 

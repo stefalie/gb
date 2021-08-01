@@ -176,11 +176,7 @@ static const struct
 	{ GB_MAG_FILTER_EPX_SCALE2X_ADVMAME2X, "epx_scale2x_advmame2x", "EPX/Scale2x/AdvMAME2x" },
 	{ GB_MAG_FILTER_SCALE3X_ADVMAME3X_SCALEF, "scale3x_advmame3x_scalef", "Scale3x/AdvMAME3x/ScaleF" },
 	{ GB_MAG_FILTER_SCALE4X_ADVMAME4X, "scale4x_advmame4x", "Scale4x/AdvMAME4x" },
-	{ GB_MAG_FILTER_HQ2X, "hq2x", "hq2x" },
-	{ GB_MAG_FILTER_HQ3X, "hq3x", "hq3x" },
-	{ GB_MAG_FILTER_HQ4X, "hq4x", "hq4x" },
-	{ GB_MAG_FILTER_XBR, "xbr", "xBR" },
-	{ GB_MAG_FILTER_SUPERXBR, "super_xbr", "Super xBR" },
+	{ GB_MAG_FILTER_XBR2, "xbr2", "xBR2" },
 };
 static const size_t num_mag_options = sizeof(mag_options) / sizeof(mag_options[0]);
 
@@ -203,7 +199,7 @@ struct Ini
 	uint32_t window_height = window_default_scale_factor * GB_FRAMEBUFFER_HEIGHT;
 
 	Stretch stretch = STRETCH_ASPECT_CORRECT;
-	gb_MagFilter mag_filter = GB_MAG_FILTER_NONE;  // TODO
+	gb_MagFilter mag_filter = GB_MAG_FILTER_NONE;
 
 	Input inputs[14] = {
 		default_inputs[0],
@@ -998,7 +994,7 @@ main(int argc, char* argv[])
 
 
 	Config config;
-	const char* save_path = SDL_GetPrefPath(NULL, "GB");
+	char* save_path = SDL_GetPrefPath(NULL, "GB");
 
 	// Load ini
 	const char* ini_name = "config.ini";

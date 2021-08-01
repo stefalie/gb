@@ -3,7 +3,12 @@
 #include "gb.h"
 #include <assert.h>
 #include <stdio.h>  // TODO rem
+#include <stdlib.h>  // TODO rem
 #include <string.h>  // TODO rem
+
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define CLAMP(v, min, max) MIN(MAX(v, min), max)
 
 // Dummy image to test image mag filters.
 // TODO(stefalie): Remove once the emulator can actually generate images.
@@ -1256,7 +1261,7 @@ gb_MagFramebufferSizeInBytes(gb_MagFilter mag_filter)
 	case GB_MAG_FILTER_NONE:
 		return num_pixels;
 	case GB_MAG_FILTER_EPX_SCALE2X_ADVMAME2X:
-	case GB_MAG_FILTER_XBR:
+	case GB_MAG_FILTER_XBR2:
 		return num_pixels * (2 * 2);
 	case GB_MAG_FILTER_SCALE3X_ADVMAME3X_SCALEF:
 		return num_pixels * (3 * 3);
@@ -1264,16 +1269,6 @@ gb_MagFramebufferSizeInBytes(gb_MagFilter mag_filter)
 		// Needs storage for the temporary intermediate buffer. Smarter people might
 		// be able to do it in place.
 		return gb_MagFramebufferSizeInBytes(GB_MAG_FILTER_EPX_SCALE2X_ADVMAME2X) + num_pixels * (4 * 4);
-	case GB_MAG_FILTER_HQ2X:
-		return num_pixels * 4;  // TODO
-	case GB_MAG_FILTER_HQ3X:
-		return num_pixels * 4;  // TODO
-	case GB_MAG_FILTER_HQ4X:
-		return num_pixels * 8;  // TODO
-	// case GB_MAG_FILTER_XBR:
-	//	return num_pixels * 8;  // TODO
-	case GB_MAG_FILTER_SUPERXBR:
-		return num_pixels * 8;  // TODO
 	default:
 		assert(false);
 		return 0;
@@ -1295,34 +1290,21 @@ gb_MaxMagFramebufferSizeInBytes()
 	return bytes;
 }
 
-static int
-gb__Clamp(int val, int min, int max)
-{
-	if (val < min)
-	{
-		return min;
-	}
-	if (val > max)
-	{
-		return max;
-	}
-	return val;
-}
-
-static uint8_t
+static inline uint8_t
 gb__SrcPixel(const gb_Framebuffer input, int x, int y)
 {
-	x = gb__Clamp(x, 0, input.width - 1);
-	y = gb__Clamp(y, 0, input.height - 1);
+	x = CLAMP(x, 0, input.width - 1);
+	y = CLAMP(y, 0, input.height - 1);
 	return input.pixels[y * input.width + x];
 }
 
-// TODO(stefalie): None of the magnification filters below are optimized.
+// TODO(stefalie): None of the magnification filters below are optimized/vectorized.
 // Often reading pixel values can be done in the outer loop and be reused in subsequent
 // iterations of the inner loop.
 
 // Uses notation from:
-// McGuire, Gagiu; 2021; MMPX Style-Preserving Pixel-Art Magnification
+// McGuire, Gagiu; 2021; MMPX Style-Preserving Pixel-Art Magnification)
+// Also see: https://www.scale2x.it
 static gb_Framebuffer
 gb__MagFramebufferEpxScale2xAdvMame2x(const gb_Framebuffer input, uint8_t* pixels)
 {
@@ -1375,6 +1357,7 @@ gb__MagFramebufferEpxScale2xAdvMame2x(const gb_Framebuffer input, uint8_t* pixel
 // https://en.wikipedia.org/wiki/Pixel-art_scaling_algorithms#Scale3%C3%97/AdvMAME3%C3%97_and_ScaleFX
 // (The input notation is identical to:
 // McGuire, Gagiu; 2021; MMPX Style-Preserving Pixel-Art Magnification)
+// Also see: https://www.scale2x.it
 static gb_Framebuffer
 gb__MagFramebufferScale3xAdvMame3xScaleF(gb_Framebuffer input, uint8_t* pixels)
 {
@@ -1454,7 +1437,7 @@ gb__MagFramebufferScale3xAdvMame3xScaleF(gb_Framebuffer input, uint8_t* pixels)
 	};
 }
 
-static gb_Framebuffer
+static inline gb_Framebuffer
 gb__MagFramebufferScale4xAdvMame4x(const gb_Framebuffer input, uint8_t* pixels)
 {
 	// Run Scale2x twice.
@@ -1463,46 +1446,179 @@ gb__MagFramebufferScale4xAdvMame4x(const gb_Framebuffer input, uint8_t* pixels)
 	return gb__MagFramebufferEpxScale2xAdvMame2x(fb2x, pixels);
 }
 
-static gb_Framebuffer
-gb__MagFramebufferXbr(const gb_Framebuffer input, uint8_t* pixels)
+// xBR
+// Heavily based on:
+// - https://github.com/Treeki/libxbr-standalone, GPL 2.1 license)
+//   Copyright 2011, 2012 Hyllian/Jararaca <sergiogdb@gmail.com>
+//   Copyright 2014 Arwa Arif <arwaarif1994@gmail.com>
+//   Copyright 2015 Treeki <treeki@gmail.com>
+// - https://github.com/joseprio/xBRjs, MIT license.
+//   Copyright 2020 Josep del Rio.
+// - https://forums.libretro.com/t/xbr-algorithm-tutorial/123
+
+// Pixel difference
+// I don't understand how the original C version builds the rgb2yuv lookup table
+// (https://github.com/Treeki/libxbr-standalone/blob/master/xbr.c#L317). The JS
+// version and the tutorial are alot easier to grok, and therefore we base the
+// implementation here on that.
+// The Yuv difference is simplified since for monochrome Yuv == (gray, 0, 0).
+//
+// uint8_t b = abs(((a & BLUE_MASK)  >> 16) - ((b & BLUE_MASK)  >> 16));
+// uint8_t g = abs(((a & GREEN_MASK) >>  8) - ((b & GREEN_MASK) >>  8));
+// uint8_t r = abs( (a & RED_MASK)          -  (b & RED_MASK)         );
+// float y = fabsf( 0.299 * r + 0.587 * g + 0.114 * b);
+// float u = fabsf(-0.169 * r - 0.331 * g + 0.500 * b);
+// float v = fabsf( 0.500 * r - 0.419 * g - 0.081 * b);
+// uint32_t yuv_diff = 48 * y + 7 * u + 6 * v;
+#define XBR_THRESHHOLD_Y 48
+#define XBR_DIFF(a, b) (XBR_THRESHHOLD_Y * ((uint32_t)abs(a - b)))
+
+#define XBR_EQ(a, b) (abs(a - b) <= XBR_THRESHHOLD_Y)
+
+// The interpolation in the original C version with 4 channels is ingenious.
+// It's split up into 2 parts so that always 2 channels are interpolated at once
+// and the gaps inbetween are used to prevent spill into the higher up part.
+// For our single monotone channel it's easier, but we have to cast to a wider
+// type so that the value can temporarily overflow.
+#define XBR_INTERP(a, b, m, s) \
+	(0xFF & ((0xFF & (uint16_t)a) + ((((0xFF & (uint16_t)b) - (0xFF & (uint16_t)a)) * m) >> s)))
+#define XBR_INTERP_32(a, b) XBR_INTERP(a, b, 1, 3)
+#define XBR_INTERP_64(a, b) XBR_INTERP(a, b, 1, 2)
+#define XBR_INTERP_128(a, b) XBR_INTERP(a, b, 1, 1)
+#define XBR_INTERP_192(a, b) XBR_INTERP(a, b, 3, 2)
+#define XBR_INTERP_224(a, b) XBR_INTERP(a, b, 7, 3)
+
+static inline void
+gb__XbrFilter2(uint8_t E, uint8_t I, uint8_t H, uint8_t F, uint8_t G, uint8_t C, uint8_t D, uint8_t B, uint8_t F4,
+		uint8_t I4, uint8_t H5, uint8_t I5, int N1, int N2, int N3, uint8_t* E_out)
 {
-	for (int x = 0; x < 2 * input.width; ++x)
+	if (E != H && E != F)
 	{
-		for (int y = 0; y < 2 * input.height; ++y)
+		const uint32_t e = XBR_DIFF(E, C) + XBR_DIFF(E, G) + XBR_DIFF(I, H5) + XBR_DIFF(I, F4) + (4 * XBR_DIFF(H, F));
+		const uint32_t i = XBR_DIFF(H, D) + XBR_DIFF(H, I5) + XBR_DIFF(F, I4) + XBR_DIFF(F, B) + (4 * XBR_DIFF(E, I));
+		if (e <= i)
 		{
-			if ((x & 1) && (y & 1))
+			const uint8_t px = XBR_DIFF(E, F) <= XBR_DIFF(E, H) ? F : H;
+			if (e < i &&
+					(!XBR_EQ(F, B) && !XBR_EQ(H, D) || XBR_EQ(E, I) && (!XBR_EQ(F, I4) && !XBR_EQ(H, I5)) ||
+							XBR_EQ(E, G) || XBR_EQ(E, C)))
 			{
-				pixels[y * 2 * input.width + x] = input.pixels[y / 2 * input.width + x / 2];
+				const uint32_t ke = XBR_DIFF(F, G);
+				const uint32_t ki = XBR_DIFF(H, C);
+				const int left = ke << 1 <= ki && E != G && D != G;
+				const int up = ke >= ki << 1 && E != C && B != C;
+				if (left && up)
+				{
+					E_out[N3] = XBR_INTERP_224(E_out[N3], px);
+					E_out[N2] = XBR_INTERP_64(E_out[N2], px);
+					E_out[N1] = E_out[N2];
+				}
+				else if (left)
+				{
+					E_out[N3] = XBR_INTERP_192(E_out[N3], px);
+					E_out[N2] = XBR_INTERP_64(E_out[N2], px);
+				}
+				else if (up)
+				{
+					E_out[N3] = XBR_INTERP_192(E_out[N3], px);
+					E_out[N1] = XBR_INTERP_64(E_out[N1], px);
+				}
+				else
+				{
+					E_out[N3] = XBR_INTERP_128(E_out[N3], px);
+				}
 			}
-			else
+			else  // if (e ==i)
 			{
-				pixels[y * 2 * input.width + x] = 255;
+				E_out[N3] = XBR_INTERP_128(E_out[N3], px);
 			}
 		}
 	}
-
-	return (gb_Framebuffer){
-		.width = 2 * GB_FRAMEBUFFER_WIDTH,
-		.height = 2 * GB_FRAMEBUFFER_HEIGHT,
-		.pixels = pixels,
-	};
 }
 
 static gb_Framebuffer
-gb__MagFramebufferTODO(const gb_Framebuffer input, uint8_t* pixels)
+gb__MagFramebufferXbr2(const gb_Framebuffer input, uint8_t* pixels)
 {
-	for (int x = 0; x < 2 * input.width; ++x)
+	const int nl = input.width * 2;
+
+	for (int y = 0; y < input.height; ++y)
 	{
-		for (int y = 0; y < 2 * input.height; ++y)
+		// Output
+		uint8_t* E_out = pixels + y * input.width * 2 * 2;
+
+		const uint8_t* row0 = input.pixels + (y - 2) * input.width - 2;
+		const uint8_t* row1 = row0 + input.width;
+		const uint8_t* row2 = row1 + input.width;
+		const uint8_t* row3 = row2 + input.width;
+		const uint8_t* row4 = row3 + input.width;
+
+		// Clamping
+		if (y == 0)
 		{
-			if ((x & 1) && (y & 1))
-			{
-				pixels[y * 2 * input.width + x] = input.pixels[y / 2 * input.width + x / 2];
-			}
-			else
-			{
-				pixels[y * 2 * input.width + x] = 255;
-			}
+			row0 = row2;
+			row1 = row2;
+		}
+		else if (y == 1)
+		{
+			row0 = row1;
+		}
+		else if (y == input.width - 2)
+		{
+			row4 = row3;
+		}
+		else if (y == input.width - 1)
+		{
+			row4 = row2;
+			row3 = row2;
+		}
+
+		for (int x = 0; x < input.width; ++x)
+		{
+
+			const int prev = 2 - (x > 0);
+			const int prev2 = prev - (x > 1);
+			const int next = 2 + (x < input.width - 1);
+			const int next2 = next + (x < input.width - 2);
+
+			const uint8_t A0 = row1[prev2];
+			const uint8_t D0 = row2[prev2];
+			const uint8_t G0 = row3[prev2];
+
+			const uint8_t A1 = row0[prev];
+			const uint8_t A = row1[prev];
+			const uint8_t D = row2[prev];
+			const uint8_t G = row3[prev];
+			const uint8_t G5 = row4[prev];
+
+			const uint8_t B1 = row0[2];
+			const uint8_t B = row1[2];
+			const uint8_t E = row2[2];
+			const uint8_t H = row3[2];
+			const uint8_t H5 = row4[2];
+
+			const uint8_t C1 = row0[next];
+			const uint8_t C = row1[next];
+			const uint8_t F = row2[next];
+			const uint8_t I = row3[next];
+			const uint8_t I5 = row4[next];
+
+			const uint8_t C4 = row1[next2];
+			const uint8_t F4 = row2[next2];
+			const uint8_t I4 = row3[next2];
+
+			// This uses only the n == 2 version
+			E_out[0] = E_out[1] = E_out[nl] = E_out[nl + 1] = E;
+			gb__XbrFilter2(E, I, H, F, G, C, D, B, F4, I4, H5, I5, 1, nl, nl + 1, E_out);
+			gb__XbrFilter2(E, C, F, B, I, A, H, D, B1, C1, F4, C4, 0, nl + 1, 1, E_out);
+			gb__XbrFilter2(E, A, B, D, C, G, F, H, D0, A0, B1, A1, nl, 1, 0, E_out);
+			gb__XbrFilter2(E, G, D, H, A, I, B, F, H5, G5, D0, G0, nl + 1, 0, nl, E_out);
+
+			++row0;
+			++row1;
+			++row2;
+			++row3;
+			++row4;
+			E_out += 2;
 		}
 	}
 
@@ -1533,13 +1649,8 @@ gb_MagFramebuffer(const gb_GameBoy* gb, gb_MagFilter mag_filter, uint8_t* pixels
 		return gb__MagFramebufferScale3xAdvMame3xScaleF(input, pixels);
 	case GB_MAG_FILTER_SCALE4X_ADVMAME4X:
 		return gb__MagFramebufferScale4xAdvMame4x(input, pixels);
-	case GB_MAG_FILTER_HQ2X:
-	case GB_MAG_FILTER_HQ3X:
-	case GB_MAG_FILTER_HQ4X:
-	case GB_MAG_FILTER_XBR:
-		return gb__MagFramebufferXbr(input, pixels);
-	case GB_MAG_FILTER_SUPERXBR:
-		return gb__MagFramebufferTODO(input, pixels);
+	case GB_MAG_FILTER_XBR2:
+		return gb__MagFramebufferXbr2(input, pixels);
 	default:
 		assert(false);
 		return (gb_Framebuffer){ 0 };
