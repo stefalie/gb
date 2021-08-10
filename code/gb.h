@@ -13,6 +13,8 @@ typedef struct
 	// TODO(stefalie): this is all just tmp
 	struct CPU
 	{
+		uint16_t pc;  // Program counter
+
 		uint16_t registers[20];
 	} cpu;
 
@@ -25,6 +27,8 @@ typedef struct
 	{
 		uint8_t pixels[GB_FRAMEBUFFER_WIDTH * GB_FRAMEBUFFER_HEIGHT];
 	} framebuffer;
+
+	char rom_name[16];
 } gb_GameBoy;
 
 void
@@ -33,8 +37,11 @@ gb_Init(gb_GameBoy* gb);
 void
 gb_Reset(gb_GameBoy* gb);
 
+// Returns true in error case if the ROM cannot be loaded, is broken,
+// or is not for GameBoy.
+// TODO(stefalie): Consider returning an error code of what went wrong.
 bool
-gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom);
+gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom, uint32_t num_bytes);
 
 typedef struct gb_Framebuffer
 {
@@ -57,7 +64,8 @@ typedef enum gb_MagFilter
 	// - HQ2x, HQ3x, HQ4x
 	// - XBR at higher resolution
 	// - SuperXBR (both referenced from Wikipedia):
-	//   - https://drive.google.com/file/d/0B_yrhrCRtu8GYkxreElSaktxS3M/view?pref=2&pli=1&resourcekey=0-mKvLmDc8GWdBuPWpPN_wQg
+	//   -
+	//   https://drive.google.com/file/d/0B_yrhrCRtu8GYkxreElSaktxS3M/view?pref=2&pli=1&resourcekey=0-mKvLmDc8GWdBuPWpPN_wQg
 	//   - https://pastebin.com/cbH8ZQQT
 	// - McGuire, Gagiu; 2021; MMPX Style-Preserving Pixel-Art Magnification
 	// GB_MAG_FILTER_HQ2X,

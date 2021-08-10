@@ -2,7 +2,6 @@
 
 #include "gb.h"
 #include <assert.h>
-#include <stdio.h>  // TODO rem
 #include <stdlib.h>  // TODO rem
 #include <string.h>  // TODO rem
 
@@ -1232,22 +1231,51 @@ gb_Init(gb_GameBoy* gb)
 {
 	*gb = (gb_GameBoy){ 0 };
 	memcpy(gb->framebuffer.pixels, gb_tetris_splash_screen, sizeof(gb->framebuffer.pixels));
-	printf("GB Init!\n");
 }
 
 void
 gb_Reset(gb_GameBoy* gb)
 {
 	(void)gb;
-	printf("GB Reset!\n");
 }
 
 bool
-gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom)
+gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom, uint32_t num_bytes)
 {
-	(void)gb;
-	(void)rom;
-	printf("GB Load ROM!\n");
+	const uint8_t nintendo_logo[] = { 0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00,
+		0x0C, 0x00, 0x0D, 0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9,
+		0x99, 0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E };
+	const uint16_t nintendo_logo_loc = 0x0104;
+	if (memcmp(nintendo_logo, &rom[nintendo_logo_loc], sizeof(nintendo_logo)))
+	{
+		return true;
+	}
+
+	// 0x80 is Color GameBoy
+	if (rom[0x0143] == 0x80)
+	{
+		return true;
+	}
+
+	// 0x00 is GameBoy, 0x03 is Super GameBoy
+	if (rom[0x0146] != 0x00)
+	{
+		return true;
+	}
+
+	gb->rom_name[15] = '\0';
+	memcpy(gb->rom_name, &rom[0x0134], (0x0142 + 1) - 0x0134);
+
+	// Checksum test
+	uint16_t checksum = 0;
+	for (size_t i = 0; i < num_bytes; ++i) {
+		checksum += rom[i];
+	}
+	checksum -= rom[0x014E] + rom[0x014F];
+	if ((checksum & 0xFF) != rom[0x014F] || (checksum >> 8) != rom[0x014E]) {
+		return true;
+	}
+
 	return false;
 }
 

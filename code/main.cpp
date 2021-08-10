@@ -30,6 +30,7 @@
 #include <imgui/backends/imgui_impl_sdl.h>
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
+#include <imgui_club/imgui_memory_editor/imgui_memory_editor.h>
 
 #include "dmca_sans_serif_v0900_600.h"
 extern "C" {
@@ -224,7 +225,6 @@ struct Ini
 static Ini
 IniLoadOrInit(const char* ini_path)
 {
-	SDL_Log("pref path: %s\n", ini_path);  // TODO
 	Ini ini;
 
 	FILE* file = fopen(ini_path, "r");
@@ -446,6 +446,7 @@ struct Config
 		bool show_quit_popup = false;
 		bool show_input_config_popup = false;
 		bool show_about_popup = false;
+		bool show_rom_load_error = false;
 
 		bool has_active_rom = false;
 
@@ -459,6 +460,7 @@ struct Config
 	struct Debugger
 	{
 		bool show = false;
+		MemoryEditor memory_editor;
 	} debug;
 
 	struct Handles
@@ -475,24 +477,48 @@ struct Config
 	} handles;
 };
 
-static Rom
-LoadRomFromFile(const char* file_path)
+static void
+LoadRomFromFile(Config* config, gb_GameBoy* gb, const char* file_path)
 {
-	Rom result;
+	Rom rom = {};
 
 	FILE* file = fopen(file_path, "rb");
 	if (file)
 	{
 		fseek(file, 0, SEEK_END);
-		result.size = ftell(file);
+		rom.size = ftell(file);
 		fseek(file, 0, SEEK_SET);
 
-		result.data = (uint8_t*)malloc(result.size);
-		fread(result.data, result.size, 1, file);
+		rom.data = (uint8_t*)malloc(rom.size);
+		fread(rom.data, rom.size, 1, file);
 		fclose(file);
 	}
 
-	return result;
+	if (rom.data)
+	{
+		if (config->rom.data)
+		{
+			free(config->rom.data);
+			config->rom = {};
+		}
+		config->rom = rom;
+		if (gb_LoadRom(gb, config->rom.data, config->rom.size))
+		{
+			config->gui.show_rom_load_error = true;
+			free(config->rom.data);
+			config->rom = {};
+		}
+		else
+		{
+			// TODO: rem
+			SDL_Log("Loaded ROM: %s\n", gb->rom_name);
+			gb_Reset(gb);
+		}
+	}
+	else
+	{
+		config->gui.show_rom_load_error = true;
+	}
 }
 
 // TODO(stefalie): Consider using only OpenGL 2.1 compatible functions, glCreateShaderProgram needs OpenGL 4.1.
@@ -543,24 +569,7 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 				ofn.Flags = OFN_FILEMUSTEXIST;
 				if (GetOpenFileNameA(&ofn))
 				{
-					SDL_Log("Selected ROM: %s\n", ofn.lpstrFile);
-
-					Rom rom = LoadRomFromFile(ofn.lpstrFile);
-					if (rom.data)
-					{
-						if (config->rom.data)
-						{
-							free(config->rom.data);
-						}
-						config->rom = rom;
-						gb_LoadRom(gb, config->rom.data);
-						gb_Reset(gb);
-					}
-					else
-					{
-						// TODO: Show error overlay instead.
-						SDL_LogCritical(SDL_LOG_CATEGORY_ERROR, "Couldn't load ROM '%s'.\n", ofn.lpstrFile);
-					}
+					LoadRomFromFile(config, gb, ofn.lpstrFile);
 				}
 			}
 			ImGui::MenuItem("Close", NULL, false, config->gui.has_active_rom);
@@ -677,8 +686,8 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 
 	// Use the hit ESC key only to close the quit popup only if it wasn't used
 	// to close another pop-up.
-	const bool any_open_popups_except_quit =
-			config->gui.show_about_popup || config->gui.show_input_config_popup /* || ...*/;
+	const bool any_open_popups_except_quit = config->gui.show_about_popup || config->gui.show_input_config_popup ||
+			config->gui.show_rom_load_error /* || ...*/;
 	const bool esc_for_quit_popup = config->gui.pressed_escape && !any_open_popups_except_quit;
 	const bool close_quit_popup = config->gui.show_quit_popup && esc_for_quit_popup;
 	if (esc_for_quit_popup)
@@ -783,6 +792,22 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 		ImGui::EndPopup();
 	}
 
+	// Rom load error popup
+	if (config->gui.show_rom_load_error)
+	{
+		ImGuiOpenCenteredPopup("Error");
+	}
+	if (ImGui::BeginPopupModal("Error", NULL, popup_flags))
+	{
+		ImGui::Text("Failed to open ROM file.");
+		if (ImGui::Button("Ok") || close_current_popup)
+		{
+			config->gui.show_rom_load_error = false;
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+
 	// Quit pop-up
 	if (config->gui.show_quit_popup)
 	{
@@ -872,14 +897,14 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 			ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
 
 			ImGuiID dock_tmp_id = dockspace_id;
-			ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Left, 0.50f, NULL, &dock_tmp_id);
+			ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Left, 0.55f, NULL, &dock_tmp_id);
 			ImGuiID dock_id_right_bottom =
 					ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Down, 0.50f, NULL, &dock_tmp_id);
 			ImGuiID dock_id_right_top = dock_tmp_id;
 
-			ImGui::DockBuilderDockWindow("Left Tab 1", dock_id_left);
-			ImGui::DockBuilderDockWindow("Left Tab 2", dock_id_left);
+			ImGui::DockBuilderDockWindow("Hex View", dock_id_left);
 			ImGui::DockBuilderDockWindow("Right", dock_id_right_top);
+			ImGui::DockBuilderDockWindow("Right Tab 2", dock_id_right_top);
 			ImGui::DockBuilderDockWindow("Sprites", dock_id_right_bottom);
 			ImGui::DockBuilderFinish(dockspace_id);
 		}
@@ -889,17 +914,13 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 	}
 
 	{
-		ImGui::Begin("Left Tab 1");
-		ImGui::Text("Lorem ipsum ...");
-		ImGui::Button("Hello button");
-		ImGui::End();
-
-		ImGui::Begin("Left Tab 2");
-		ImGui::Text("text text text left");
-		ImGui::End();
+		config->debug.memory_editor.DrawWindow("Hex View", config->rom.data, config->rom.size);
 
 		ImGui::Begin("Right");
 		ImGui::Text("text text text right");
+		ImGui::End();
+		ImGui::Begin("Right Tab 2");
+		ImGui::Text("text text text left");
 		ImGui::End();
 
 		ImGui::Begin("Sprites");
@@ -994,6 +1015,7 @@ main(int argc, char* argv[])
 
 
 	Config config;
+	config.debug.memory_editor.ReadOnly = true;
 	char* save_path = SDL_GetPrefPath(NULL, "GB");
 
 	// Load ini
@@ -1021,8 +1043,8 @@ main(int argc, char* argv[])
 	}
 
 	{  // Debugger window
-		const int fb_debug_width = (int)(1280 * dpi_scale);
-		const int fb_debug_height = (int)(960 * dpi_scale);
+		const int fb_debug_width = (int)(1024 * dpi_scale);
+		const int fb_debug_height = (int)(768 * dpi_scale);
 		config.handles.debug_window = SDL_CreateWindow("GB Debugger", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 				fb_debug_width, fb_debug_height, SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
 		if (!config.handles.debug_window)
@@ -1155,6 +1177,10 @@ main(int argc, char* argv[])
 	gb_GameBoy gb = {};
 	gb_Init(&gb);
 	uint8_t* pixels = (uint8_t*)malloc(gb_MaxMagFramebufferSizeInBytes());
+	if (argc > 1)
+	{
+		LoadRomFromFile(&config, &gb, argv[1]);
+	}
 
 	// Main Loop
 	while (!config.quit)
