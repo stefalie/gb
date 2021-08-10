@@ -18,15 +18,17 @@ This project is shipped with third-party dependencies, each of which may have in
 - [ImGui](https://github.com/ocornut/imgui)
 - [DMCA Sans Serif font](https://typedesign.netlify.app/dmcasansserif.html)
 
-## Building on Windows (only)
+## Building on Windows
 
-You require the [ImGui](https://github.com/ocornut/imgui) sub-module:
+Windows is the only supported OS.
+
+You require the [ImGui](https://github.com/ocornut/imgui) and [imgui_club][https://github.com/ocornut/imgui_club] (for the hex editor) sub-modules:
 
 ```
 git submodule init && git submodule update
 ```
 
-The build is triggered via the `build_win_x64.bat` batch script ([I'm really sick of CMake and the like](http://www.youtube.com/watch?v=Ee3EtYb8d1o&t=19m45s)) and can either use Clang or the Visual Studio Compiler (only Clang supports [computed gotos](https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html) however).
+The build is triggered via the `build_win_x64.bat` batch script ([I'm really sick of CMake and the like](http://www.youtube.com/watch?v=Ee3EtYb8d1o&t=19m45s)) and can either use Clang or the Visual Studio Compiler.
 
 ### Clang
 
@@ -43,7 +45,7 @@ The build script can be called with these options: `build_win_x64.bat (Clang|Msv
 - `Clang` or `Msvc` to choose the compiler
 - `Rel` or `Deb` for release or debug flags
 
-For debugging call `devenv build\gb.exe` in the project directory (make sure `msvc_shell.bat` has been called first), or simply use the VSCode project by calling `code .` in the project directory (this also needs `shell_msvc.bat` to be called first).
+For debugging call `devenv build\gb.exe` in the project directory (make sure `msvc_shell.bat` has been called first), or simply use the VSCode project by calling `code .` in the project directory (this also requires prior setup of the environment via `shell_msvc.bat`).
 
 ## Resources
 
