@@ -10,12 +10,49 @@
 
 typedef struct
 {
-	// TODO(stefalie): this is all just tmp
+	// The CPU conains only the registers
 	struct CPU
 	{
-		uint16_t pc;  // Program counter
+		union
+		{
+			struct
+			{
+				uint8_t f;
+				uint8_t a;
+			};
+			uint16_t af;
+		};
+		union
+		{
+			struct
+			{
+				uint8_t c;
+				uint8_t b;
+			};
+			uint16_t bc;
+		};
+		union
+		{
+			struct
+			{
+				uint8_t e;
+				uint8_t d;
+			};
+			uint16_t de;
+		};
+		union
+		{
+			struct
+			{
+				uint8_t l;
+				uint8_t h;
+			};
+			uint16_t hl;
+		};
 
-		uint16_t registers[20];
+		uint8_t zero_flag;
+		uint16_t pc;  // Program counter
+		uint16_t sp;  // Stack pointer
 	} cpu;
 
 	struct Memory
@@ -42,6 +79,17 @@ gb_Reset(gb_GameBoy* gb);
 // TODO(stefalie): Consider returning an error code of what went wrong.
 bool
 gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom, uint32_t num_bytes);
+
+typedef struct
+{
+	// uint8_t opcode;
+	char* name;
+	uint8_t num_operands;
+	uint8_t num_cycles;
+} gb_Instruction;
+
+gb_Instruction
+gb_InstructionFromOpcode(uint8_t opcode);
 
 typedef struct gb_Framebuffer
 {

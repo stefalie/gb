@@ -54,7 +54,10 @@ if "%1" == "Clang" (
     rem applied to C++.
     rem Include paths for SDL and Imgui come in two forms, with and without parent
     rem dir. This is because Imgui wants them without parent dir.
-    set CompilerFlags=-o %ExeName% -I%SdlDir% -I..\external -I%SdlDir%\SDL2 -I%ImguiDir% -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token
+    rem We're explicitly allowing anonymous struct/unions. Unfortunately we can't use
+    rem the -std=c11 becasue clang doesn't like it when we also compile C++ files
+    rem at the same time.
+    set CompilerFlags=-o %ExeName% -I%SdlDir% -I..\external -I%SdlDir%\SDL2 -I%ImguiDir% -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token -Wno-nested-anon-types -Wno-gnu-anonymous-struct
 
     rem -fuse-ld=lld Use clang lld linker instead of msvc link.
     rem /SUBSYSTEM:console warns about both main and wmain being present.
@@ -76,8 +79,9 @@ if "%1" == "Clang" (
     rem /WL One-line warnings/errors
     rem /GR- Diable rttr
     rem /EHa- Disable all exceptions
+    rem /wd4201 Disable warning about anonymous structs/unions, it's allowed in C11
     rem See note under 'Clang' about duplicate include dirs.
-    set CompilerFlags=/Zi /FC /Fe%ExeName% /I%SdlDir% /I../external /I%SdlDir%/SDL2 /I../external/imgui /std:c11 /WX /W4 /WL /GR- /EHa-
+    set CompilerFlags=/Zi /FC /Fe%ExeName% /I%SdlDir% /I../external /I%SdlDir%/SDL2 /I../external/imgui /std:c11 /WX /W4 /WL /GR- /EHa- /wd4201
 
     if "%2" == "Rel" (
         rem /Zo Generates enhanced debugging information for optimized code.

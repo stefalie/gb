@@ -1239,44 +1239,92 @@ gb_Reset(gb_GameBoy* gb)
 	(void)gb;
 }
 
+// TODO:
+// header struct:
+// https://github.com/ThomasRinsma/dromaius/blob/ffe8e2bead2c11c525a07578a99d5ae464515f76/src/memory.h#L62
+
+#define ROM_HEADER_START_ADDRESS 0x100
+typedef struct gb__RomHeader
+{
+	uint8_t begin_code_execution_point[4];
+	uint8_t nintendo_logo[48];
+	char rom_name[15];
+	uint8_t gbc;  // 0x80 is GameBoy Color
+	uint8_t licensee_hi;
+	uint8_t licensee_lo;
+	uint8_t sgb;  // 0x00 is GameBoy, 0x03 is Super GameBoy
+	uint8_t cartridge_type;
+	uint8_t rom_size;
+	uint8_t ram_size;
+	uint8_t dst_country_cod;  // 0x00 is Japan, 0x01 is non-Japanese
+	uint8_t licensee_old;
+	uint8_t mask_rom_version_number;
+	uint8_t complement_check;
+	uint8_t checksum_hi;
+	uint8_t checksum_lo;
+} gb__RomHeader;
+
+static uint8_t
+gb__Hi(uint16_t val)
+{
+	return (val >> 8u) & 0xFF;
+}
+static uint8_t
+gb__Lo(uint16_t val)
+{
+	return val & 0xFF;
+}
+
 bool
 gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom, uint32_t num_bytes)
 {
+	const gb__RomHeader* header = (gb__RomHeader*)&rom[ROM_HEADER_START_ADDRESS];
 	const uint8_t nintendo_logo[] = { 0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00,
 		0x0C, 0x00, 0x0D, 0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9,
 		0x99, 0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E };
-	const uint16_t nintendo_logo_loc = 0x0104;
-	if (memcmp(nintendo_logo, &rom[nintendo_logo_loc], sizeof(nintendo_logo)))
+	if (memcmp(nintendo_logo, header->nintendo_logo, sizeof(nintendo_logo)))
 	{
 		return true;
 	}
 
 	// 0x80 is Color GameBoy
-	if (rom[0x0143] == 0x80)
+	if (header->gbc == 0x80)
 	{
 		return true;
 	}
 
 	// 0x00 is GameBoy, 0x03 is Super GameBoy
-	if (rom[0x0146] != 0x00)
+	if (header->sgb != 0x00)
 	{
 		return true;
 	}
 
 	gb->rom_name[15] = '\0';
-	memcpy(gb->rom_name, &rom[0x0134], (0x0142 + 1) - 0x0134);
+	memcpy(gb->rom_name, header->rom_name, sizeof(header->rom_name));
 
 	// Checksum test
 	uint16_t checksum = 0;
-	for (size_t i = 0; i < num_bytes; ++i) {
+	for (size_t i = 0; i < num_bytes; ++i)
+	{
 		checksum += rom[i];
 	}
-	checksum -= rom[0x014E] + rom[0x014F];
-	if ((checksum & 0xFF) != rom[0x014F] || (checksum >> 8) != rom[0x014E]) {
+	checksum -= header->checksum_lo + header->checksum_hi;
+	if (gb__Lo(checksum) != header->checksum_lo || gb__Hi(checksum) != header->checksum_hi)
+	{
 		return true;
 	}
 
 	return false;
+}
+
+static const gb_Instruction gb__instructions[256] = {
+	{ "NOP", 0, 0 },
+};
+
+gb_Instruction
+gb_InstructionFromOpcode(uint8_t opcode)
+{
+	return gb__instructions[opcode];
 }
 
 uint32_t
@@ -1528,7 +1576,7 @@ gb__XbrFilter2(uint8_t E, uint8_t I, uint8_t H, uint8_t F, uint8_t G, uint8_t C,
 		{
 			const uint8_t px = XBR_DIFF(E, F) <= XBR_DIFF(E, H) ? F : H;
 			if (e < i &&
-					(!XBR_EQ(F, B) && !XBR_EQ(H, D) || XBR_EQ(E, I) && (!XBR_EQ(F, I4) && !XBR_EQ(H, I5)) ||
+					((!XBR_EQ(F, B) && !XBR_EQ(H, D)) || (XBR_EQ(E, I) && (!XBR_EQ(F, I4) && !XBR_EQ(H, I5))) ||
 							XBR_EQ(E, G) || XBR_EQ(E, C)))
 			{
 				const uint32_t ke = XBR_DIFF(F, G);
