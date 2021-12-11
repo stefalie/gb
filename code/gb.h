@@ -11,6 +11,7 @@
 typedef struct
 {
 	// The CPU conains only the registers
+	// Note thate the GameBoy uses Big Endian
 	struct CPU
 	{
 		union
@@ -50,14 +51,24 @@ typedef struct
 			uint16_t hl;
 		};
 
-		uint8_t zero_flag;
+		// struct
+		//{
+		//	uint8_t waste : 4;
+		//	uint8_t carry : 1;
+		//	uint8_t half_carry : 1;
+		//	uint8_t operation : 1;
+		//	uint8_t zero : 1;
+		//} flags;
 		uint16_t pc;  // Program counter
 		uint16_t sp;  // Stack pointer
 	} cpu;
 
 	struct Memory
 	{
-		uint8_t bytes[1000];
+		bool bios_mapped;
+		//TODO
+		uint8_t wram[8192];  // 8 KiB
+		uint8_t vram[8192];  // 8 KiB
 	} memory;
 
 	struct Framebuffer
@@ -65,14 +76,20 @@ typedef struct
 		uint8_t pixels[GB_FRAMEBUFFER_WIDTH * GB_FRAMEBUFFER_HEIGHT];
 	} framebuffer;
 
-	char rom_name[16];
+	struct Rom
+	{
+		char name[16];
+		const uint8_t* data;
+		uint32_t num_bytes;
+	} rom;
 } gb_GameBoy;
 
+// TODO rem
 void
 gb_Init(gb_GameBoy* gb);
 
-void
-gb_Reset(gb_GameBoy* gb);
+// void
+// gb_Reset(gb_GameBoy* gb);
 
 // Returns true in error case if the ROM cannot be loaded, is broken,
 // or is not for GameBoy.
@@ -80,10 +97,13 @@ gb_Reset(gb_GameBoy* gb);
 bool
 gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom, uint32_t num_bytes);
 
+void
+gb_Reset(gb_GameBoy* gb);
+
 typedef struct
 {
 	// uint8_t opcode;
-	char* name;
+	char* assembly;
 	uint8_t num_operands;
 	uint8_t num_cycles;
 } gb_Instruction;

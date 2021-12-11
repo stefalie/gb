@@ -510,8 +510,7 @@ LoadRomFromFile(Config* config, gb_GameBoy* gb, const char* file_path)
 		}
 		else
 		{
-			// TODO: rem
-			SDL_Log("Loaded ROM: %s\n", gb->rom_name);
+			SDL_Log("Loaded ROM: %s\n", gb->rom.name); // TODO: rem
 			gb_Reset(gb);
 		}
 	}
@@ -582,7 +581,10 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 		}
 		if (ImGui::BeginMenu("System"))
 		{
-			ImGui::MenuItem("Reset", NULL, false, config->gui.has_active_rom);
+			if (ImGui::MenuItem("Reset"))
+			{
+				gb_Reset(gb);
+			}
 			ImGui::MenuItem("Pause", "Space", false, config->gui.has_active_rom);
 			ImGui::Separator();
 			ImGui::MenuItem("Save", "F5", false, config->gui.has_active_rom);
