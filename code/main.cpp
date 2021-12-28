@@ -510,8 +510,18 @@ LoadRomFromFile(Config* config, gb_GameBoy* gb, const char* file_path)
 		}
 		else
 		{
-			SDL_Log("Loaded ROM: %s\n", gb->rom.name); // TODO: rem
 			gb_Reset(gb);
+
+			// TODO: print cleanup
+			SDL_Log("Loaded ROM: %s\n", gb->rom.name);
+
+			SDL_Log("Bios instructions:\n");
+			char str_buf[32];
+			uint16_t addr = 0u;
+			while (addr < 256) {
+				addr += gb_PrintInstruction(gb, addr, str_buf, sizeof(str_buf));
+				SDL_Log("%s\n", str_buf);
+			}
 		}
 	}
 	else
