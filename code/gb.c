@@ -1410,7 +1410,8 @@ gb_Reset(gb_GameBoy* gb)
 	gb->cpu.de = 0x00D8;
 	gb->cpu.hl = 0x014D;
 	gb->cpu.sp = 0xFFFE;
-	gb->cpu.pc = 0x0100;  // TODO: do we end up here autmatically?
+	gb->cpu.pc = 0x0;  // TODO: do we end up here autmatically?
+	//gb->cpu.pc = 0x0100;  // TODO: do we end up here autmatically?
 
 	gb__MemWriteWord(gb, 0xFF05, 0x00);
 	gb__MemWriteWord(gb, 0xFF06, 0x00);

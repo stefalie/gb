@@ -414,16 +414,8 @@ IniSave(const char* ini_path, const Ini* ini)
 
 struct Rom
 {
-	// TODO
 	uint8_t* data = 0;
 	int size = 0;
-};
-
-enum State
-{
-	STATE_EMPTY,
-	STATE_RUNNING,
-	STATE_PAUSED,
 };
 
 struct Config
@@ -431,7 +423,6 @@ struct Config
 	Ini ini;
 
 	Rom rom;
-	State state;
 
 	bool quit = false;
 
@@ -455,6 +446,9 @@ struct Config
 		bool fullscreen = false;
 
 		bool mag_filter_changed = true;
+
+		bool single_step_mode = false;
+		bool exec_next_step = false;
 	} gui;
 
 	struct Debugger
@@ -510,6 +504,8 @@ LoadRomFromFile(Config* config, gb_GameBoy* gb, const char* file_path)
 		}
 		else
 		{
+			config->gui.has_active_rom = true;
+			config->gui.exec_next_step = false;
 			gb_Reset(gb);
 
 			// TODO: print cleanup
@@ -518,10 +514,12 @@ LoadRomFromFile(Config* config, gb_GameBoy* gb, const char* file_path)
 			SDL_Log("Bios instructions:\n");
 			char str_buf[32];
 			uint16_t addr = 0u;
-			while (addr < 256) {
+			while (addr < 256)
+			{
 				addr += gb_PrintInstruction(gb, addr, str_buf, sizeof(str_buf));
 				SDL_Log("%s\n", str_buf);
 			}
+			SDL_Log("Start execution:\n");
 		}
 	}
 	else
@@ -581,7 +579,12 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 					LoadRomFromFile(config, gb, ofn.lpstrFile);
 				}
 			}
-			ImGui::MenuItem("Close", NULL, false, config->gui.has_active_rom);
+			// TODO: Keep this menu element?
+			if (ImGui::MenuItem("Eject ROM", NULL, false, config->gui.has_active_rom)) {
+				config->gui.has_active_rom = false;
+				free(config->rom.data);
+				config->rom = {};
+			}
 			ImGui::Separator();
 			if (ImGui::MenuItem("Exit", "Esc"))
 			{
@@ -673,7 +676,13 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 			{
 				config->debug.show = !config->debug.show;
 			}
-			ImGui::MenuItem("Step", "F10");
+			if (ImGui::MenuItem("Single step mode", NULL, config->gui.single_step_mode))
+			{
+				config->gui.single_step_mode = !config->gui.single_step_mode;
+			}
+			if (ImGui::MenuItem("Step", "F10")) {
+				config->gui.exec_next_step = true;
+			}
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Help"))
@@ -926,6 +935,9 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 	}
 
 	{
+		// TODO: brilliant, use to dispay next instr.
+		config->debug.memory_editor.GotoAddrAndHighlight(0x100, 0x100+3);
+
 		config->debug.memory_editor.DrawWindow("Hex View", config->rom.data, config->rom.size);
 
 		ImGui::Begin("Right");
@@ -1324,6 +1336,10 @@ main(int argc, char* argv[])
 				{
 					config.gui.toggle_fullscreen = true;
 				}
+				else if (event.key.keysym.sym == SDLK_F10)
+				{
+					config.gui.exec_next_step = true;
+				}
 				else
 				{
 					for (size_t i = 0; i < num_inputs; ++i)
@@ -1345,13 +1361,29 @@ main(int argc, char* argv[])
 		}
 		ImGui::SetCurrentContext(config.handles.imgui);  // Reset (if changed)
 
-		{  // OpenGL drawing
-			int fb_width, fb_height;
-			SDL_GL_GetDrawableSize(config.handles.window, &fb_width, &fb_height);
-			glViewport(0, 0, fb_width, fb_height);
-			glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-			glClear(GL_COLOR_BUFFER_BIT);
+		// Run emulator
+		if (config.gui.has_active_rom && (!config.gui.single_step_mode || config.gui.exec_next_step))
+		{
+			config.gui.exec_next_step = false;
 
+			const size_t num_elapsed_gb_cyles = gb_ExecuteNextInstruction(&gb);
+			if (num_elapsed_gb_cyles == (size_t)-1)
+			{
+				char str_buf[32];
+				gb_PrintInstruction(&gb, gb.cpu.pc - 1, str_buf, sizeof(str_buf));
+				SDL_Log("%s\n", str_buf);
+				assert(false);
+			}
+		}
+
+		// OpenGL drawing
+		int fb_width, fb_height;
+		SDL_GL_GetDrawableSize(config.handles.window, &fb_width, &fb_height);
+		glViewport(0, 0, fb_width, fb_height);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
+		if (config.gui.has_active_rom)
+		{
 			int x = 0;
 			int y = 0;
 			int w = fb_width;
