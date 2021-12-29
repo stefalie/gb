@@ -101,15 +101,29 @@ gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom, uint32_t num_bytes);
 void
 gb_Reset(gb_GameBoy* gb);
 
-// Prints the assembly instruction at 'addr' (which needs to point to a valid
-// instruction) into 'str_buf'. A 32 byte buffer is sufficient for any instruction.
-// Returns the size of the instruction in bytes. This way you know where the next
-// instruction starts.
-uint16_t
-gb_PrintInstruction(gb_GameBoy* gb, uint16_t addr, char str_buf[], size_t str_buf_len);
+// A GameBoy assembly instruction.
+typedef struct
+{
+	uint8_t opcode;
+	uint8_t num_operand_bytes;
+	union
+	{
+		uint8_t operand_byte;
+		uint16_t operand_word;
+	};
+	uint8_t num_machine_cycles;
+} gb_Instruction;
 
-// Executes the next instruction and returns the number of machines GameBoy
-// machines cycles it takes to execute that instruction.
+// Fetches assembly instruction at 'addr' (which needs to point to a valid instruction).
+gb_Instruction
+gb_FetchInstruction(gb_GameBoy* gb, uint16_t addr);
+
+// Disassembles 'inst' into 'str_buf'. A 32 byte buffer is sufficient for any instruction.
+void
+gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_len);
+
+// Executes the next instruction and returns the number of GameBoy machines cycles
+// it takes to execute that instruction.
 size_t
 gb_ExecuteNextInstruction(gb_GameBoy* gb);
 

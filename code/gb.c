@@ -1411,7 +1411,7 @@ gb_Reset(gb_GameBoy* gb)
 	gb->cpu.hl = 0x014D;
 	gb->cpu.sp = 0xFFFE;
 	gb->cpu.pc = 0x0;  // TODO: do we end up here autmatically?
-	//gb->cpu.pc = 0x0100;  // TODO: do we end up here autmatically?
+	// gb->cpu.pc = 0x0100;  // TODO: do we end up here autmatically?
 
 	gb__MemWriteWord(gb, 0xFF05, 0x00);
 	gb__MemWriteWord(gb, 0xFF06, 0x00);
@@ -1448,7 +1448,7 @@ gb_Reset(gb_GameBoy* gb)
 
 typedef struct
 {
-	char* assembly;
+	char* name;
 	uint8_t num_operand_bytes;
 	uint8_t num_machine_cycles;
 } gb__InstructionInfo;
@@ -1457,50 +1457,55 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 	{ "NOP", 0, 1 },
 };
 
-typedef struct
+gb_Instruction
+gb_FetchInstruction(gb_GameBoy* gb, uint16_t addr)
 {
-	uint8_t opcode;
-	uint16_t operand;
-} gb__Instruction;
-
-static gb__Instruction
-gb__FetchInstruction(gb_GameBoy* gb, uint16_t addr)
-{
-	gb__Instruction inst = {
+	gb_Instruction inst = {
 		.opcode = gb__MemReadByte(gb, addr),
 	};
 
 	const gb__InstructionInfo info = gb__instruction_infos[inst.opcode];
-	if (info.num_operand_bytes == 1)
+	inst.num_operand_bytes = info.num_operand_bytes;
+	inst.num_machine_cycles = info.num_machine_cycles;
+
+	if (inst.num_operand_bytes == 1)
 	{
-		inst.operand = gb__MemReadByte(gb, gb->cpu.pc + 1);
+		inst.operand_byte = gb__MemReadByte(gb, gb->cpu.pc + 1);
 	}
-	else if (info.num_operand_bytes == 2)
+	else if (inst.num_operand_bytes == 2)
 	{
-		inst.operand = gb__MemReadWord(gb, gb->cpu.pc + 1);
+		inst.operand_word = gb__MemReadWord(gb, gb->cpu.pc + 1);
 	}
 
 	return inst;
 }
 
-uint16_t
-gb_PrintInstruction(gb_GameBoy* gb, uint16_t addr, char str_buf[], size_t str_buf_len)
+void
+gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_len)
 {
-	const gb__Instruction inst = gb__FetchInstruction(gb, addr);
 	const gb__InstructionInfo info = gb__instruction_infos[inst.opcode];
-	if (!info.assembly)
+	if (!info.name)
 	{
 		snprintf(str_buf, str_buf_len, "OpCode %d info is missing!", inst.opcode);
 	}
-	else if (info.num_operand_bytes > 0)
-	{
-		snprintf(str_buf, str_buf_len, info.assembly, inst.operand);
-	}
 	else
 	{
-		snprintf(str_buf, str_buf_len, info.assembly);
+		switch (info.num_operand_bytes)
+		{
+		case 0:
+			snprintf(str_buf, str_buf_len, info.name);
+			break;
+		case 1:
+			snprintf(str_buf, str_buf_len, "%s 0x%02X", info.name, inst.operand_byte);
+			break;
+		case 2:
+			snprintf(str_buf, str_buf_len, "%s 0x%04X", info.name, inst.operand_word);
+			break;
+		default:
+			assert(false);
+			break;
+		}
 	}
-	return  1 /* opcode */ + info.num_operand_bytes;
 }
 
 size_t
@@ -1514,7 +1519,7 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 		gb->memory.bios_mapped = false;
 	}
 
-	const gb__Instruction inst = gb__FetchInstruction(gb, gb->cpu.pc);
+	const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
 	const gb__InstructionInfo info = gb__instruction_infos[inst.opcode];
 	gb->cpu.pc += 1 /* opcode */ + info.num_operand_bytes;
 

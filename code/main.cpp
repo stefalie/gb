@@ -454,7 +454,9 @@ struct Config
 	struct Debugger
 	{
 		bool show = false;
-		MemoryEditor memory_editor;
+		MemoryEditor rom_view;
+		MemoryEditor mem_view;
+		bool views_follow_pc = true;
 	} debug;
 
 	struct Handles
@@ -516,8 +518,10 @@ LoadRomFromFile(Config* config, gb_GameBoy* gb, const char* file_path)
 			uint16_t addr = 0u;
 			while (addr < 256)
 			{
-				addr += gb_PrintInstruction(gb, addr, str_buf, sizeof(str_buf));
+				const gb_Instruction inst = gb_FetchInstruction(gb, addr);
+				gb_DisassembleInstruction(inst, str_buf, sizeof(str_buf));
 				SDL_Log("%s\n", str_buf);
+				addr += inst.num_operand_bytes + 1;
 			}
 			SDL_Log("Start execution:\n");
 		}
@@ -580,7 +584,8 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 				}
 			}
 			// TODO: Keep this menu element?
-			if (ImGui::MenuItem("Eject ROM", NULL, false, config->gui.has_active_rom)) {
+			if (ImGui::MenuItem("Eject ROM", NULL, false, config->gui.has_active_rom))
+			{
 				config->gui.has_active_rom = false;
 				free(config->rom.data);
 				config->rom = {};
@@ -680,7 +685,8 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 			{
 				config->gui.single_step_mode = !config->gui.single_step_mode;
 			}
-			if (ImGui::MenuItem("Step", "F10")) {
+			if (ImGui::MenuItem("Step", "F10"))
+			{
 				config->gui.exec_next_step = true;
 			}
 			ImGui::EndMenu();
@@ -920,13 +926,14 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 			ImGuiID dock_tmp_id = dockspace_id;
 			ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Left, 0.55f, NULL, &dock_tmp_id);
 			ImGuiID dock_id_right_bottom =
-					ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Down, 0.50f, NULL, &dock_tmp_id);
+					ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Down, 0.75f, NULL, &dock_tmp_id);
 			ImGuiID dock_id_right_top = dock_tmp_id;
 
-			ImGui::DockBuilderDockWindow("Hex View", dock_id_left);
-			ImGui::DockBuilderDockWindow("Right", dock_id_right_top);
-			ImGui::DockBuilderDockWindow("Right Tab 2", dock_id_right_top);
+			ImGui::DockBuilderDockWindow("Rom View", dock_id_left);
+			ImGui::DockBuilderDockWindow("Memory View", dock_id_left);
+			ImGui::DockBuilderDockWindow("Options", dock_id_right_top);
 			ImGui::DockBuilderDockWindow("Sprites", dock_id_right_bottom);
+			ImGui::DockBuilderDockWindow("Right Tab 2", dock_id_right_bottom);
 			ImGui::DockBuilderFinish(dockspace_id);
 		}
 
@@ -935,20 +942,44 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 	}
 
 	{
-		// TODO: brilliant, use to dispay next instr.
-		config->debug.memory_editor.GotoAddrAndHighlight(0x100, 0x100+3);
+		const uint16_t inst_num_bytes = gb_FetchInstruction(gb, gb->cpu.pc).num_operand_bytes + 1;
 
-		config->debug.memory_editor.DrawWindow("Hex View", config->rom.data, config->rom.size);
+		MemoryEditor* rom_view = &config->debug.rom_view;
+		if (config->debug.views_follow_pc && (!gb->memory.bios_mapped || gb->cpu.pc >= 256))
+		{
+			rom_view->GotoAddrAndHighlight(gb->cpu.pc, gb->cpu.pc + inst_num_bytes);
+		}
+		else
+		{
+			rom_view->HighlightMin = (size_t)-1;
+			rom_view->HighlightMax = (size_t)-1;
+		}
+		rom_view->DrawWindow("Rom View", config->rom.data, config->rom.size);
 
-		ImGui::Begin("Right");
-		ImGui::Text("text text text right");
-		ImGui::End();
-		ImGui::Begin("Right Tab 2");
-		ImGui::Text("text text text left");
+		// TODO: Use readFN
+		// https://github.com/ocornut/imgui_club/blob/master/imgui_memory_editor/imgui_memory_editor.h#L91
+		MemoryEditor* mem_view = &config->debug.mem_view;
+		if (config->debug.views_follow_pc)
+		{
+			mem_view->GotoAddrAndHighlight(gb->cpu.pc, gb->cpu.pc + inst_num_bytes);
+		}
+		else
+		{
+			mem_view->HighlightMin = (size_t)-1;
+			mem_view->HighlightMax = (size_t)-1;
+		}
+		mem_view->DrawWindow("Memory View", config->rom.data, config->rom.size);
+
+		ImGui::Begin("Options");
+		ImGui::Checkbox("Memory Views follow PC", &config->debug.views_follow_pc);
 		ImGui::End();
 
 		ImGui::Begin("Sprites");
+		ImGui::Text("text text text right");
 		ImGui::Text("bla bla bla");
+		ImGui::End();
+		ImGui::Begin("Right Tab 2");
+		ImGui::Text("text text text left");
 		ImGui::End();
 	}
 
@@ -1039,7 +1070,8 @@ main(int argc, char* argv[])
 
 
 	Config config;
-	config.debug.memory_editor.ReadOnly = true;
+	config.debug.mem_view.ReadOnly = true;
+	config.debug.rom_view.ReadOnly = true;
 	char* save_path = SDL_GetPrefPath(NULL, "GB");
 
 	// Load ini
@@ -1370,7 +1402,8 @@ main(int argc, char* argv[])
 			if (num_elapsed_gb_cyles == (size_t)-1)
 			{
 				char str_buf[32];
-				gb_PrintInstruction(&gb, gb.cpu.pc - 1, str_buf, sizeof(str_buf));
+				const gb_Instruction inst = gb_FetchInstruction(&gb, gb.cpu.pc - 1);
+				gb_DisassembleInstruction(inst, str_buf, sizeof(str_buf));
 				SDL_Log("%s\n", str_buf);
 				assert(false);
 			}
