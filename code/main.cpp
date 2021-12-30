@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Stefan Lienhard
+// Copyright (C) 2022 Stefan Lienhard
 
 // TODO:
 // - UI timeout
@@ -809,7 +809,7 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 		ImGui::Text(
 				"GB is a simple GameBoy emulator\n"
 				"and debugger for Windows created\n"
-				"by Stefan Lienhard in 2021.");
+				"by Stefan Lienhard in 2022.");
 		ImGui::Text("https://github.com/stefalie/gb");
 		if (ImGui::Button("Cancel") || close_current_popup)
 		{
@@ -894,6 +894,12 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 	}
 	ImGui::EndMainMenuBar();
 
+	const char* tab_name_rom_view = "ROM View";
+	const char* tab_name_mem_view = "Memory View";
+	const char* tab_name_options = "Options";
+	const char* tab_name_sprites = "Sprites";
+	const char* tab_name_righttab2 = "Right Tab 2";  // TODO: rem
+
 	{  // Dock
 		// Unfortunately we can't use DockSpaceOverViewport(...) here because
 		// it internally creates a window and defines a dock space id. But we
@@ -929,11 +935,11 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 					ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Down, 0.75f, NULL, &dock_tmp_id);
 			ImGuiID dock_id_right_top = dock_tmp_id;
 
-			ImGui::DockBuilderDockWindow("Rom View", dock_id_left);
-			ImGui::DockBuilderDockWindow("Memory View", dock_id_left);
-			ImGui::DockBuilderDockWindow("Options", dock_id_right_top);
-			ImGui::DockBuilderDockWindow("Sprites", dock_id_right_bottom);
-			ImGui::DockBuilderDockWindow("Right Tab 2", dock_id_right_bottom);
+			ImGui::DockBuilderDockWindow(tab_name_rom_view, dock_id_left);
+			ImGui::DockBuilderDockWindow(tab_name_mem_view, dock_id_left);
+			ImGui::DockBuilderDockWindow(tab_name_options, dock_id_right_top);
+			ImGui::DockBuilderDockWindow(tab_name_sprites, dock_id_right_bottom);
+			ImGui::DockBuilderDockWindow(tab_name_righttab2, dock_id_right_bottom);
 			ImGui::DockBuilderFinish(dockspace_id);
 		}
 
@@ -941,6 +947,7 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		ImGui::End();
 	}
 
+	if (config->gui.has_active_rom)
 	{
 		const uint16_t inst_num_bytes = gb_FetchInstruction(gb, gb->cpu.pc).num_operand_bytes + 1;
 
@@ -949,12 +956,9 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		{
 			rom_view->GotoAddrAndHighlight(gb->cpu.pc, gb->cpu.pc + inst_num_bytes);
 		}
-		else
-		{
-			rom_view->HighlightMin = (size_t)-1;
-			rom_view->HighlightMax = (size_t)-1;
-		}
-		rom_view->DrawWindow("Rom View", config->rom.data, config->rom.size);
+		ImGui::Begin(tab_name_rom_view);
+		rom_view->DrawContents(config->rom.data, config->rom.size);
+		ImGui::End();
 
 		// TODO: Use readFN
 		// https://github.com/ocornut/imgui_club/blob/master/imgui_memory_editor/imgui_memory_editor.h#L91
@@ -963,25 +967,38 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		{
 			mem_view->GotoAddrAndHighlight(gb->cpu.pc, gb->cpu.pc + inst_num_bytes);
 		}
-		else
-		{
-			mem_view->HighlightMin = (size_t)-1;
-			mem_view->HighlightMax = (size_t)-1;
-		}
-		mem_view->DrawWindow("Memory View", config->rom.data, config->rom.size);
-
-		ImGui::Begin("Options");
-		ImGui::Checkbox("Memory Views follow PC", &config->debug.views_follow_pc);
+		ImGui::Begin(tab_name_mem_view);
+		mem_view->DrawContents(config->rom.data, config->rom.size);
 		ImGui::End();
 
-		ImGui::Begin("Sprites");
-		ImGui::Text("text text text right");
-		ImGui::Text("bla bla bla");
+		ImGui::Begin(tab_name_sprites);
+		ImGui::Text("TODO");
 		ImGui::End();
-		ImGui::Begin("Right Tab 2");
+	}
+	else
+	{
+		const char* placeholder = "No ROM loaded.";
+
+		ImGui::Begin(tab_name_rom_view);
+		ImGui::Text(placeholder);
+		ImGui::End();
+		ImGui::Begin(tab_name_mem_view);
+		ImGui::Text(placeholder);
+		ImGui::End();
+		ImGui::Begin(tab_name_sprites);
+		ImGui::Text(placeholder);
+		ImGui::End();
+	}
+
+	{  // TODO
+		ImGui::Begin(tab_name_options);
+		ImGui::Checkbox("Highlight current instruction", &config->debug.views_follow_pc);
+		ImGui::End();
+		ImGui::Begin(tab_name_righttab2);
 		ImGui::Text("text text text left");
 		ImGui::End();
 	}
+
 
 	// ImGui demo window
 	// static bool show_demo = true;
@@ -1399,14 +1416,25 @@ main(int argc, char* argv[])
 			config.gui.exec_next_step = false;
 
 			const size_t num_elapsed_gb_cyles = gb_ExecuteNextInstruction(&gb);
+
+			// Break and open the debugger if -1 was returned from the execution
+			// of the instruction. This was used for the step by step implementation
+			// of instructions when missing ones would return -1.
 			if (num_elapsed_gb_cyles == (size_t)-1)
 			{
-				char str_buf[32];
-				const gb_Instruction inst = gb_FetchInstruction(&gb, gb.cpu.pc - 1);
-				gb_DisassembleInstruction(inst, str_buf, sizeof(str_buf));
-				SDL_Log("%s\n", str_buf);
-				assert(false);
+				config.debug.show = true;
+				config.gui.single_step_mode = true;
+				--gb.cpu.pc;
+
+				// TODO: remove
+				// char str_buf[32];
+				// const gb_Instruction inst = gb_FetchInstruction(&gb, gb.cpu.pc);
+				// gb_DisassembleInstruction(inst, str_buf, sizeof(str_buf));
+				// SDL_Log("%s\n", str_buf);
+				////assert(false);
 			}
+
+			// TODO: timing
 		}
 
 		// OpenGL drawing

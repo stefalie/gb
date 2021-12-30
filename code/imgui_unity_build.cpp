@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Stefan Lienhard
+// Copyright (C) 2022 Stefan Lienhard
 
 #include <imgui/imgui.cpp>
 #include <imgui/imgui_draw.cpp>

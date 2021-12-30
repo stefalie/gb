@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Stefan Lienhard
+// Copyright (C) 2022 Stefan Lienhard
 
 #include "gb.h"
 // TODO(stefalie): Get rid of the stdlib includes. Make it standalone.
@@ -1480,6 +1480,8 @@ gb_FetchInstruction(gb_GameBoy* gb, uint16_t addr)
 	return inst;
 }
 
+// TODO: get rid of snprintf, strlen, memcpy to avoid std includes.
+// should all be easy, ans from snprintf you only need to know how to convert 1 byte numbers to 2-char strings.
 void
 gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_len)
 {
@@ -1488,23 +1490,17 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 	{
 		snprintf(str_buf, str_buf_len, "OpCode %d info is missing!", inst.opcode);
 	}
+	else if (info.num_operand_bytes == 0)
+	{
+		size_t len = strlen(info.name) + 1;
+		assert(len <= str_buf_len);
+		len = MIN(len, str_buf_len);
+		memcpy(str_buf, info.name, len);
+	}
 	else
 	{
-		switch (info.num_operand_bytes)
-		{
-		case 0:
-			snprintf(str_buf, str_buf_len, info.name);
-			break;
-		case 1:
-			snprintf(str_buf, str_buf_len, "%s 0x%02X", info.name, inst.operand_byte);
-			break;
-		case 2:
-			snprintf(str_buf, str_buf_len, "%s 0x%04X", info.name, inst.operand_word);
-			break;
-		default:
-			assert(false);
-			break;
-		}
+		assert(info.num_operand_bytes > 0 && info.num_operand_bytes < 3);
+		snprintf(str_buf, str_buf_len, "%s 0x%0*X", info.name, info.num_operand_bytes * 2, inst.operand_byte);
 	}
 }
 
