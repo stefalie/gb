@@ -897,6 +897,8 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 	const char* tab_name_rom_view = "ROM View";
 	const char* tab_name_mem_view = "Memory View";
 	const char* tab_name_options = "Options";
+	const char* tab_name_disassembly = "Disassembly at PC";
+	const char* tab_name_cpu = "CPU State";
 	const char* tab_name_sprites = "Sprites";
 	const char* tab_name_righttab2 = "Right Tab 2";  // TODO: rem
 
@@ -932,12 +934,16 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 			ImGuiID dock_tmp_id = dockspace_id;
 			ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Left, 0.55f, NULL, &dock_tmp_id);
 			ImGuiID dock_id_right_bottom =
-					ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Down, 0.75f, NULL, &dock_tmp_id);
+					ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Down, 0.45f, NULL, &dock_tmp_id);
+			ImGuiID dock_id_right_middle =
+					ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Down, 0.5f, NULL, &dock_tmp_id);
 			ImGuiID dock_id_right_top = dock_tmp_id;
 
 			ImGui::DockBuilderDockWindow(tab_name_rom_view, dock_id_left);
 			ImGui::DockBuilderDockWindow(tab_name_mem_view, dock_id_left);
 			ImGui::DockBuilderDockWindow(tab_name_options, dock_id_right_top);
+			ImGui::DockBuilderDockWindow(tab_name_disassembly, dock_id_right_middle);
+			ImGui::DockBuilderDockWindow(tab_name_cpu, dock_id_right_middle);
 			ImGui::DockBuilderDockWindow(tab_name_sprites, dock_id_right_bottom);
 			ImGui::DockBuilderDockWindow(tab_name_righttab2, dock_id_right_bottom);
 			ImGui::DockBuilderFinish(dockspace_id);
@@ -971,6 +977,29 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		mem_view->DrawContents(config->rom.data, config->rom.size);
 		ImGui::End();
 
+		{
+			ImGui::Begin(tab_name_disassembly);
+			const size_t num_instructions = 20;
+			const size_t buf_len = (32 + 1) * num_instructions;  // 32 + 1 newline chars per line
+			char buf[buf_len];
+			uint16_t addr = gb->cpu.pc;
+			size_t buf_offset = 0;
+			for (size_t i = 0; i < num_instructions; ++i)
+			{
+				const gb_Instruction inst = gb_FetchInstruction(gb, addr);
+				buf_offset += gb_DisassembleInstruction(inst, buf + buf_offset, buf_len - buf_offset);
+				buf[buf_offset] = '\n';
+				++buf_offset;
+				addr += inst.num_operand_bytes + 1;
+			}
+			ImGui::Text(buf);
+			ImGui::End();
+		}
+
+		ImGui::Begin(tab_name_cpu);
+		ImGui::Text("TODO");
+		ImGui::End();
+
 		ImGui::Begin(tab_name_sprites);
 		ImGui::Text("TODO");
 		ImGui::End();
@@ -983,6 +1012,13 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		ImGui::Text(placeholder);
 		ImGui::End();
 		ImGui::Begin(tab_name_mem_view);
+		ImGui::Text(placeholder);
+		ImGui::End();
+		ImGui::Begin(tab_name_disassembly);
+		ImGui::Text(placeholder);
+		ImGui::End();
+		ImGui::End();
+		ImGui::Begin(tab_name_cpu);
 		ImGui::Text(placeholder);
 		ImGui::End();
 		ImGui::Begin(tab_name_sprites);

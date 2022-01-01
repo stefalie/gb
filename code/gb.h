@@ -118,8 +118,10 @@ typedef struct
 gb_Instruction
 gb_FetchInstruction(gb_GameBoy* gb, uint16_t addr);
 
-// Disassembles 'inst' into 'str_buf'. A 32 byte buffer is sufficient for any instruction.
-void
+// Disassembles 'inst' into 'str_buf'. Appends a NUL suffix.
+// A 32 byte buffer is sufficient for any instruction.
+// Returns the string length of the written disassembly (not counting the NUL suffix).
+size_t
 gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_len);
 
 // Executes the next instruction and returns the number of GameBoy machines cycles

@@ -1482,7 +1482,7 @@ gb_FetchInstruction(gb_GameBoy* gb, uint16_t addr)
 
 // TODO: get rid of snprintf, strlen, memcpy to avoid std includes.
 // should all be easy, ans from snprintf you only need to know how to convert 1 byte numbers to 2-char strings.
-void
+size_t
 gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_len)
 {
 	const gb__InstructionInfo info = gb__instruction_infos[inst.opcode];
@@ -1502,6 +1502,7 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 		assert(info.num_operand_bytes > 0 && info.num_operand_bytes < 3);
 		snprintf(str_buf, str_buf_len, "%s 0x%0*X", info.name, info.num_operand_bytes * 2, inst.operand_byte);
 	}
+	return strlen(str_buf);
 }
 
 size_t
