@@ -997,7 +997,13 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		}
 
 		ImGui::Begin(tab_name_cpu);
-		ImGui::Text("TODO");
+		ImGui::Text("af = 0x%04X\n", gb->cpu.af);
+		ImGui::Text("bc = 0x%04X\n", gb->cpu.bc);
+		ImGui::Text("de = 0x%04X\n", gb->cpu.de);
+		ImGui::Text("hl = 0x%04X\n", gb->cpu.hl);
+		ImGui::Text("sp = 0x%04X\n", gb->cpu.sp);
+		ImGui::Text("pc = 0x%04X\n", gb->cpu.pc);
+		// TODO z n h c flags
 		ImGui::End();
 
 		ImGui::Begin(tab_name_sprites);

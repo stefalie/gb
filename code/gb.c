@@ -1235,12 +1235,6 @@ gb_Init(gb_GameBoy* gb)
 	memcpy(gb->framebuffer.pixels, gb_tetris_splash_screen, sizeof(gb->framebuffer.pixels));
 }
 
-// void
-// gb_Reset(gb_GameBoy* gb)
-//{
-//	(void)gb;
-//}
-
 // TODO:
 // header struct:
 // https://github.com/ThomasRinsma/dromaius/blob/ffe8e2bead2c11c525a07578a99d5ae464515f76/src/memory.h#L62
@@ -1282,6 +1276,16 @@ static const uint8_t gb__bios[256] = { 0x31, 0xFE, 0xFF, 0xAF, 0x21, 0xFF, 0x9F,
 	0x06, 0x19, 0x78, 0x86, 0x23, 0x05, 0x20, 0xFB, 0x86, 0x20, 0xFE, 0x3E, 0x01, 0xE0, 0x50 };
 
 // TODO: needed? check how many times we use them and inline if not often.
+// Replace with union?
+//union WordOr2Bytes
+//{
+//	uint16_t word;
+//	struct
+//	{
+//		uint8_t byte1;
+//		uint8_t byte2;
+//	};
+//};
 static inline uint8_t
 gb__Hi(uint16_t val)
 {

@@ -66,7 +66,7 @@ typedef struct
 	struct Memory
 	{
 		bool bios_mapped;
-		//TODO
+		// TODO
 		uint8_t wram[8192];  // 8 KiB
 		uint8_t vram[8192];  // 8 KiB
 	} memory;
@@ -148,11 +148,12 @@ typedef enum gb_MagFilter
 	GB_MAG_FILTER_XBR2,
 	// TODO(stefalie): I'm too tired, but eventually I should add some more filters:
 	// - HQ2x, HQ3x, HQ4x
-	// - XBR at higher resolution
-	// - SuperXBR (both referenced from Wikipedia):
+	// - xBR at higher resolution
+	// - SuperXBR (some info links, both referenced in Wikipedia):
 	//   -
 	//   https://drive.google.com/file/d/0B_yrhrCRtu8GYkxreElSaktxS3M/view?pref=2&pli=1&resourcekey=0-mKvLmDc8GWdBuPWpPN_wQg
 	//   - https://pastebin.com/cbH8ZQQT
+	// - xBRZ (https://github.com/janisozaur/xbrz/blob/master/xbrz.cpp)
 	// - McGuire, Gagiu; 2021; MMPX Style-Preserving Pixel-Art Magnification
 	// GB_MAG_FILTER_HQ2X,
 	// GB_MAG_FILTER_HQ3X,
@@ -160,7 +161,8 @@ typedef enum gb_MagFilter
 	// GB_MAG_FILTER_XBR3,
 	// GB_MAG_FILTER_XBR4,
 	// GB_MAG_FILTER_SUPERXBR,
-	// GB_MAG_FILTER_MMX,
+	// GB_MAG_FILTER_XBRZ,
+	// GB_MAG_FILTER_MMPX,
 	GB_MAG_FILTER_MAX_VALUE,
 } gb_MagFilter;
 
