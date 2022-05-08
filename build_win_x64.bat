@@ -4,17 +4,17 @@ rem ============================================================================
 rem Input Validation
 
 if not "%1" == "Clang" (
-    if not "%1" == "Msvc" (
-        goto :usage
-    )
+	if not "%1" == "Msvc" (
+		goto :usage
+	)
 )
 if not "%2" == "Rel" (
-    if not "%2" == "Deb" (
-        goto :usage
-    )
+	if not "%2" == "Deb" (
+		goto :usage
+	)
 )
 if not "%3" == "" (
-    goto :usage
+	goto :usage
 )
 
 goto :build
@@ -45,53 +45,59 @@ set ImguiDir=..\external\imgui
 rem A unity build is faster than listing required ImGui files.
 set CodeFiles=..\code\main.cpp ..\code\gb.c ..\code\imgui_unity_build.cpp
 
-if "%1" == "Clang" (
-    set Compiler=clang
+set MsvcCommonLinkerFlags=/INCREMENTAL:NO /SUBSYSTEM:windows /NOLOGO %SdlLibs% Shell32.lib OpenGL32.lib Comdlg32.lib
 
-    rem -Wno-language-extension-token is used to prevent clang from complaining about
-    rem `typedef unsigned __int64 uint64_t` (and the like) in SDL headers.
-    rem Unfortunately we can't add -std=c11 because the same flags are also
-    rem applied to C++.
-    rem Include paths for SDL and Imgui come in two forms, with and without parent
-    rem dir. This is because Imgui wants them without parent dir.
-    rem We're explicitly allowing anonymous struct/unions. Unfortunately we can't use
-    rem the -std=c11 becasue clang doesn't like it when we also compile C++ files
-    rem at the same time.
-    set CompilerFlags=-o %ExeName% -I%SdlDir% -I..\external -I%SdlDir%\SDL2 -I%ImguiDir% -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token -Wno-nested-anon-types -Wno-gnu-anonymous-struct
+if "%1" equ "Clang" (
+	set Compiler=clang
 
-    rem -fuse-ld=lld Use clang lld linker instead of msvc link.
-    rem /SUBSYSTEM:console warns about both main and wmain being present.
-    set LinkerFlags=-fuse-ld=lld -Xlinker /INCREMENTAL:NO -Xlinker /OPT:REF -Xlinker /SUBSYSTEM:windows -lShell32 -lOpenGL32 -lComdlg32 %SdlLibs%
+	rem -Wno-language-extension-token is used to prevent clang from complaining about
+	rem `typedef unsigned __int64 uint64_t` (and the like) in SDL headers.
+	rem Unfortunately we can't add -std=c11 because the same flags are also
+	rem applied to C++.
+	rem Include paths for SDL and Imgui come in two forms, with and without parent
+	rem dir. This is because Imgui wants them without parent dir.
+	rem We're explicitly allowing anonymous struct/unions. Unfortunately we can't use
+	rem the -std=c11 becasue clang doesn't like it when we also compile C++ files
+	rem at the same time.
+	set CompilerFlags=-o %ExeName% -I%SdlDir% -I..\external -I%SdlDir%\SDL2 -I%ImguiDir% -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token -Wno-nested-anon-types -Wno-gnu-anonymous-struct -Wno-unused-but-set-variable
 
-    if "%2" == "Rel" (
-        set OptFlags=-DNDEBUG -O3 -Wno-unused-function
-    ) else (
-        set OptFlags=-g
-    )
+	rem -fuse-ld=lld Use clang lld linker instead of msvc link.
+	rem /SUBSYSTEM:console warns about both main and wmain being present.
+	set LinkerFlags=-fuse-ld=lld -Xlinker /INCREMENTAL:NO -Xlinker /OPT:REF -Xlinker /SUBSYSTEM:windows -lShell32 -lOpenGL32 -lComdlg32 %SdlLibs%
+
+	if "%2" equ "Rel" (
+		set OptFlags=-DNDEBUG -O3 -Wno-unused-function
+	) else (
+		set OptFlags=-g
+	)
 ) else (
-    rem NOTE: You can actually use clang-cl here if you remove /std:c11 and /WL.
-    rem But then it will use the MS toolchain for linking (I think).
-    set Compiler=cl
+	rem NOTE: You can actually use clang-cl here if you remove /std:c11 and /WL.
+	rem But then it will use the MS toolchain for linking (I think).
+	set Compiler=cl
 
-    rem /Zi Generates complete debugging information.
-    rem /FC Full paths in diagnostics
-    rem /WX Warning become errors
-    rem /WL One-line warnings/errors
-    rem /GR- Diable rttr
-    rem /EHa- Disable all exceptions
-    rem /wd4201 Disable warning about anonymous structs/unions, it's allowed in C11
-    rem See note under 'Clang' about duplicate include dirs.
-    set CompilerFlags=/Zi /FC /Fe%ExeName% /I%SdlDir% /I../external /I%SdlDir%/SDL2 /I../external/imgui /std:c11 /WX /W4 /WL /GR- /EHa- /wd4201
+	rem /Zi Generates complete debugging information.
+	rem /FC Full paths in diagnostics
+	rem /WX Warning become errors
+	rem /WL One-line warnings/errors
+	rem /GR- Diable rttr
+	rem /EHa- Disable all exceptions
+	rem /wd4201 Disable warning about anonymous structs/unions, it's allowed in C11
+	rem See note under 'Clang' about duplicate include dirs.
+	set CompilerFlags=/Zi /FC /Fe%ExeName% /I%SdlDir% /I../external /I%SdlDir%/SDL2 /I../external/imgui /std:c11 /WX /W4 /WL /GR- /EHa- /wd4201
 
-    if "%2" == "Rel" (
-        rem /Zo Generates enhanced debugging information for optimized code.
-        rem /Oi Generates intrinsic functions.
-        set OptFlags=/Zo /O2 /Oi
-    ) else (
-        set OptFlags=/D_DEBUG
-    )
-
-    set LinkerFlags=/link /INCREMENTAL:NO /OPT:REF /SUBSYSTEM:windows /NOLOGO %SdlLibs% Shell32.lib OpenGL32.lib Comdlg32.lib
+	if "%2" equ "Rel" (
+		rem /Zo Generates enhanced debugging information for optimized code.
+		rem /Oi Generates intrinsic functions.
+		rem /GL Whole program optimization
+		set OptFlags=/Zo /O2 /Oi /GL
+		rem /LTCG (Link-time code generation)
+		set LinkerFlags=/link /LTCG /OPT:REF /OPT:ICF %MsvcCommonLinkerFlags%
+	) else (
+		rem /RTC1 Run-time error checks
+		rem Enabling asan seems to result in the generation of gl.lib and gl.exp files.
+		set OptFlags=/D_DEBUG /RTC1 /fsanitize=address
+		set LinkerFlags=/link /DEBUG %MsvcCommonLinkerFlags%
+	)
 )
 
 mkdir build
@@ -106,5 +112,5 @@ set EndTime=%time%
 popd
 
 echo Start time: %StartTime%
-echo End time:   %EndTime%
+echo End time:	 %EndTime%
 
