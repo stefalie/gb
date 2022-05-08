@@ -962,6 +962,10 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		{
 			rom_view->GotoAddrAndHighlight(gb->cpu.pc, gb->cpu.pc + inst_num_bytes);
 		}
+		else
+		{
+			rom_view->GotoAddrAndHighlight((size_t)-1, 0);
+		}
 		ImGui::Begin(tab_name_rom_view);
 		rom_view->DrawContents(config->rom.data, config->rom.size);
 		ImGui::End();
@@ -972,6 +976,10 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		if (config->debug.views_follow_pc)
 		{
 			mem_view->GotoAddrAndHighlight(gb->cpu.pc, gb->cpu.pc + inst_num_bytes);
+		}
+		else
+		{
+			mem_view->GotoAddrAndHighlight((size_t)-1, 0);
 		}
 		ImGui::Begin(tab_name_mem_view);
 		mem_view->DrawContents(config->rom.data, config->rom.size);
@@ -992,7 +1000,7 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 				++buf_offset;
 				addr += inst.num_operand_bytes + 1;
 			}
-			ImGui::Text(buf);
+			ImGui::Text("%s", buf);
 			ImGui::End();
 		}
 
@@ -1015,20 +1023,20 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		const char* placeholder = "No ROM loaded.";
 
 		ImGui::Begin(tab_name_rom_view);
-		ImGui::Text(placeholder);
+		ImGui::Text("%s", placeholder);
 		ImGui::End();
 		ImGui::Begin(tab_name_mem_view);
-		ImGui::Text(placeholder);
+		ImGui::Text("%s", placeholder);
 		ImGui::End();
 		ImGui::Begin(tab_name_disassembly);
-		ImGui::Text(placeholder);
+		ImGui::Text("%s", placeholder);
 		ImGui::End();
 		ImGui::End();
 		ImGui::Begin(tab_name_cpu);
-		ImGui::Text(placeholder);
+		ImGui::Text("%s", placeholder);
 		ImGui::End();
 		ImGui::Begin(tab_name_sprites);
-		ImGui::Text(placeholder);
+		ImGui::Text("%s", placeholder);
 		ImGui::End();
 	}
 

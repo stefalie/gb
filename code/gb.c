@@ -1485,7 +1485,7 @@ gb_FetchInstruction(gb_GameBoy* gb, uint16_t addr)
 }
 
 // TODO: get rid of snprintf, strlen, memcpy to avoid std includes.
-// should all be easy, ans from snprintf you only need to know how to convert 1 byte numbers to 2-char strings.
+// should all be easy, and from snprintf you only need to know how to convert 1 byte numbers to 2-char strings.
 size_t
 gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_len)
 {
