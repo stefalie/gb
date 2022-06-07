@@ -1277,7 +1277,7 @@ static const uint8_t gb__bios[256] = { 0x31, 0xFE, 0xFF, 0xAF, 0x21, 0xFF, 0x9F,
 
 // TODO: needed? check how many times we use them and inline if not often.
 // Replace with union?
-//union WordOr2Bytes
+// union WordOr2Bytes
 //{
 //	uint16_t word;
 //	struct
@@ -1297,7 +1297,7 @@ gb__Lo(uint16_t val)
 	return val & 0xFF;
 }
 static inline uint16_t
-gb__HiLo(uint8_t lo, uint8_t hi)
+gb__LoHi(uint8_t lo, uint8_t hi)
 {
 	return lo + (hi << 8u);
 }
@@ -1313,9 +1313,9 @@ gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom, uint32_t num_bytes)
 	const uint8_t nintendo_logo[] = { 0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00,
 		0x0C, 0x00, 0x0D, 0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9,
 		0x99, 0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E };
-	// TODO: I think this is identical. And I think this can actually all be skipped
-	// if we actually execute the bios startup sequence: the comparison will still
-	// happen, but it will be emulated.
+	// TODO: I think this is identical.
+	// TODO: I think this can be skipped if we execute the BIOS startup sequence:
+	// the comparison still happens, but it will be emulated.
 	// const uint8_t* nintendo_logo = &gb__bios[120];
 
 	if (memcmp(nintendo_logo, header->nintendo_logo, sizeof(header->nintendo_logo)))
@@ -1371,36 +1371,83 @@ gb__MemMap(gb_GameBoy* gb, uint16_t addr)
 {
 	const uint8_t* result = NULL;
 
-	if (gb->memory.bios_mapped && addr < 256)
+	const uint16_t rom_bank_0_end = 0x4000;
+	const uint16_t rom_bank_0_end = 0x4000;
+
+	if (gb->memory.bios_mapped && addr < 0x100)  // BIOS if mapped
 	{
 		result = &gb__bios[addr];
 	}
-	else
+	else if (addr < 0x4000)  // ROM bank 0
 	{
-		assert(false);
+		result = gb->rom.data[addr];
 	}
-
+	else if (/* addr >= 0x4000 && */ addr < 0x8000)  // Switchable ROM bank
+	{
+		assert(addr >= 0x4000);
+		assert(false);
+		const size_t rom_bank = 1;
+		result = gb->rom.data[(rom_bank - 1) * 0x4000 + addr];
+	}
+	else if (/* addr >= 0x8000 && */ addr < 0xA000) // VRAM
+	{
+		assert(addr >= 0x8000);
+		// vram does somthing special with tiles
+		assert(false);
+		assert((addr & 0x1FFF) == (addr - 0x8000));
+		result = gb->memory.vram[addr & 0x1FFF];
+	}
+	else if (/* addr >= 0xA000 && */ addr < 0xC000)  // Switchable RAM bank
+	{
+		assert(addr >= 0xA000);
+		assert(false);
+		assert((addr & 0x1FFF) == (addr - 0xA000));
+		result = gb->memory.vram[addr & 0x1FFF];
+	}
+	else if (/* addr >= 0xC000 && */ addr < 0xE000)  // Internal RAM
+	{
+		assert(addr >= 0xC000);
+		assert(false);
+		assert((addr & 0x1FFF) == (addr - 0xC000));
+		result = gb->memory.vram[addr & 0x1FFF];
+	}
+	else if (/* addr >= 0xE000 && */ addr < 0xFE00)  // Echo of internal RAM
+	{
+		assert(addr >= 0xE000);
+		assert(false);
+		assert((addr & 0x1FFF) == (addr - 0xE000));
+		result = gb->memory.vram[addr & 0x1FFF];
+	}
 	return result;
 }
 
 static inline void
-gb__MemWriteWord(gb_GameBoy* gb, uint16_t addr, uint16_t value)
+gb__MemWriteByte(gb_GameBoy* gb, uint16_t addr, uint16_t value)
 {
 	(void)addr;
 	(void)gb;
 	(void)value;
+TODO:
+	MAP ?
 }
+//static inline void
+//gb__MemWriteWord(gb_GameBoy* gb, uint16_t addr, uint16_t value)
+//{
+//	gb__MemWriteByte(gb, addr, gb__Lo(value));
+//	gb__MemWriteByte(gb, addr + 1, gb__Hi(value));
+//}
 
 static inline uint8_t
 gb__MemReadByte(gb_GameBoy* gb, uint16_t addr)
 {
 	return *gb__MemMap(gb, addr);
 }
-static inline uint16_t
-gb__MemReadWord(gb_GameBoy* gb, uint16_t addr)
-{
-	return gb__HiLo(gb__MemReadByte(gb, addr), gb__MemReadByte(gb, addr));
-}
+// TODO: exists?
+// static inline uint16_t
+// gb__MemReadWord(gb_GameBoy* gb, uint16_t addr)
+//{
+//	return gb__LoHi(gb__MemReadByte(gb, addr), gb__MemReadByte(gb, addr + 1));
+//}
 
 void
 gb_Reset(gb_GameBoy* gb)
@@ -1417,37 +1464,37 @@ gb_Reset(gb_GameBoy* gb)
 	gb->cpu.pc = 0x0;  // TODO: do we end up here autmatically?
 	// gb->cpu.pc = 0x0100;  // TODO: do we end up here autmatically?
 
-	gb__MemWriteWord(gb, 0xFF05, 0x00);
-	gb__MemWriteWord(gb, 0xFF06, 0x00);
-	gb__MemWriteWord(gb, 0xFF07, 0x00);
-	gb__MemWriteWord(gb, 0xFF10, 0x80);
-	gb__MemWriteWord(gb, 0xFF11, 0xBF);
-	gb__MemWriteWord(gb, 0xFF12, 0xF3);
-	gb__MemWriteWord(gb, 0xFF14, 0xBF);
-	gb__MemWriteWord(gb, 0xFF16, 0x3F);
-	gb__MemWriteWord(gb, 0xFF17, 0x00);
-	gb__MemWriteWord(gb, 0xFF19, 0xBF);
-	gb__MemWriteWord(gb, 0xFF1A, 0x7F);
-	gb__MemWriteWord(gb, 0xFF1B, 0xFF);
-	gb__MemWriteWord(gb, 0xFF1C, 0x9F);
-	gb__MemWriteWord(gb, 0xFF1E, 0xBF);
-	gb__MemWriteWord(gb, 0xFF20, 0xFF);
-	gb__MemWriteWord(gb, 0xFF21, 0x00);
-	gb__MemWriteWord(gb, 0xFF22, 0x00);
-	gb__MemWriteWord(gb, 0xFF23, 0xBF);
-	gb__MemWriteWord(gb, 0xFF24, 0x77);
-	gb__MemWriteWord(gb, 0xFF25, 0xF3);
-	gb__MemWriteWord(gb, 0xFF26, 0xF1);
-	gb__MemWriteWord(gb, 0xFF40, 0x91);
-	gb__MemWriteWord(gb, 0xFF42, 0x00);
-	gb__MemWriteWord(gb, 0xFF43, 0x00);
-	gb__MemWriteWord(gb, 0xFF45, 0x00);
-	gb__MemWriteWord(gb, 0xFF47, 0xFC);
-	gb__MemWriteWord(gb, 0xFF48, 0xFF);
-	gb__MemWriteWord(gb, 0xFF49, 0xFF);
-	gb__MemWriteWord(gb, 0xFF4A, 0x00);
-	gb__MemWriteWord(gb, 0xFF4B, 0x00);
-	gb__MemWriteWord(gb, 0xFFFF, 0x00);
+	gb__MemWriteByte(gb, 0xFF05, 0x00);
+	gb__MemWriteByte(gb, 0xFF06, 0x00);
+	gb__MemWriteByte(gb, 0xFF07, 0x00);
+	gb__MemWriteByte(gb, 0xFF10, 0x80);
+	gb__MemWriteByte(gb, 0xFF11, 0xBF);
+	gb__MemWriteByte(gb, 0xFF12, 0xF3);
+	gb__MemWriteByte(gb, 0xFF14, 0xBF);
+	gb__MemWriteByte(gb, 0xFF16, 0x3F);
+	gb__MemWriteByte(gb, 0xFF17, 0x00);
+	gb__MemWriteByte(gb, 0xFF19, 0xBF);
+	gb__MemWriteByte(gb, 0xFF1A, 0x7F);
+	gb__MemWriteByte(gb, 0xFF1B, 0xFF);
+	gb__MemWriteByte(gb, 0xFF1C, 0x9F);
+	gb__MemWriteByte(gb, 0xFF1E, 0xBF);
+	gb__MemWriteByte(gb, 0xFF20, 0xFF);
+	gb__MemWriteByte(gb, 0xFF21, 0x00);
+	gb__MemWriteByte(gb, 0xFF22, 0x00);
+	gb__MemWriteByte(gb, 0xFF23, 0xBF);
+	gb__MemWriteByte(gb, 0xFF24, 0x77);
+	gb__MemWriteByte(gb, 0xFF25, 0xF3);
+	gb__MemWriteByte(gb, 0xFF26, 0xF1);
+	gb__MemWriteByte(gb, 0xFF40, 0x91);
+	gb__MemWriteByte(gb, 0xFF42, 0x00);
+	gb__MemWriteByte(gb, 0xFF43, 0x00);
+	gb__MemWriteByte(gb, 0xFF45, 0x00);
+	gb__MemWriteByte(gb, 0xFF47, 0xFC);
+	gb__MemWriteByte(gb, 0xFF48, 0xFF);
+	gb__MemWriteByte(gb, 0xFF49, 0xFF);
+	gb__MemWriteByte(gb, 0xFF4A, 0x00);
+	gb__MemWriteByte(gb, 0xFF4B, 0x00);
+	gb__MemWriteByte(gb, 0xFFFF, 0x00);
 }
 
 typedef struct
