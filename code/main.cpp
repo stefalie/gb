@@ -110,6 +110,7 @@ struct Input
 	} sdl;
 };
 
+// TODO: rename to kDefaultInputs ?
 static const Input default_inputs[] = {
 	// Keyboard
 	{ "key_a", "A", Input::TYPE_KEY, { SDLK_x } },
@@ -863,8 +864,6 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 static void
 DebuggerDraw(Config* config, gb_GameBoy* gb)
 {
-	(void)gb;  // TODO
-
 	ImGui::SetCurrentContext(config->handles.debug_imgui);
 	SDL_GL_MakeCurrent(config->handles.debug_window, config->handles.gl_context);
 	ImGui_ImplSDL2_InitForOpenGL(config->handles.debug_window, config->handles.gl_context);
@@ -970,8 +969,6 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		rom_view->DrawContents(config->rom.data, config->rom.size);
 		ImGui::End();
 
-		// TODO: Use readFN
-		// https://github.com/ocornut/imgui_club/blob/master/imgui_memory_editor/imgui_memory_editor.h#L91
 		MemoryEditor* mem_view = &config->debug.mem_view;
 		if (config->debug.views_follow_pc)
 		{
@@ -982,7 +979,7 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 			mem_view->GotoAddrAndHighlight((size_t)-1, 0);
 		}
 		ImGui::Begin(tab_name_mem_view);
-		mem_view->DrawContents(config->rom.data, config->rom.size);
+		mem_view->DrawContents(gb, 0xFFFF);
 		ImGui::End();
 
 		{
@@ -1074,6 +1071,21 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 	ImGui_ImplSDL2_InitForOpenGL(config->handles.window, config->handles.gl_context);
 }
 
+static uint8_t
+DebuggerMemoryViewReadFunc(const uint8_t* data, size_t off)
+{
+	// This is a HACK. But without, gb would need to be global.
+	const gb_GameBoy* gb = (const gb_GameBoy*)data;
+
+	// TODO: remove this. Memory mapping is not finished yet.
+	const uint16_t rom_bank_0_end = 0x4000;
+	if (off >= rom_bank_0_end)
+	{
+		return gb->rom.data[off];
+	}
+	return gb_MemoryReadByte(gb, (uint16_t)off);
+}
+
 #define STRINGIFY(str) STRINGIFY2(str)
 #define STRINGIFY2(str) #str
 
@@ -1138,6 +1150,7 @@ main(int argc, char* argv[])
 
 	Config config;
 	config.debug.mem_view.ReadOnly = true;
+	config.debug.mem_view.ReadFn = &DebuggerMemoryViewReadFunc;
 	config.debug.rom_view.ReadOnly = true;
 	char* save_path = SDL_GetPrefPath(NULL, "GB");
 

@@ -1367,56 +1367,65 @@ gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom, uint32_t num_bytes)
 
 // TODO useful?
 static const uint8_t*
-gb__MemMap(gb_GameBoy* gb, uint16_t addr)
+gb__MemMap(const gb_GameBoy* gb, uint16_t addr)
 {
 	const uint8_t* result = NULL;
 
 	const uint16_t rom_bank_0_end = 0x4000;
-	const uint16_t rom_bank_0_end = 0x4000;
+	const uint16_t switchable_rom_bank_end = 0x8000;
+	const uint16_t vram_end = 0xA000;
+	const uint16_t switchable_ram_end = 0xC000;
+	const uint16_t internal_ram_end = 0xE000;
+	const uint16_t echo_internal_ram_end = 0xFE00;
 
 	if (gb->memory.bios_mapped && addr < 0x100)  // BIOS if mapped
 	{
 		result = &gb__bios[addr];
 	}
-	else if (addr < 0x4000)  // ROM bank 0
+	else if (addr < rom_bank_0_end)  // ROM bank 0
 	{
-		result = gb->rom.data[addr];
+		result = &gb->rom.data[addr];
 	}
-	else if (/* addr >= 0x4000 && */ addr < 0x8000)  // Switchable ROM bank
+	else if (addr < switchable_rom_bank_end)  // Switchable ROM bank
 	{
-		assert(addr >= 0x4000);
+		// TODO:
+		assert(addr >= rom_bank_0_end);
 		assert(false);
 		const size_t rom_bank = 1;
-		result = gb->rom.data[(rom_bank - 1) * 0x4000 + addr];
+		result = &gb->rom.data[(rom_bank - 1) * rom_bank_0_end + addr];
 	}
-	else if (/* addr >= 0x8000 && */ addr < 0xA000) // VRAM
+	else if (addr < vram_end)  // VRAM
 	{
-		assert(addr >= 0x8000);
+		assert(addr >= switchable_rom_bank_end);
 		// vram does somthing special with tiles
 		assert(false);
-		assert((addr & 0x1FFF) == (addr - 0x8000));
-		result = gb->memory.vram[addr & 0x1FFF];
+		assert((addr & 0x1FFF) == (addr - switchable_rom_bank_end));
+		result = &gb->memory.vram[addr & 0x1FFF];
 	}
-	else if (/* addr >= 0xA000 && */ addr < 0xC000)  // Switchable RAM bank
+	else if (addr < switchable_ram_end)  // Switchable RAM bank
 	{
-		assert(addr >= 0xA000);
+		assert(addr >= vram_end);
 		assert(false);
-		assert((addr & 0x1FFF) == (addr - 0xA000));
-		result = gb->memory.vram[addr & 0x1FFF];
+		assert((addr & 0x1FFF) == (addr - vram_end));
+		result = &gb->memory.vram[addr & 0x1FFF];
 	}
-	else if (/* addr >= 0xC000 && */ addr < 0xE000)  // Internal RAM
+	else if (addr < internal_ram_end)  // Internal RAM
 	{
-		assert(addr >= 0xC000);
+		assert(addr >= switchable_ram_end);
 		assert(false);
-		assert((addr & 0x1FFF) == (addr - 0xC000));
-		result = gb->memory.vram[addr & 0x1FFF];
+		assert((addr & 0x1FFF) == (addr - switchable_ram_end));
+		result = &gb->memory.vram[addr & 0x1FFF];
 	}
-	else if (/* addr >= 0xE000 && */ addr < 0xFE00)  // Echo of internal RAM
+	else if (addr < echo_internal_ram_end)  // Echo of internal RAM
 	{
-		assert(addr >= 0xE000);
+		assert(addr >= internal_ram_end);
 		assert(false);
-		assert((addr & 0x1FFF) == (addr - 0xE000));
-		result = gb->memory.vram[addr & 0x1FFF];
+		assert((addr & 0x1FFF) == (addr - internal_ram_end));
+		result = &gb->memory.vram[addr & 0x1FFF];
+	}
+	else
+	{
+		assert(false);
 	}
 	return result;
 }
@@ -1427,27 +1436,34 @@ gb__MemWriteByte(gb_GameBoy* gb, uint16_t addr, uint16_t value)
 	(void)addr;
 	(void)gb;
 	(void)value;
-TODO:
-	MAP ?
+	// TODO:
+	//	MAP ?
 }
-//static inline void
-//gb__MemWriteWord(gb_GameBoy* gb, uint16_t addr, uint16_t value)
+// static inline void
+// gb__MemWriteWord(gb_GameBoy* gb, uint16_t addr, uint16_t value)
 //{
 //	gb__MemWriteByte(gb, addr, gb__Lo(value));
 //	gb__MemWriteByte(gb, addr + 1, gb__Hi(value));
-//}
+// }
 
+uint8_t
+gb_MemoryReadByte(const gb_GameBoy* gb, uint16_t addr)
+{
+	return *gb__MemMap(gb, addr);
+}
+
+// TODO: del
 static inline uint8_t
-gb__MemReadByte(gb_GameBoy* gb, uint16_t addr)
+gb__MemReadByte(const gb_GameBoy* gb, uint16_t addr)
 {
 	return *gb__MemMap(gb, addr);
 }
 // TODO: exists?
-// static inline uint16_t
-// gb__MemReadWord(gb_GameBoy* gb, uint16_t addr)
-//{
-//	return gb__LoHi(gb__MemReadByte(gb, addr), gb__MemReadByte(gb, addr + 1));
-//}
+static inline uint16_t
+gb__MemReadWord(const gb_GameBoy* gb, uint16_t addr)
+{
+	return gb__LoHi(gb__MemReadByte(gb, addr), gb__MemReadByte(gb, addr + 1));
+}
 
 void
 gb_Reset(gb_GameBoy* gb)
@@ -1509,7 +1525,7 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 };
 
 gb_Instruction
-gb_FetchInstruction(gb_GameBoy* gb, uint16_t addr)
+gb_FetchInstruction(const gb_GameBoy* gb, uint16_t addr)
 {
 	gb_Instruction inst = {
 		.opcode = gb__MemReadByte(gb, addr),

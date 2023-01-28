@@ -97,6 +97,10 @@ gb_Init(gb_GameBoy* gb);
 bool
 gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom, uint32_t num_bytes);
 
+// Read a byte from the GameBoy's memory space at 'addr'.
+uint8_t
+gb_MemoryReadByte(const gb_GameBoy* gb, uint16_t addr);
+
 // Resets the GameBoy.
 void
 gb_Reset(gb_GameBoy* gb);
@@ -116,7 +120,7 @@ typedef struct
 
 // Fetches assembly instruction at 'addr' (which needs to point to a valid instruction).
 gb_Instruction
-gb_FetchInstruction(gb_GameBoy* gb, uint16_t addr);
+gb_FetchInstruction(const gb_GameBoy* gb, uint16_t addr);
 
 // Disassembles 'inst' into 'str_buf'. Appends a NUL suffix.
 // A 32 byte buffer is sufficient for any instruction.
