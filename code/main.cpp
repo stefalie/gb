@@ -982,11 +982,24 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		mem_view->DrawContents(gb, 0xFFFF);
 		ImGui::End();
 
+		ImGui::Begin(tab_name_cpu);
+		ImGui::Text("af = 0x%04X\n", gb->cpu.af);
+		ImGui::Text("bc = 0x%04X\n", gb->cpu.bc);
+		ImGui::Text("de = 0x%04X\n", gb->cpu.de);
+		ImGui::Text("hl = 0x%04X\n", gb->cpu.hl);
+		ImGui::Text("sp = 0x%04X\n", gb->cpu.sp);
+		ImGui::Text("pc = 0x%04X\n", gb->cpu.pc);
+		// TODO z n h c flags
+		ImGui::End();
+
 		{
 			ImGui::Begin(tab_name_disassembly);
 			const size_t num_instructions = 20;
 			const size_t buf_len = (32 + 1) * num_instructions;  // 32 + 1 newline chars per line
 			char buf[buf_len];
+			// Ideally we would go a few instruction back in time.
+			// But for that we would have to track the instructions because otherwise
+			// we cannot know how long (in bytes) they were.
 			uint16_t addr = gb->cpu.pc;
 			size_t buf_offset = 0;
 			for (size_t i = 0; i < num_instructions; ++i)
@@ -997,19 +1010,10 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 				++buf_offset;
 				addr += inst.num_operand_bytes + 1;
 			}
+			buf[buf_offset] = '\0';
 			ImGui::Text("%s", buf);
 			ImGui::End();
 		}
-
-		ImGui::Begin(tab_name_cpu);
-		ImGui::Text("af = 0x%04X\n", gb->cpu.af);
-		ImGui::Text("bc = 0x%04X\n", gb->cpu.bc);
-		ImGui::Text("de = 0x%04X\n", gb->cpu.de);
-		ImGui::Text("hl = 0x%04X\n", gb->cpu.hl);
-		ImGui::Text("sp = 0x%04X\n", gb->cpu.sp);
-		ImGui::Text("pc = 0x%04X\n", gb->cpu.pc);
-		// TODO z n h c flags
-		ImGui::End();
 
 		ImGui::Begin(tab_name_sprites);
 		ImGui::Text("TODO");
@@ -1487,7 +1491,6 @@ main(int argc, char* argv[])
 			{
 				config.debug.show = true;
 				config.gui.single_step_mode = true;
-				--gb.cpu.pc;
 
 				// TODO: remove
 				// char str_buf[32];

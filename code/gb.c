@@ -1431,7 +1431,7 @@ gb__MemMap(const gb_GameBoy* gb, uint16_t addr)
 }
 
 static inline void
-gb__MemWriteByte(gb_GameBoy* gb, uint16_t addr, uint16_t value)
+gb__MemoryWriteByte(gb_GameBoy* gb, uint16_t addr, uint16_t value)
 {
 	(void)addr;
 	(void)gb;
@@ -1451,18 +1451,10 @@ gb_MemoryReadByte(const gb_GameBoy* gb, uint16_t addr)
 {
 	return *gb__MemMap(gb, addr);
 }
-
-// TODO: del
-static inline uint8_t
-gb__MemReadByte(const gb_GameBoy* gb, uint16_t addr)
+uint16_t
+gb_MemoryReadWord(const gb_GameBoy* gb, uint16_t addr)
 {
-	return *gb__MemMap(gb, addr);
-}
-// TODO: exists?
-static inline uint16_t
-gb__MemReadWord(const gb_GameBoy* gb, uint16_t addr)
-{
-	return gb__LoHi(gb__MemReadByte(gb, addr), gb__MemReadByte(gb, addr + 1));
+	return gb__LoHi(gb_MemoryReadByte(gb, addr), gb_MemoryReadByte(gb, addr + 1));
 }
 
 void
@@ -1480,37 +1472,37 @@ gb_Reset(gb_GameBoy* gb)
 	gb->cpu.pc = 0x0;  // TODO: do we end up here autmatically?
 	// gb->cpu.pc = 0x0100;  // TODO: do we end up here autmatically?
 
-	gb__MemWriteByte(gb, 0xFF05, 0x00);
-	gb__MemWriteByte(gb, 0xFF06, 0x00);
-	gb__MemWriteByte(gb, 0xFF07, 0x00);
-	gb__MemWriteByte(gb, 0xFF10, 0x80);
-	gb__MemWriteByte(gb, 0xFF11, 0xBF);
-	gb__MemWriteByte(gb, 0xFF12, 0xF3);
-	gb__MemWriteByte(gb, 0xFF14, 0xBF);
-	gb__MemWriteByte(gb, 0xFF16, 0x3F);
-	gb__MemWriteByte(gb, 0xFF17, 0x00);
-	gb__MemWriteByte(gb, 0xFF19, 0xBF);
-	gb__MemWriteByte(gb, 0xFF1A, 0x7F);
-	gb__MemWriteByte(gb, 0xFF1B, 0xFF);
-	gb__MemWriteByte(gb, 0xFF1C, 0x9F);
-	gb__MemWriteByte(gb, 0xFF1E, 0xBF);
-	gb__MemWriteByte(gb, 0xFF20, 0xFF);
-	gb__MemWriteByte(gb, 0xFF21, 0x00);
-	gb__MemWriteByte(gb, 0xFF22, 0x00);
-	gb__MemWriteByte(gb, 0xFF23, 0xBF);
-	gb__MemWriteByte(gb, 0xFF24, 0x77);
-	gb__MemWriteByte(gb, 0xFF25, 0xF3);
-	gb__MemWriteByte(gb, 0xFF26, 0xF1);
-	gb__MemWriteByte(gb, 0xFF40, 0x91);
-	gb__MemWriteByte(gb, 0xFF42, 0x00);
-	gb__MemWriteByte(gb, 0xFF43, 0x00);
-	gb__MemWriteByte(gb, 0xFF45, 0x00);
-	gb__MemWriteByte(gb, 0xFF47, 0xFC);
-	gb__MemWriteByte(gb, 0xFF48, 0xFF);
-	gb__MemWriteByte(gb, 0xFF49, 0xFF);
-	gb__MemWriteByte(gb, 0xFF4A, 0x00);
-	gb__MemWriteByte(gb, 0xFF4B, 0x00);
-	gb__MemWriteByte(gb, 0xFFFF, 0x00);
+	gb__MemoryWriteByte(gb, 0xFF05, 0x00);
+	gb__MemoryWriteByte(gb, 0xFF06, 0x00);
+	gb__MemoryWriteByte(gb, 0xFF07, 0x00);
+	gb__MemoryWriteByte(gb, 0xFF10, 0x80);
+	gb__MemoryWriteByte(gb, 0xFF11, 0xBF);
+	gb__MemoryWriteByte(gb, 0xFF12, 0xF3);
+	gb__MemoryWriteByte(gb, 0xFF14, 0xBF);
+	gb__MemoryWriteByte(gb, 0xFF16, 0x3F);
+	gb__MemoryWriteByte(gb, 0xFF17, 0x00);
+	gb__MemoryWriteByte(gb, 0xFF19, 0xBF);
+	gb__MemoryWriteByte(gb, 0xFF1A, 0x7F);
+	gb__MemoryWriteByte(gb, 0xFF1B, 0xFF);
+	gb__MemoryWriteByte(gb, 0xFF1C, 0x9F);
+	gb__MemoryWriteByte(gb, 0xFF1E, 0xBF);
+	gb__MemoryWriteByte(gb, 0xFF20, 0xFF);
+	gb__MemoryWriteByte(gb, 0xFF21, 0x00);
+	gb__MemoryWriteByte(gb, 0xFF22, 0x00);
+	gb__MemoryWriteByte(gb, 0xFF23, 0xBF);
+	gb__MemoryWriteByte(gb, 0xFF24, 0x77);
+	gb__MemoryWriteByte(gb, 0xFF25, 0xF3);
+	gb__MemoryWriteByte(gb, 0xFF26, 0xF1);
+	gb__MemoryWriteByte(gb, 0xFF40, 0x91);
+	gb__MemoryWriteByte(gb, 0xFF42, 0x00);
+	gb__MemoryWriteByte(gb, 0xFF43, 0x00);
+	gb__MemoryWriteByte(gb, 0xFF45, 0x00);
+	gb__MemoryWriteByte(gb, 0xFF47, 0xFC);
+	gb__MemoryWriteByte(gb, 0xFF48, 0xFF);
+	gb__MemoryWriteByte(gb, 0xFF49, 0xFF);
+	gb__MemoryWriteByte(gb, 0xFF4A, 0x00);
+	gb__MemoryWriteByte(gb, 0xFF4B, 0x00);
+	gb__MemoryWriteByte(gb, 0xFFFF, 0x00);
 }
 
 typedef struct
@@ -1522,13 +1514,14 @@ typedef struct
 
 static const gb__InstructionInfo gb__instruction_infos[256] = {
 	{ "NOP", 0, 1 },
+	[0x31] = { "LD SP", 2, 3 },
 };
 
 gb_Instruction
 gb_FetchInstruction(const gb_GameBoy* gb, uint16_t addr)
 {
 	gb_Instruction inst = {
-		.opcode = gb__MemReadByte(gb, addr),
+		.opcode = gb_MemoryReadByte(gb, addr),
 	};
 
 	const gb__InstructionInfo info = gb__instruction_infos[inst.opcode];
@@ -1537,11 +1530,11 @@ gb_FetchInstruction(const gb_GameBoy* gb, uint16_t addr)
 
 	if (inst.num_operand_bytes == 1)
 	{
-		inst.operand_byte = gb__MemReadByte(gb, gb->cpu.pc + 1);
+		inst.operand_byte = gb_MemoryReadByte(gb, addr + 1);
 	}
 	else if (inst.num_operand_bytes == 2)
 	{
-		inst.operand_word = gb__MemReadWord(gb, gb->cpu.pc + 1);
+		inst.operand_word = gb_MemoryReadWord(gb, addr + 1);
 	}
 
 	return inst;
@@ -1555,7 +1548,7 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 	const gb__InstructionInfo info = gb__instruction_infos[inst.opcode];
 	if (!info.name)
 	{
-		snprintf(str_buf, str_buf_len, "OpCode %d info is missing!", inst.opcode);
+		snprintf(str_buf, str_buf_len, "OpCode 0x%02X info is missing!", inst.opcode);
 	}
 	else if (info.num_operand_bytes == 0)
 	{
@@ -1567,7 +1560,8 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 	else
 	{
 		assert(info.num_operand_bytes > 0 && info.num_operand_bytes < 3);
-		snprintf(str_buf, str_buf_len, "%s 0x%0*X", info.name, info.num_operand_bytes * 2, inst.operand_byte);
+		snprintf(str_buf, str_buf_len, "%s, 0x%0*X", info.name, info.num_operand_bytes * 2,
+				info.num_operand_bytes == 1 ? inst.operand_byte : inst.operand_word);
 	}
 	return strlen(str_buf);
 }
@@ -1585,11 +1579,13 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 
 	const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
 	const gb__InstructionInfo info = gb__instruction_infos[inst.opcode];
-	gb->cpu.pc += 1 /* opcode */ + info.num_operand_bytes;
 
 	switch (inst.opcode)
 	{
 	case 0:  // NOP
+		break;
+	case 0x31:  // LD SP, nn
+		gb->cpu.sp = inst.operand_word;
 		break;
 	default:
 		// Asserting that the return value is not -1 in the caller allows
@@ -1599,6 +1595,7 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 		return (size_t)-1;
 	}
 
+	gb->cpu.pc += 1 /* opcode */ + info.num_operand_bytes;
 	return info.num_machine_cycles;
 }
 
@@ -2007,4 +2004,3 @@ gb_MagFramebuffer(const gb_GameBoy* gb, gb_MagFilter mag_filter, uint8_t* pixels
 		return (gb_Framebuffer){ 0 };
 	}
 }
-
