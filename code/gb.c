@@ -1515,6 +1515,15 @@ typedef struct
 static const gb__InstructionInfo gb__instruction_infos[256] = {
 	{ "NOP", 0, 1 },
 	[0x31] = { "LD SP", 2, 3 },
+	[0xA8] = { "XOR B", 0, 1 },
+	[0xA9] = { "XOR C", 0, 1 },
+	[0xAA] = { "XOR D", 0, 1 },
+	[0xAB] = { "XOR E", 0, 1 },
+	[0xAC] = { "XOR H", 0, 1 },
+	[0xAD] = { "XOR L", 0, 1 },
+	[0xAE] = { "XOR (HL)", 0, 2 },
+	[0xAF] = { "XOR A", 0, 1 },
+	[0xEE] = { "XOR n", 1, 2 },
 };
 
 gb_Instruction
@@ -1566,6 +1575,15 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 	return strlen(str_buf);
 }
 
+static inline void
+gb__SetFlags(gb_GameBoy* gb, bool zero, bool subtract, bool half_carry, bool carry)
+{
+	gb->cpu.flags.zero = zero ? 1 : 0;
+	gb->cpu.flags.subtract = subtract ? 1 : 0;
+	gb->cpu.flags.half_carry = half_carry ? 1 : 0;
+	gb->cpu.flags.carry = carry ? 1 : 0;
+}
+
 size_t
 gb_ExecuteNextInstruction(gb_GameBoy* gb)
 {
@@ -1587,6 +1605,50 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 	case 0x31:  // LD SP, nn
 		gb->cpu.sp = inst.operand_word;
 		break;
+	case 0xA8:  // XOR B
+		gb->cpu.a ^= gb->cpu.b;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		assert(false);
+		break;
+	case 0xA9:  // XOR C
+		gb->cpu.a ^= gb->cpu.c;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		assert(false);
+		break;
+	case 0xAA:  // XOR D
+		gb->cpu.a ^= gb->cpu.d;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		assert(false);
+		break;
+	case 0xAB:  // XOR E
+		gb->cpu.a ^= gb->cpu.e;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		assert(false);
+		break;
+	case 0xAC:  // XOR H
+		gb->cpu.a ^= gb->cpu.h;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		assert(false);
+		break;
+	case 0xAD:  // XOR L
+		gb->cpu.a ^= gb->cpu.l;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		assert(false);
+		break;
+	case 0xAE:  // XOR (HL)
+		gb->cpu.a ^= gb_MemoryReadByte(gb, gb->cpu.hl);
+		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		assert(false);
+		break;
+	case 0xAF:  // XOR A
+		gb->cpu.a ^= gb->cpu.a;  // Identical to: gb->cpu.a = 0
+		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		break;
+	case 0xEE:  // XOR n
+		gb->cpu.a ^= inst.operand_byte;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		assert(false);
+		break;
 	default:
 		// Asserting that the return value is not -1 in the caller allows
 		// implementing the instructions step by step. Whenever assert fails,
@@ -1595,6 +1657,7 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 		return (size_t)-1;
 	}
 
+	// TODO: is this ok here? will this be correct for instructions that modify th PC?
 	gb->cpu.pc += 1 /* opcode */ + info.num_operand_bytes;
 	return info.num_machine_cycles;
 }
