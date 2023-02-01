@@ -1512,9 +1512,29 @@ typedef struct
 	uint8_t num_machine_cycles;
 } gb__InstructionInfo;
 
+// TODO:reorder
 static const gb__InstructionInfo gb__instruction_infos[256] = {
 	{ "NOP", 0, 1 },
+
+	[0x01] = { "LD BC", 2, 3 },
+
+	[0x11] = { "LD DE", 2, 3 },
+
+	[0x21] = { "LD HL", 2, 3 },
+
 	[0x31] = { "LD SP", 2, 3 },
+
+	[0xA0] = { "AND B", 0, 1 },
+	[0xA1] = { "AND C", 0, 1 },
+	[0xA2] = { "AND D", 0, 1 },
+	[0xA3] = { "AND E", 0, 1 },
+	[0xA4] = { "AND H", 0, 1 },
+	[0xA5] = { "AND L", 0, 1 },
+	[0xA6] = { "AND (HL)", 0, 2 },
+	[0xA7] = { "AND A", 0, 1 },
+
+	[0xCB] = { "PREFIX", 0, 1 },
+
 	[0xA8] = { "XOR B", 0, 1 },
 	[0xA9] = { "XOR C", 0, 1 },
 	[0xAA] = { "XOR D", 0, 1 },
@@ -1523,6 +1543,8 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 	[0xAD] = { "XOR L", 0, 1 },
 	[0xAE] = { "XOR (HL)", 0, 2 },
 	[0xAF] = { "XOR A", 0, 1 },
+
+	[0xE7] = { "AND n", 1, 2 },
 	[0xEE] = { "XOR n", 1, 2 },
 };
 
@@ -1602,9 +1624,66 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 	{
 	case 0:  // NOP
 		break;
+
+	case 0x01:  // LD BC, nn
+		gb->cpu.bc = inst.operand_word;
+		assert(false);
+		break;
+
+	case 0x11:  // LD DE, nn
+		gb->cpu.de = inst.operand_word;
+		assert(false);
+		break;
+
+	case 0x21:  // LD HL, nn
+		gb->cpu.hl = inst.operand_word;
+		break;
+
 	case 0x31:  // LD SP, nn
 		gb->cpu.sp = inst.operand_word;
 		break;
+
+	case 0xA0:  // AND B
+		gb->cpu.a &= gb->cpu.b;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		assert(false);
+		break;
+	case 0xA1:  // AND C
+		gb->cpu.a &= gb->cpu.c;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		assert(false);
+		break;
+	case 0xA2:  // AND D
+		gb->cpu.a &= gb->cpu.d;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		assert(false);
+		break;
+	case 0xA3:  // AND E
+		gb->cpu.a &= gb->cpu.e;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		assert(false);
+		break;
+	case 0xA4:  // AND H
+		gb->cpu.a &= gb->cpu.h;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		assert(false);
+		break;
+	case 0xA5:  // AND L
+		gb->cpu.a &= gb->cpu.l;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		assert(false);
+		break;
+	case 0xA6:  // AND (HL)
+		gb->cpu.a &= gb_MemoryReadByte(gb, gb->cpu.hl);
+		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		assert(false);
+		break;
+	case 0xA7:  // AND A
+		gb->cpu.a &= gb->cpu.a;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		assert(false);
+		break;
+
 	case 0xA8:  // XOR B
 		gb->cpu.a ^= gb->cpu.b;
 		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
@@ -1644,11 +1723,41 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 		gb->cpu.a ^= gb->cpu.a;  // Identical to: gb->cpu.a = 0
 		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
 		break;
+
+	case 0xCB:  // PREFIX
+		// TODO: call extened operations in seperate function with separate switch
+		assert(false);
+		break;
+
+
+	case 0xE7:  // AND n
+		gb->cpu.a &= inst.operand_byte;
+		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		assert(false);
+		break;
+
 	case 0xEE:  // XOR n
 		gb->cpu.a ^= inst.operand_byte;
 		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
 		assert(false);
 		break;
+
+	case 0xD3:
+	case 0xDB:
+	case 0xDD:
+	case 0xE3:
+	case 0xE4:
+	case 0xEB:
+	case 0xEC:
+	case 0xED:
+	case 0xF4:
+	case 0xFC:
+	case 0xFD:
+		// Undefined opcodes
+		assert(false);
+		break;
+
+
 	default:
 		// Asserting that the return value is not -1 in the caller allows
 		// implementing the instructions step by step. Whenever assert fails,
