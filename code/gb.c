@@ -1620,6 +1620,8 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 	const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
 	const gb__InstructionInfo info = gb__instruction_infos[inst.opcode];
 
+	gb->cpu.pc += 1 /* opcode */ + info.num_operand_bytes;
+
 	switch (inst.opcode)
 	{
 	case 0:  // NOP
@@ -1759,6 +1761,8 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 
 
 	default:
+		// Revert PC
+		gb->cpu.pc -= 1 /* opcode */ + info.num_operand_bytes;
 		// Asserting that the return value is not -1 in the caller allows
 		// implementing the instructions step by step. Whenever assert fails,
 		// it will tell us which is the next instruction that needs to be
@@ -1766,8 +1770,6 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 		return (size_t)-1;
 	}
 
-	// TODO: is this ok here? will this be correct for instructions that modify th PC?
-	gb->cpu.pc += 1 /* opcode */ + info.num_operand_bytes;
 	return info.num_machine_cycles;
 }
 
