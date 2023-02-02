@@ -1431,19 +1431,16 @@ gb__MemMap(const gb_GameBoy* gb, uint16_t addr)
 }
 
 static inline void
-gb__MemoryWriteByte(gb_GameBoy* gb, uint16_t addr, uint16_t value)
+gb__MemoryWriteByte(gb_GameBoy* gb, uint16_t addr, uint8_t value)
 {
-	(void)addr;
-	(void)gb;
-	(void)value;
-	// TODO:
-	//	MAP ?
+	*gb__MemMap(gb, addr) = value;
 }
+// TODO: needed?
 // static inline void
-// gb__MemWriteWord(gb_GameBoy* gb, uint16_t addr, uint16_t value)
+// gb__MemoryWriteWord(gb_GameBoy* gb, uint16_t addr, uint16_t value)
 //{
-//	gb__MemWriteByte(gb, addr, gb__Lo(value));
-//	gb__MemWriteByte(gb, addr + 1, gb__Hi(value));
+//	gb__MemoryWriteByte(gb, addr, gb__Lo(value));
+//	gb__MemoryWriteByte(gb, addr + 1, gb__Hi(value));
 // }
 
 uint8_t
@@ -1523,6 +1520,7 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 	[0x21] = { "LD HL", 2, 3 },
 
 	[0x31] = { "LD SP", 2, 3 },
+	[0x32] = { "LD (HL-), A", 0, 1 },
 
 	[0xA0] = { "AND B", 0, 1 },
 	[0xA1] = { "AND C", 0, 1 },
@@ -1643,6 +1641,10 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 
 	case 0x31:  // LD SP, nn
 		gb->cpu.sp = inst.operand_word;
+		break;
+	case 0x32:  // LD (HL-), A
+		gb__MemoryWriteByte(gb, gb->cpu.hl, gb->cpu.a);
+		--gb->cpu.hl;
 		break;
 
 	case 0xA0:  // AND B
