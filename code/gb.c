@@ -1367,7 +1367,7 @@ gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom, uint32_t num_bytes)
 
 // TODO useful?
 static const uint8_t*
-gb__MemMap(const gb_GameBoy* gb, uint16_t addr)
+gb__MemoryMapReadonly(const gb_GameBoy* gb, uint16_t addr)
 {
 	const uint8_t* result = NULL;
 
@@ -1433,7 +1433,11 @@ gb__MemMap(const gb_GameBoy* gb, uint16_t addr)
 static inline void
 gb__MemoryWriteByte(gb_GameBoy* gb, uint16_t addr, uint8_t value)
 {
-	*gb__MemMap(gb, addr) = value;
+	assert(false);
+	(void)gb;
+	(void)addr;
+	(void)value;
+	//*gb__MemoryMapReadWrite(gb, addr) = value;
 }
 // TODO: needed?
 // static inline void
@@ -1443,10 +1447,11 @@ gb__MemoryWriteByte(gb_GameBoy* gb, uint16_t addr, uint8_t value)
 //	gb__MemoryWriteByte(gb, addr + 1, gb__Hi(value));
 // }
 
+// TODO: let this replace gb__MemoryMapReadonly!
 uint8_t
 gb_MemoryReadByte(const gb_GameBoy* gb, uint16_t addr)
 {
-	return *gb__MemMap(gb, addr);
+	return *gb__MemoryMapReadonly(gb, addr);
 }
 uint16_t
 gb_MemoryReadWord(const gb_GameBoy* gb, uint16_t addr)

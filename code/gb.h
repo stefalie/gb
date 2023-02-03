@@ -12,7 +12,7 @@ typedef struct
 {
 	// The CPU conains only the registers.
 	// Note that the GameBoy uses little-endian.
-	struct CPU
+	struct Cpu
 	{
 		union
 		{
