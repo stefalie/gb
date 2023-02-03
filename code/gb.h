@@ -25,7 +25,6 @@ typedef struct
 						uint8_t _ : 4;
 						uint8_t carry : 1;
 						uint8_t half_carry : 1;
-						// TODO: name, have also seen "operation" and "negative"
 						uint8_t subtract : 1;
 						uint8_t zero : 1;
 					} flags;
@@ -72,7 +71,11 @@ typedef struct
 		// TODO
 		uint8_t wram[8192];  // 8 KiB
 		uint8_t vram[8192];  // 8 KiB
+		uint8_t external_ram[8192];  // 8 KiB
+		uint8_t zero_page[128];
 	} memory;
+
+	// TODO: timers
 
 	struct Framebuffer
 	{
