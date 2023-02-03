@@ -8,17 +8,7 @@
 #define GB_FRAMEBUFFER_WIDTH 160
 #define GB_FRAMEBUFFER_HEIGHT 144
 
-typedef struct gb_CpuFlags
-{
-	uint8_t _ : 4;
-	uint8_t carry : 1;
-	uint8_t half_carry : 1;
-	// TODO: name, have also seen "operation" and "negative"
-	uint8_t subtract : 1;
-	uint8_t zero : 1;
-} gb_CpuFlags;
-
-typedef struct gb_GameBoy
+typedef struct
 {
 	// The CPU conains only the registers.
 	// Note that the GameBoy uses little-endian.
@@ -30,7 +20,15 @@ typedef struct gb_GameBoy
 			{
 				union
 				{
-					gb_CpuFlags flags;
+					struct
+					{
+						uint8_t _ : 4;
+						uint8_t carry : 1;
+						uint8_t half_carry : 1;
+						// TODO: name, have also seen "operation" and "negative"
+						uint8_t subtract : 1;
+						uint8_t zero : 1;
+					} flags;
 					uint8_t f;
 				};
 				uint8_t a;
