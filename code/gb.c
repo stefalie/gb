@@ -1600,15 +1600,6 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 	return strlen(str_buf);
 }
 
-static inline void
-gb__SetFlags(gb_GameBoy* gb, bool zero, bool subtract, bool half_carry, bool carry)
-{
-	gb->cpu.flags.zero = zero ? 1 : 0;
-	gb->cpu.flags.subtract = subtract ? 1 : 0;
-	gb->cpu.flags.half_carry = half_carry ? 1 : 0;
-	gb->cpu.flags.carry = carry ? 1 : 0;
-}
-
 size_t
 gb_ExecuteNextInstruction(gb_GameBoy* gb)
 {
@@ -1654,83 +1645,123 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 
 	case 0xA0:  // AND B
 		gb->cpu.a &= gb->cpu.b;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+			.half_carry = 1,
+		};
 		assert(false);
 		break;
 	case 0xA1:  // AND C
 		gb->cpu.a &= gb->cpu.c;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+			.half_carry = 1,
+		};
 		assert(false);
 		break;
 	case 0xA2:  // AND D
 		gb->cpu.a &= gb->cpu.d;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+			.half_carry = 1,
+		};
 		assert(false);
 		break;
 	case 0xA3:  // AND E
 		gb->cpu.a &= gb->cpu.e;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+			.half_carry = 1,
+		};
 		assert(false);
 		break;
 	case 0xA4:  // AND H
 		gb->cpu.a &= gb->cpu.h;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+			.half_carry = 1,
+		};
 		assert(false);
 		break;
 	case 0xA5:  // AND L
 		gb->cpu.a &= gb->cpu.l;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+			.half_carry = 1,
+		};
 		assert(false);
 		break;
 	case 0xA6:  // AND (HL)
 		gb->cpu.a &= gb_MemoryReadByte(gb, gb->cpu.hl);
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+			.half_carry = 1,
+		};
 		assert(false);
 		break;
 	case 0xA7:  // AND A
 		gb->cpu.a &= gb->cpu.a;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+			.half_carry = 1,
+		};
 		assert(false);
 		break;
 
 	case 0xA8:  // XOR B
 		gb->cpu.a ^= gb->cpu.b;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+		};
 		assert(false);
 		break;
 	case 0xA9:  // XOR C
 		gb->cpu.a ^= gb->cpu.c;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+		};
 		assert(false);
 		break;
 	case 0xAA:  // XOR D
 		gb->cpu.a ^= gb->cpu.d;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+		};
 		assert(false);
 		break;
 	case 0xAB:  // XOR E
 		gb->cpu.a ^= gb->cpu.e;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+		};
 		assert(false);
 		break;
 	case 0xAC:  // XOR H
 		gb->cpu.a ^= gb->cpu.h;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+		};
 		assert(false);
 		break;
 	case 0xAD:  // XOR L
 		gb->cpu.a ^= gb->cpu.l;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+		};
 		assert(false);
 		break;
 	case 0xAE:  // XOR (HL)
 		gb->cpu.a ^= gb_MemoryReadByte(gb, gb->cpu.hl);
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+		};
 		assert(false);
 		break;
 	case 0xAF:  // XOR A
 		gb->cpu.a ^= gb->cpu.a;  // Identical to: gb->cpu.a = 0
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		gb->cpu.flags = (gb_CpuFlags){
+			.zero = gb->cpu.a == 0,
+		};
 		break;
 
 	case 0xCB:  // PREFIX
