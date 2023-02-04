@@ -84,6 +84,7 @@ gb__Lo(uint16_t val)
 {
 	return val & 0xFF;
 }
+// TODO: remove if never used
 static inline uint16_t
 gb__LoHi(uint8_t lo, uint8_t hi)
 {
@@ -153,67 +154,8 @@ gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom, uint32_t num_bytes)
 	return false;
 }
 
-static uint8_t*
-gb__MemoryMapReadWrite(gb_GameBoy* gb, uint16_t addr)
-{
-	const uint16_t switchable_rom_bank_end = 0x8000;
-	assert(addr >= switchable_rom_bank_end);
-
-	switch (addr & 0xF000)
-	{
-	// VRAM
-	case 0x8000:
-	case 0x9000:
-		// vram does somthing special with tiles
-		assert(false);
-		return &gb->memory.vram[addr & 0x1FFF];
-	// Switchable RAM bank
-	case 0xA000:
-	case 0xB000:
-		assert(false);
-		return &gb->memory.external_ram[addr & 0x1FFF];
-	// (Internal) working RAM
-	case 0xC000:
-	case 0xD000:
-		assert(false);
-		return &gb->memory.wram[addr & 0x1FFF];
-	// Echo of (Internal) working RAM, I/O, zero page
-	case 0xE000:
-	case 0xF000:
-		switch (addr & 0x0F00)
-		{
-		// Echo of (Internal) working RAM
-		default:
-			return &gb->memory.wram[addr & 0x1FFF];
-		// Sprite Attrib Memory (OAM)
-		case 0x0E00:
-			// TODO: is this assert or return 0?
-			// I fear it won't work as exceptec. You can't write it, but you can read 0?
-			assert(addr < 0xFEA0);
-			assert(false);
-			return NULL;
-		case 0x0F00:
-			if (addr >= 0xFF80)  // Zero page
-			{
-				return &gb->memory.zero_page[addr & 0x7F];
-			}
-			else  // I/O TODO
-			{
-				// TODO: is this assert or return 0?
-				// I fear it won't work as exceptec. You can't write it, but you can read 0?
-				assert(addr < 0xFF4C);
-				assert(false);
-				return NULL;
-			}
-		}
-	default:
-		assert(false);
-		return NULL;
-	}
-}
-
-static const uint8_t*
-gb__MemoryMapReadonly(const gb_GameBoy* gb, uint16_t addr)
+uint8_t
+gb_MemoryReadByte(const gb_GameBoy* gb, uint16_t addr)
 {
 	switch (addr & 0xF000)
 	{
@@ -224,31 +166,163 @@ gb__MemoryMapReadonly(const gb_GameBoy* gb, uint16_t addr)
 	case 0x3000:
 		if (gb->memory.bios_mapped && addr < 0x100)
 		{
-			return &gb__bios[addr];
+			return gb__bios[addr];
 		}
 		else
 		{
-			return &gb->rom.data[addr];
+			return gb->rom.data[addr];
 		}
 	// Switchable ROM bank
 	case 0x4000:
 	case 0x5000:
 	case 0x6000:
 	case 0x7000:
-		assert(false);
+		assert(!"TODO");
 		const size_t rom_bank = 1;  // TODO
 		const uint16_t rom_bank_0_end = 0x4000;
-		return &gb->rom.data[(rom_bank - 1) * rom_bank_0_end + addr];
-	// Fetch from writable region of the address space.
+		return gb->rom.data[(rom_bank - 1) * rom_bank_0_end + addr];
+	// VRAM
+	case 0x8000:
+	case 0x9000:
+		assert(!"TODO");
+		return gb->memory.vram[addr & 0x1FFF];
+	// Switchable RAM bank
+	case 0xA000:
+	case 0xB000:
+		assert(!"TODO");
+		return gb->memory.external_ram[addr & 0x1FFF];
+	// (Internal) working RAM
+	case 0xC000:
+	case 0xD000:
+		assert(!"TODO");
+		return gb->memory.wram[addr & 0x1FFF];
+	// Echo of (Internal) working RAM, I/O, zero page
+	case 0xE000:
+	case 0xF000:
+		switch (addr & 0x0F00)
+		{
+		// Echo of (Internal) working RAM
+		default:  // [0xE000, 0xFE00)
+			assert((addr - 0xE000) < 0x1E00);
+			return gb->memory.wram[addr & 0x1FFF];
+		case 0x0E00:
+			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
+			{
+				assert(!"TODO");
+				return 0;
+			}
+			else  // Empty
+			{
+				return 0;
+			}
+		case 0x0F00:
+			if (addr < 0xFF4C)  // I/O
+			{
+				assert(!"TODO");
+				return 0;
+			}
+			else if (addr < 0xFF80)  // Empty
+			{
+				return 0;
+			}
+			else  // Zero page
+			{
+				assert((addr - 0xFF80) < 0x80);
+				assert(!"TODO");
+				return gb->memory.zero_page[addr & 0x7F];
+			}
+		}
 	default:
-		return gb__MemoryMapReadWrite((gb_GameBoy*)gb, addr);
+		assert(false);
+		return 0;
 	}
 }
 
+uint16_t
+gb_MemoryReadWord(const gb_GameBoy* gb, uint16_t addr)
+{
+	return gb_MemoryReadByte(gb, addr) + (gb_MemoryReadByte(gb, addr + 1) << 8u);
+}
+
+// TODO: Can gb_MemoryReadByte and gb__MemoryWriteByte be merged?
+// Maybe a combined MemoryMap function that just returns a pointer.
+// gb__MemoryWriteByte does some checks or redirections when accessing control registers, timers, roms. Otherwise it
+// uses the map function. The map function asserts for all empty areas and stuff that doesn't have an address. the
+// timers maybe (but even that has an address in our case).
 static inline void
 gb__MemoryWriteByte(gb_GameBoy* gb, uint16_t addr, uint8_t value)
 {
-	*gb__MemoryMapReadWrite(gb, addr) = value;
+	switch (addr & 0xF000)
+	{
+	// ROM bank 0 or BIOS
+	case 0x0000:
+	case 0x1000:
+	case 0x2000:
+	case 0x3000:
+		if (gb->memory.bios_mapped && addr < 0x100)
+		{
+			assert(false);
+		}
+		assert(!"TODO");
+	// Switchable ROM bank
+	case 0x4000:
+	case 0x5000:
+	case 0x6000:
+	case 0x7000:
+		assert(!"TODO");
+	// VRAM
+	case 0x8000:
+	case 0x9000:
+		assert(!"TODO");
+	// Switchable RAM bank
+	case 0xA000:
+	case 0xB000:
+		assert(!"TODO");
+		gb->memory.external_ram[addr & 0x1FFF] = value;
+	// (Internal) working RAM
+	case 0xC000:
+	case 0xD000:
+		assert(!"TODO");
+		gb->memory.wram[addr & 0x1FFF] = value;
+	// Echo of (Internal) working RAM, I/O, zero page
+	case 0xE000:
+	case 0xF000:
+		switch (addr & 0x0F00)
+		{
+		// Echo of (Internal) working RAM
+		default:  // [0xE000, 0xFE00)
+			assert((addr - 0xE000) < 0x1E00);
+			gb->memory.wram[addr & 0x1FFF] = value;
+		case 0x0E00:
+			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
+			{
+				assert(!"TODO");
+			}
+			else
+			{
+				// The empty area is ignored
+				assert(!"TODO");
+			}
+		case 0x0F00:
+			if (addr < 0xFF4C)  // I/O
+			{
+				assert(!"TODO");
+			}
+			else if (addr < 0xFF80)
+			{
+				// The empty area is ignored
+				assert(!"TODO");
+			}
+			else  // Zero page
+			{
+				assert((addr - 0xFF80) < 0x80);
+				assert(!"TODO");
+				gb->memory.zero_page[addr & 0x7F] = value;
+			}
+		}
+	default:
+		assert(false);
+	}
 }
 // TODO: needed?
 // static inline void
@@ -257,18 +331,6 @@ gb__MemoryWriteByte(gb_GameBoy* gb, uint16_t addr, uint8_t value)
 //	gb__MemoryWriteByte(gb, addr, gb__Lo(value));
 //	gb__MemoryWriteByte(gb, addr + 1, gb__Hi(value));
 // }
-
-// TODO: let this replace gb__MemoryMapReadonly!
-uint8_t
-gb_MemoryReadByte(const gb_GameBoy* gb, uint16_t addr)
-{
-	return *gb__MemoryMapReadonly(gb, addr);
-}
-uint16_t
-gb_MemoryReadWord(const gb_GameBoy* gb, uint16_t addr)
-{
-	return gb__LoHi(gb_MemoryReadByte(gb, addr), gb_MemoryReadByte(gb, addr + 1));
-}
 
 void
 gb_Reset(gb_GameBoy* gb)

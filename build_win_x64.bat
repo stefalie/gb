@@ -20,7 +20,7 @@ if not "%3" equ "" (
 goto :build
 :usage
 @echo ERROR: Incorrect usage, use as follows:
-@echo build.bat (Clang^|Msvc) (Rel^|Deb)
+@echo build_win_x64.bat (Clang^|Msvc) (Rel^|Deb)
 goto :eof
 :build
 
