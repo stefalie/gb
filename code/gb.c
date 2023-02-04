@@ -154,6 +154,20 @@ gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom, uint32_t num_bytes)
 	return false;
 }
 
+// TODO: Can gb_MemoryReadByte and gb__MemoryWriteByte be merged?
+// Maybe a combined MemoryMap function that just returns a pointer.
+// gb__MemoryWriteByte does some checks or redirections when accessing control registers, timers, roms. Otherwise it
+// uses the map function. The map function asserts for all empty areas and stuff that doesn't have an address. the
+// timers maybe (but even that has an address in our case).
+//
+// If this is possible depends on how many virtual addresses there are that
+// behave different when reading from or writing to it.
+// We will know more towards the end fo the project.
+//static uint8_t*
+//gb__MemoryMap(gb_GameBoy* gb, uint16_t addr)
+//{
+//}
+
 uint8_t
 gb_MemoryReadByte(const gb_GameBoy* gb, uint16_t addr)
 {
@@ -244,12 +258,7 @@ gb_MemoryReadWord(const gb_GameBoy* gb, uint16_t addr)
 	return gb_MemoryReadByte(gb, addr) + (gb_MemoryReadByte(gb, addr + 1) << 8u);
 }
 
-// TODO: Can gb_MemoryReadByte and gb__MemoryWriteByte be merged?
-// Maybe a combined MemoryMap function that just returns a pointer.
-// gb__MemoryWriteByte does some checks or redirections when accessing control registers, timers, roms. Otherwise it
-// uses the map function. The map function asserts for all empty areas and stuff that doesn't have an address. the
-// timers maybe (but even that has an address in our case).
-static inline void
+static void
 gb__MemoryWriteByte(gb_GameBoy* gb, uint16_t addr, uint8_t value)
 {
 	switch (addr & 0xF000)
