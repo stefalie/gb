@@ -1032,7 +1032,6 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		ImGui::Begin(tab_name_disassembly);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
-		ImGui::End();
 		ImGui::Begin(tab_name_cpu);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
@@ -1322,6 +1321,9 @@ main(int argc, char* argv[])
 		LoadRomFromFile(&config, &gb, argv[1]);
 	}
 
+	const uint64_t counter_freq = SDL_GetPerformanceFrequency();
+	uint64_t prev_time = SDL_GetPerformanceCounter();
+
 	// Main Loop
 	while (!config.quit)
 	{
@@ -1336,7 +1338,7 @@ main(int argc, char* argv[])
 		{
 			ImGui_ImplSDL2_ProcessEvent(&event);
 
-			// TODO: Not needed for GB I think. Also modal poup wants input and then doesn't give us the keys anymore.
+			// TODO: Not needed for GB I think. Also modal popup wants input and then doesn't give us the keys anymore.
 			// BAD.
 			// ImGuiIO& io = ImGui::GetIO(); if ((io.WantCaptureMouse && (event.type == SDL_MOUSEWHEEL ||
 			// event.type == SDL_MOUSEBUTTONDOWN)) ||
@@ -1478,29 +1480,21 @@ main(int argc, char* argv[])
 		ImGui::SetCurrentContext(config.handles.imgui);  // Reset (if changed)
 
 		// Run emulator
+		size_t elapsed_machine_cycles = 0;
 		if (config.gui.has_active_rom && (!config.gui.single_step_mode || config.gui.exec_next_step))
 		{
 			config.gui.exec_next_step = false;
 
-			const size_t num_elapsed_gb_cyles = gb_ExecuteNextInstruction(&gb);
+			elapsed_machine_cycles = gb_ExecuteNextInstruction(&gb);
 
 			// Break and open the debugger if -1 was returned from the execution
 			// of the instruction. This was used for the step by step implementation
 			// of instructions when missing ones would return -1.
-			if (num_elapsed_gb_cyles == (size_t)-1)
+			if (elapsed_machine_cycles == (size_t)-1)
 			{
 				config.debug.show = true;
 				config.gui.single_step_mode = true;
-
-				// TODO: remove
-				// char str_buf[32];
-				// const gb_Instruction inst = gb_FetchInstruction(&gb, gb.cpu.pc);
-				// gb_DisassembleInstruction(inst, str_buf, sizeof(str_buf));
-				// SDL_Log("%s\n", str_buf);
-				////assert(false);
 			}
-
-			// TODO: timing
 		}
 
 		// OpenGL drawing
@@ -1547,9 +1541,6 @@ main(int argc, char* argv[])
 				y = (fb_height - h) / 2;
 				glViewport(x, y, w, h);
 			}
-
-			// TODO: Don't use ticks, use perf counters as shown in the Imgui example.
-			// const int tick = SDL_GetTicks();  // TODO
 
 			const gb_Framebuffer fb = gb_MagFramebuffer(&gb, config.ini.mag_filter, pixels);
 			if (config.gui.mag_filter_changed)
@@ -1619,6 +1610,22 @@ main(int argc, char* argv[])
 				SDL_HideWindow(config.handles.debug_window);
 			}
 		}
+
+		// Timing
+		// TODO: stretch elapsed gb time according to emulation speed.
+		// TODO: don't sleep at all for max game speed.
+		// TODO: move constant to gb file
+		const uint32_t GB_MACHINE_FREQ = 1048576;
+		const double elapsed_gb_time_in_ms = (double)elapsed_machine_cycles / GB_MACHINE_FREQ * 1000.0;
+		const uint64_t curr_time = SDL_GetPerformanceCounter();
+		const double dt_in_ms = (double)(curr_time - prev_time) / counter_freq * 1000.0;
+		const uint32_t wait_ms = (uint32_t)round(dt_in_ms - elapsed_gb_time_in_ms);
+		assert(wait_ms >= 0); // TODO:rem
+		if (wait_ms > 0)
+		{
+			SDL_Delay(wait_ms);
+		}
+		prev_time = curr_time;
 	}
 
 	glDeleteTextures(1, &texture);

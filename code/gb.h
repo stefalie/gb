@@ -8,7 +8,16 @@
 #define GB_FRAMEBUFFER_WIDTH 160
 #define GB_FRAMEBUFFER_HEIGHT 144
 
-typedef struct
+typedef struct gb_CpuFlags
+{
+	uint8_t _ : 4;
+	uint8_t carry : 1;
+	uint8_t half_carry : 1;
+	uint8_t subtract : 1;
+	uint8_t zero : 1;
+} gb_CpuFlags;
+
+typedef struct gb_GameBoy
 {
 	// The CPU conains only the registers.
 	// Note that the GameBoy uses little-endian.
@@ -20,14 +29,7 @@ typedef struct
 			{
 				union
 				{
-					struct
-					{
-						uint8_t _ : 4;
-						uint8_t carry : 1;
-						uint8_t half_carry : 1;
-						uint8_t subtract : 1;
-						uint8_t zero : 1;
-					} flags;
+					gb_CpuFlags flags;
 					uint8_t f;
 				};
 				uint8_t a;
@@ -75,7 +77,13 @@ typedef struct
 		uint8_t zero_page[128];
 	} memory;
 
-	// TODO: timers
+	struct Timer
+	{
+		uint8_t div;
+		uint8_t tima;
+		uint8_t tma;
+		uint8_t tac;
+	} timer;
 
 	struct Framebuffer
 	{
@@ -114,7 +122,7 @@ void
 gb_Reset(gb_GameBoy* gb);
 
 // A GameBoy assembly instruction.
-typedef struct
+typedef struct gb_Instruction
 {
 	uint8_t opcode;
 	uint8_t num_operand_bytes;
