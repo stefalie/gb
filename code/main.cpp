@@ -895,7 +895,7 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 
 	const char* tab_name_rom_view = "ROM View";
 	const char* tab_name_mem_view = "Memory View";
-	const char* tab_name_options = "Options";
+	const char* tab_name_options = "Options and Info";
 	const char* tab_name_disassembly = "Disassembly at PC";
 	const char* tab_name_cpu = "CPU State";
 	const char* tab_name_sprites = "Sprites";
@@ -1043,7 +1043,27 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 	{  // TODO
 		ImGui::Begin(tab_name_options);
 		ImGui::Checkbox("Highlight current instruction", &config->debug.views_follow_pc);
+
+		// Compute average framerate.
+		static Uint64 frequency = SDL_GetPerformanceFrequency();
+		static Uint64 prev_time = SDL_GetPerformanceCounter();
+		Uint64 curr_time = SDL_GetPerformanceCounter();
+		const double dt = (double)(curr_time - prev_time) / frequency;
+		static float avg_dt_in_ms = 0.0f;
+		avg_dt_in_ms = avg_dt_in_ms * 0.95f + (float)(dt * 1000.0) * 0.05f;
+
+		// Using avg_dt_in_ms is somehow more accurate than ImGui::GetIO().Framerate.
+		// I dunno why. Maybe because of all the two window shenanigans we do?
+		// This FPS counter includes rendering the debug window, which is likely the
+		// bottleneck.
+		ImGui::Text("Frame time: %.3f ms", avg_dt_in_ms);
+		ImGui::Text("FPS: %.1f", 1000.0f / avg_dt_in_ms);
+		prev_time = curr_time;
+
 		ImGui::End();
+	}
+
+	{
 		ImGui::Begin(tab_name_righttab2);
 		ImGui::Text("text text text left");
 		ImGui::End();
@@ -1619,8 +1639,17 @@ main(int argc, char* argv[])
 		const double elapsed_gb_time_in_ms = (double)elapsed_machine_cycles / GB_MACHINE_FREQ * 1000.0;
 		const uint64_t curr_time = SDL_GetPerformanceCounter();
 		const double dt_in_ms = (double)(curr_time - prev_time) / counter_freq * 1000.0;
-		const uint32_t wait_ms = (uint32_t)round(dt_in_ms - elapsed_gb_time_in_ms);
-		assert(wait_ms >= 0); // TODO:rem
+		const int wait_ms = (int)round(elapsed_gb_time_in_ms - dt_in_ms);
+		// TODO: start rem
+		static uint32_t counter = 0;
+		if (counter++ % 100 == 0)
+		{
+			SDL_Log("elapsed cycles: %i\n", elapsed_machine_cycles);
+			SDL_Log("elapsed gb time: %f\n", elapsed_gb_time_in_ms);
+			SDL_Log("dt in ms: %f\n", dt_in_ms);
+			SDL_Log("Wait time: %i\n", wait_ms);
+		}
+		// TODO: end rem
 		if (wait_ms > 0)
 		{
 			SDL_Delay(wait_ms);

@@ -261,77 +261,90 @@ gb_MemoryReadWord(const gb_GameBoy* gb, uint16_t addr)
 static void
 gb__MemoryWriteByte(gb_GameBoy* gb, uint16_t addr, uint8_t value)
 {
-	switch (addr & 0xF000)
-	{
-	// ROM bank 0 or BIOS
-	case 0x0000:
-	case 0x1000:
-	case 0x2000:
-	case 0x3000:
-		if (gb->memory.bios_mapped && addr < 0x100)
-		{
-			assert(false);
-		}
-		assert(!"TODO");
-	// Switchable ROM bank
-	case 0x4000:
-	case 0x5000:
-	case 0x6000:
-	case 0x7000:
-		assert(!"TODO");
-	// VRAM
-	case 0x8000:
-	case 0x9000:
-		assert(!"TODO");
-	// Switchable RAM bank
-	case 0xA000:
-	case 0xB000:
-		assert(!"TODO");
-		gb->memory.external_ram[addr & 0x1FFF] = value;
-	// (Internal) working RAM
-	case 0xC000:
-	case 0xD000:
-		assert(!"TODO");
-		gb->memory.wram[addr & 0x1FFF] = value;
-	// Echo of (Internal) working RAM, I/O, zero page
-	case 0xE000:
-	case 0xF000:
-		switch (addr & 0x0F00)
-		{
-		// Echo of (Internal) working RAM
-		default:  // [0xE000, 0xFE00)
-			assert((addr - 0xE000) < 0x1E00);
-			gb->memory.wram[addr & 0x1FFF] = value;
-		case 0x0E00:
-			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
-			{
-				assert(!"TODO");
-			}
-			else
-			{
-				// The empty area is ignored
-				assert(!"TODO");
-			}
-		case 0x0F00:
-			if (addr < 0xFF4C)  // I/O
-			{
-				assert(!"TODO");
-			}
-			else if (addr < 0xFF80)
-			{
-				// The empty area is ignored
-				assert(!"TODO");
-			}
-			else  // Zero page
-			{
-				assert((addr - 0xFF80) < 0x80);
-				assert(!"TODO");
-				gb->memory.zero_page[addr & 0x7F] = value;
-			}
-		}
-	default:
-		assert(false);
-	}
+	(void)gb;
+	(void)addr;
+	(void)value;
+
+//	switch (addr & 0xF000)
+//	{
+//	// ROM bank 0 or BIOS
+//	case 0x0000:
+//	case 0x1000:
+//	case 0x2000:
+//	case 0x3000:
+//		if (gb->memory.bios_mapped && addr < 0x100)
+//		{
+//			assert(false);
+//		}
+//		assert(!"TODO");
+//		break;
+//	// Switchable ROM bank
+//	case 0x4000:
+//	case 0x5000:
+//	case 0x6000:
+//	case 0x7000:
+//		assert(!"TODO");
+//		break;
+//	// VRAM
+//	case 0x8000:
+//	case 0x9000:
+//		assert(!"TODO");
+//		break;
+//	// Switchable RAM bank
+//	case 0xA000:
+//	case 0xB000:
+//		assert(!"TODO");
+//		gb->memory.external_ram[addr & 0x1FFF] = value;
+//		break;
+//	// (Internal) working RAM
+//	case 0xC000:
+//	case 0xD000:
+//		assert(!"TODO");
+//		gb->memory.wram[addr & 0x1FFF] = value;
+//		break;
+//	// Echo of (Internal) working RAM, I/O, zero page
+//	case 0xE000:
+//	case 0xF000:
+//		switch (addr & 0x0F00)
+//		{
+//		// Echo of (Internal) working RAM
+//		default:  // [0xE000, 0xFE00)
+//			assert((addr - 0xE000) < 0x1E00);
+//			gb->memory.wram[addr & 0x1FFF] = value;
+//		case 0x0E00:
+//			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
+//			{
+//				assert(!"TODO");
+//			}
+//			else
+//			{
+//				// The empty area is ignored
+//				assert(!"TODO");
+//			}
+//			break;
+//		case 0x0F00:
+//			if (addr < 0xFF4C)  // I/O
+//			{
+//				assert(!"TODO");
+//			}
+//			else if (addr < 0xFF80)
+//			{
+//				// The empty area is ignored
+//				assert(!"TODO");
+//			}
+//			else  // Zero page
+//			{
+//				assert((addr - 0xFF80) < 0x80);
+//				assert(!"TODO");
+//				gb->memory.zero_page[addr & 0x7F] = value;
+//			}
+//			break;
+//		}
+//		break;
+//	default:
+//		assert(false);
+//		break;
+//	}
 }
 // TODO: needed?
 // static inline void
