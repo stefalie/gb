@@ -1343,10 +1343,49 @@ main(int argc, char* argv[])
 
 	const uint64_t counter_freq = SDL_GetPerformanceFrequency();
 	uint64_t prev_time = SDL_GetPerformanceCounter();
+	// TODO: move constant to gb file
+	const uint32_t GB_MACHINE_FREQ = 1048576;
+	const uint32_t GB_MACHINE_CYCLES_PER_FRAME = 70224;
+	const uint32_t machine_cycle_acc = 0;
 
 	// Main Loop
 	while (!config.quit)
 	{
+		// TODO: should this be moved right before the actual emu update?
+		const uint64_t curr_time = SDL_GetPerformanceCounter();
+		const double dt_in_s = (double)(curr_time - prev_time) / counter_freq;
+		const uint32_t elapsed_machine_cycles = dt_in_s* GB_MACHINE_FREQ machine_cycle_acc += elapsed_machine_cycles;
+		prev_time = curr_time;
+
+		while (machine_cycle_acc >= GB_MACHINE_CYCLES_PER_FRAME)
+		{
+			// TODO: emulate frame
+			machine_cycle_acc -= GB_MACHINE_CYCLES_PER_FRAME;
+		}
+
+		//// Timing
+		//// TODO: stretch elapsed gb time according to emulation speed.
+		//// TODO: don't sleep at all for max game speed.
+		//// TODO: move constant to gb file
+		// const double elapsed_gb_time_in_ms = (double)elapsed_machine_cycles / GB_MACHINE_FREQ * 1000.0;
+		// const uint64_t curr_time = SDL_GetPerformanceCounter();
+		// const double dt_in_ms = (double)(curr_time - prev_time) / counter_freq * 1000.0;
+		// const int wait_ms = (int)round(elapsed_gb_time_in_ms - dt_in_ms);
+		//// TODO: start rem
+		// static uint32_t counter = 0;
+		// if (counter++ % 100 == 0)
+		//{
+		//	SDL_Log("elapsed cycles: %i\n", elapsed_machine_cycles);
+		//	SDL_Log("elapsed gb time: %f\n", elapsed_gb_time_in_ms);
+		//	SDL_Log("dt in ms: %f\n", dt_in_ms);
+		//	SDL_Log("Wait time: %i\n", wait_ms);
+		// }
+		//// TODO: end rem
+		// if (wait_ms > 0)
+		//{
+		//	SDL_Delay(wait_ms);
+		// }
+
 		// Make sure the right ImGui context gets the event.
 		if (SDL_GetWindowFlags(config.handles.debug_window) & SDL_WINDOW_INPUT_FOCUS)
 		{
@@ -1631,30 +1670,30 @@ main(int argc, char* argv[])
 			}
 		}
 
-		// Timing
-		// TODO: stretch elapsed gb time according to emulation speed.
-		// TODO: don't sleep at all for max game speed.
-		// TODO: move constant to gb file
-		const uint32_t GB_MACHINE_FREQ = 1048576;
-		const double elapsed_gb_time_in_ms = (double)elapsed_machine_cycles / GB_MACHINE_FREQ * 1000.0;
-		const uint64_t curr_time = SDL_GetPerformanceCounter();
-		const double dt_in_ms = (double)(curr_time - prev_time) / counter_freq * 1000.0;
-		const int wait_ms = (int)round(elapsed_gb_time_in_ms - dt_in_ms);
-		// TODO: start rem
-		static uint32_t counter = 0;
-		if (counter++ % 100 == 0)
-		{
-			SDL_Log("elapsed cycles: %i\n", elapsed_machine_cycles);
-			SDL_Log("elapsed gb time: %f\n", elapsed_gb_time_in_ms);
-			SDL_Log("dt in ms: %f\n", dt_in_ms);
-			SDL_Log("Wait time: %i\n", wait_ms);
-		}
-		// TODO: end rem
-		if (wait_ms > 0)
-		{
-			SDL_Delay(wait_ms);
-		}
-		prev_time = curr_time;
+		//// Timing
+		//// TODO: stretch elapsed gb time according to emulation speed.
+		//// TODO: don't sleep at all for max game speed.
+		//// TODO: move constant to gb file
+		// const uint32_t GB_MACHINE_FREQ = 1048576;
+		// const double elapsed_gb_time_in_ms = (double)elapsed_machine_cycles / GB_MACHINE_FREQ * 1000.0;
+		// const uint64_t curr_time = SDL_GetPerformanceCounter();
+		// const double dt_in_ms = (double)(curr_time - prev_time) / counter_freq * 1000.0;
+		// const int wait_ms = (int)round(elapsed_gb_time_in_ms - dt_in_ms);
+		//// TODO: start rem
+		// static uint32_t counter = 0;
+		// if (counter++ % 100 == 0)
+		//{
+		//	SDL_Log("elapsed cycles: %i\n", elapsed_machine_cycles);
+		//	SDL_Log("elapsed gb time: %f\n", elapsed_gb_time_in_ms);
+		//	SDL_Log("dt in ms: %f\n", dt_in_ms);
+		//	SDL_Log("Wait time: %i\n", wait_ms);
+		// }
+		//// TODO: end rem
+		// if (wait_ms > 0)
+		//{
+		//	SDL_Delay(wait_ms);
+		// }
+		// prev_time = curr_time;
 	}
 
 	glDeleteTextures(1, &texture);
