@@ -1,4 +1,4 @@
-﻿---
+---
 AccessModifierOffset: -4
 AlignAfterOpenBracket: DontAlign
 AlignConsecutiveAssignments: false
@@ -36,7 +36,6 @@ BraceWrapping:
   SplitEmptyFunction: false
   SplitEmptyRecord: false
   SplitEmptyNamespace: false
-#BreakAfterJavaFieldAnnotations: true
 BreakBeforeBinaryOperators: None
 # This activates that the options under BraceWrapping
 BreakBeforeBraces: Custom
@@ -45,7 +44,6 @@ BreakConstructorInitializers: AfterColon
 BreakInheritanceList: AfterColon
 BreakStringLiterals: true
 ColumnLimit: 120
-#CommentPragmas:
 CompactNamespaces: false
 ConstructorInitializerAllOnOneLineOrOnePerLine: true
 ConstructorInitializerIndentWidth: 4
@@ -53,7 +51,7 @@ ContinuationIndentWidth: 8
 Cpp11BracedListStyle: false
 DerivePointerAlignment: false
 DisableFormat: false
-#ExperimentalAutoDetectBinPacking: false
+EmptyLineBeforeAccessModifier: Always
 FixNamespaceComments: true
 ForEachMacros:
 IncludeBlocks: Preserve
@@ -68,23 +66,16 @@ IncludeCategories:
     Priority:        4
 IncludeIsMainRegex: '(_test)?$'
 IndentCaseLabels: false
-IndentPPDirectives: None
+IndentPPDirectives: BeforeHash
 IndentWidth: 4
 IndentWrappedFunctionNames: false
-#JavaImportGroups:
-#JavaScriptQuotes: Double
-#JavaScriptWrapImports: true
-# Setting this to false will remove empty lines at the beginning of namespaces.
+InsertBraces: true
+# Setting this to false will remove empty lines at the beginning of namespaces unfortunately.
 KeepEmptyLinesAtTheStartOfBlocks: true
 Language: Cpp
-#MacroBlockBegin:
-#MacroBlockEnd:
 MaxEmptyLinesToKeep: 2
 NamespaceIndentation: None
-#ObjCBinPackProtocolList: Auto
-#ObjCBlockIndentWidth: 4
-#ObjCSpaceAfterProperty: false
-#ObjCSpaceBeforeProtocolList: false
+PackConstructorInitializers: Never
 # The penalties are stolen from Google, except the last one.
 PenaltyBreakAssignment: 2
 PenaltyBreakBeforeFirstCallParameter: 1
@@ -95,12 +86,15 @@ PenaltyBreakTemplateDeclaration: 10
 PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 0
 PointerAlignment: Left
+PPIndentWidth: -1
 RawStringFormats:
   - Language: Cpp
     Delimiters:
       - 'cpp'
     CanonicalDelimiter: 'cpp'
+ReferenceAlignment: Left
 ReflowComments: true
+#SeparateDefinitionBlocks: Always
 SortIncludes: true
 SortUsingDeclarations: true
 SpaceAfterCStyleCast: false
@@ -115,10 +109,11 @@ SpaceInEmptyParentheses: false
 SpacesBeforeTrailingComments: 2
 SpacesInAngles: false
 SpacesInCStyleCastParentheses: false
-#SpacesInContainerLiterals: true
+SpacesInLineCommentPrefix: 
+  Minimum: 1
+  Maximum: 1
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
 Standard: Cpp11
-#StatementMacros:
 TabWidth: 4
 UseTab: ForContinuationAndIndentation
