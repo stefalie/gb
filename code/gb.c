@@ -410,11 +410,19 @@ typedef struct
 } gb__InstructionInfo;
 
 static const gb__InstructionInfo gb__instruction_infos[256] = {
-	{ "NOP", 0, 1 },
+	[0x00] = { "NOP", 0, 1 },
 
 	[0x01] = { "LD BC", 2, 3 },
 
+	[0x07] = { "RLC A", 0, 1 },
+
+	[0x0F] = { "RRC A", 0, 1 },
+
 	[0x11] = { "LD DE", 2, 3 },
+
+	[0x17] = { "RL A", 0, 1 },
+
+	[0x1F] = { "RR A", 0, 1 },
 
 	[0x21] = { "LD HL", 2, 3 },
 
@@ -430,7 +438,7 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 	[0xA6] = { "AND (HL)", 0, 2 },
 	[0xA7] = { "AND A", 0, 1 },
 
-	[0xCB] = { "PREFIX", 0, 1 },
+	[0xCB] = { "PREFIX", 0, 0 },  // Num cycles is 0 here because it's taken from the extended instruction table.
 
 	[0xA8] = { "XOR B", 0, 1 },
 	[0xA9] = { "XOR C", 0, 1 },
@@ -444,6 +452,44 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 	[0xE7] = { "AND n", 1, 2 },
 	[0xEE] = { "XOR n", 1, 2 },
 };
+
+static const gb__InstructionInfo gb__extended_instruction_infos[256] = {
+	[0x00] = { "RLC B", 0, 2 },
+	[0x01] = { "RLC C", 0, 2 },
+	[0x02] = { "RLC D", 0, 2 },
+	[0x03] = { "RLC E", 0, 2 },
+	[0x04] = { "RLC H", 0, 2 },
+	[0x05] = { "RLC L", 0, 2 },
+	[0x06] = { "RLC (HL)", 0, 4 },
+	[0x07] = { "RLC A", 0, 2 },
+	[0x08] = { "RRC B", 0, 2 },
+	[0x09] = { "RRC C", 0, 2 },
+	[0x0A] = { "RRC D", 0, 2 },
+	[0x0B] = { "RRC E", 0, 2 },
+	[0x0C] = { "RRC H", 0, 2 },
+	[0x0D] = { "RRC L", 0, 2 },
+	[0x0E] = { "RRC (HL)", 0, 4 },
+	[0x0F] = { "RRC A", 0, 2 },
+	[0x10] = { "RL B", 0, 2 },
+	[0x11] = { "RL C", 0, 2 },
+	[0x12] = { "RL D", 0, 2 },
+	[0x13] = { "RL E", 0, 2 },
+	[0x14] = { "RL H", 0, 2 },
+	[0x15] = { "RL L", 0, 2 },
+	[0x16] = { "RL (HL)", 0, 4 },
+	[0x17] = { "RL A", 0, 2 },
+	[0x18] = { "RR B", 0, 2 },
+	[0x19] = { "RR C", 0, 2 },
+	[0x1A] = { "RR D", 0, 2 },
+	[0x1B] = { "RR E", 0, 2 },
+	[0x1C] = { "RR H", 0, 2 },
+	[0x1D] = { "RR L", 0, 2 },
+	[0x1E] = { "RR (HL)", 0, 4 },
+	[0x1F] = { "RR A", 0, 2 },
+
+	[0x7C] = { "BIT 7,H", 0, 2 },
+};
+
 
 gb_Instruction
 gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
@@ -464,6 +510,23 @@ gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
 	{
 		inst.operand_word = gb_MemoryReadWord(gb, addr + 1);
 	}
+
+	return inst;
+}
+
+gb_Instruction
+gb__ExtendedFetchInstruction(const gb_GameBoy *gb, uint16_t addr)
+{
+	// Assert that extended instruction are prefixed properly.
+	assert(gb_MemoryReadByte(gb, addr - 1) == 0xCB);
+
+	gb_Instruction inst = {
+		.opcode = gb_MemoryReadByte(gb, addr),
+	};
+
+	const gb__InstructionInfo info = gb__instruction_infos[inst.opcode];
+	assert(info.num_operand_bytes == 0);
+	inst.num_machine_cycles = info.num_machine_cycles;
 
 	return inst;
 }
@@ -503,8 +566,186 @@ gb__SetFlags(gb_GameBoy *gb, bool zero, bool subtract, bool half_carry, bool car
 	gb->cpu.flags.carry = carry ? 1 : 0;
 }
 
+uint8_t *
+gl__MapIndexToReg(gb_GameBoy *gb, uint8_t index)
+{
+	index &= 0x07;
+
+	switch (index)
+	{
+	case 0:
+		return &gb->cpu.b;
+	case 1:
+		return &gb->cpu.c;
+	case 2:
+		return &gb->cpu.d;
+	case 3:
+		return &gb->cpu.e;
+	case 4:
+		return &gb->cpu.h;
+	case 5:
+		return &gb->cpu.l;
+	case 7:
+		return &gb->cpu.a;
+	default:
+		assert(false);
+		return NULL;
+	}
+}
+
+uint8_t
+gb__RotateLeftCircular(gb_GameBoy *gb, uint8_t val, bool clear_zero)
+{
+	const bool co = val & 0x80;
+	val <<= 1u;
+	if (co)
+	{
+		val |= 0x01;
+	}
+	gb__SetFlags(gb, clear_zero ? false : val == 0, false, false, co);
+	return val;
+}
+
+uint8_t
+gb__RotateLeft(gb_GameBoy *gb, uint8_t val, bool clear_zero)
+{
+	const bool co = val & 0x80;
+	val <<= 1u;
+	val |= gb->cpu.flags.carry;
+	gb__SetFlags(gb, clear_zero ? false : val == 0, false, false, co);
+	return val;
+}
+
+uint8_t
+gb__RotateRightCircular(gb_GameBoy *gb, uint8_t val, bool clear_zero)
+{
+	const bool co = val & 0x01;
+	val >>= 1u;
+	if (co)
+	{
+		val |= 0x08;
+	}
+	gb__SetFlags(gb, clear_zero ? false : val == 0, false, false, co);
+	return val;
+}
+
+uint8_t
+gb__RotateRight(gb_GameBoy *gb, uint8_t val, bool clear_zero)
+{
+	const bool co = val & 0x01;
+	val >>= 1u;
+	val |= gb->cpu.flags.carry << 7u;
+	gb__SetFlags(gb, clear_zero ? false : val == 0, false, false, co);
+	return val;
+}
+
 size_t
-gb_ExecuteNextInstruction(gb_GameBoy* gb)
+gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
+{
+	const gb_Instruction inst = gb__ExtendedFetchInstruction(gb, gb->cpu.pc);
+	const gb__InstructionInfo info = gb__extended_instruction_infos[inst.opcode];
+
+	gb->cpu.pc += 1;
+
+	switch (inst.opcode)
+	{
+	case 0x00:  // RLC B
+	case 0x01:  // RLC C
+	case 0x02:  // RLC D
+	case 0x03:  // RLC E
+	case 0x04:  // RLC H
+	case 0x05:  // RLC L
+	case 0x07:  // RLC A
+	{
+		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		*reg = gb__RotateLeftCircular(gb, *reg, false);
+		assert(false);
+		break;
+	}
+	case 0x06:  // RLC (HL)
+	{
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		val = gb__RotateLeftCircular(gb, val, false);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		assert(false);
+		break;
+	}
+	case 0x08:  // RRC B
+	case 0x09:  // RRC C
+	case 0x0A:  // RRC D
+	case 0x0B:  // RRC E
+	case 0x0C:  // RRC H
+	case 0x0D:  // RRC L
+	case 0x0E:  // RRC A
+	{
+		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		*reg = gb__RotateRightCircular(gb, *reg, false);
+		assert(false);
+		break;
+	}
+	case 0x0F:  // RRC (HL)
+	{
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		val = gb__RotateRightCircular(gb, val, false);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		assert(false);
+		break;
+	}
+	case 0x10:  // RL B
+	case 0x11:  // RL C
+	case 0x12:  // RL D
+	case 0x13:  // RL E
+	case 0x14:  // RL H
+	case 0x15:  // RL L
+	case 0x17:  // RL A
+	{
+		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		*reg = gb__RotateLeft(gb, *reg, false);
+		assert(false);
+		break;
+	}
+	case 0x16:  // RL (HL)
+	{
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		val = gb__RotateLeft(gb, val, false);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		assert(false);
+		break;
+	}
+	case 0x18:  // RR B
+	case 0x19:  // RR C
+	case 0x1A:  // RR D
+	case 0x1B:  // RR E
+	case 0x1C:  // RR H
+	case 0x1D:  // RR L
+	case 0x1E:  // RR A
+	{
+		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		*reg = gb__RotateRight(gb, *reg, false);
+		assert(false);
+		break;
+	}
+	case 0x1F:  // RR (HL)
+	{
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		val = gb__RotateRight(gb, val, false);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		assert(false);
+		break;
+	}
+
+	default:
+		// Revert PC
+		gb->cpu.pc -= 1;
+		// See note in the end of gb_ExecuteNextInstruction.
+		return (size_t)-1;
+	}
+
+	return info.num_machine_cycles;
+}
+
+size_t
+gb_ExecuteNextInstruction(gb_GameBoy *gb)
 {
 	assert(gb->rom.data);
 	assert(gb->rom.num_bytes);
@@ -519,9 +760,11 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 
 	gb->cpu.pc += 1 /* opcode */ + info.num_operand_bytes;
 
+	size_t result = info.num_machine_cycles;
+
 	switch (inst.opcode)
 	{
-	case 0:  // NOP
+	case 0x00:  // NOP
 		break;
 
 	case 0x01:  // LD BC, nn
@@ -529,8 +772,28 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 		assert(false);
 		break;
 
+	case 0x07:  // RLC A
+		gb->cpu.a = gb__RotateLeftCircular(gb, gb->cpu.a, true);
+		assert(false);
+		break;
+
+	case 0x0F:  // RRC A
+		gb->cpu.a = gb__RotateRightCircular(gb, gb->cpu.a, true);
+		assert(false);
+		break;
+
 	case 0x11:  // LD DE, nn
 		gb->cpu.de = inst.operand_word;
+		assert(false);
+		break;
+
+	case 0x17:  // RL A
+		gb->cpu.a = gb__RotateLeft(gb, gb->cpu.a, true);
+		assert(false);
+		break;
+
+	case 0x1F:  // RR A
+		gb->cpu.a = gb__RotateRight(gb, gb->cpu.a, true);
 		assert(false);
 		break;
 
@@ -547,91 +810,38 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 		break;
 
 	case 0xA0:  // AND B
-		gb->cpu.a &= gb->cpu.b;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
-		assert(false);
-		break;
 	case 0xA1:  // AND C
-		gb->cpu.a &= gb->cpu.c;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
-		assert(false);
-		break;
 	case 0xA2:  // AND D
-		gb->cpu.a &= gb->cpu.d;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
-		assert(false);
-		break;
 	case 0xA3:  // AND E
-		gb->cpu.a &= gb->cpu.e;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
-		assert(false);
-		break;
 	case 0xA4:  // AND H
-		gb->cpu.a &= gb->cpu.h;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
-		assert(false);
-		break;
 	case 0xA5:  // AND L
-		gb->cpu.a &= gb->cpu.l;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
-		assert(false);
+	case 0xA7:  // AND A
+		gb->cpu.a &= *gl__MapIndexToReg(gb, inst.opcode);
+		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
 		break;
 	case 0xA6:  // AND (HL)
 		gb->cpu.a &= gb_MemoryReadByte(gb, gb->cpu.hl);
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
-		assert(false);
-		break;
-	case 0xA7:  // AND A
-		gb->cpu.a &= gb->cpu.a;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
-		assert(false);
+		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
 		break;
 
 	case 0xA8:  // XOR B
-		gb->cpu.a ^= gb->cpu.b;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
-		assert(false);
-		break;
 	case 0xA9:  // XOR C
-		gb->cpu.a ^= gb->cpu.c;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
-		assert(false);
-		break;
 	case 0xAA:  // XOR D
-		gb->cpu.a ^= gb->cpu.d;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
-		assert(false);
-		break;
 	case 0xAB:  // XOR E
-		gb->cpu.a ^= gb->cpu.e;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
-		assert(false);
-		break;
 	case 0xAC:  // XOR H
-		gb->cpu.a ^= gb->cpu.h;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
-		assert(false);
-		break;
 	case 0xAD:  // XOR L
-		gb->cpu.a ^= gb->cpu.l;
+	case 0xAF:  // XOR A
+		gb->cpu.a ^= *gl__MapIndexToReg(gb, inst.opcode);
 		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
-		assert(false);
 		break;
 	case 0xAE:  // XOR (HL)
 		gb->cpu.a ^= gb_MemoryReadByte(gb, gb->cpu.hl);
 		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
-		assert(false);
-		break;
-	case 0xAF:  // XOR A
-		gb->cpu.a ^= gb->cpu.a;  // Identical to: gb->cpu.a = 0
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
 		break;
 
 	case 0xCB:  // PREFIX
-		// TODO: call extened operations in seperate function with separate switch
-		assert(false);
+		result = gb__ExecuteExtendedInstruction(gb);
 		break;
-
 
 	case 0xE7:  // AND n
 		gb->cpu.a &= inst.operand_byte;
@@ -671,7 +881,7 @@ gb_ExecuteNextInstruction(gb_GameBoy* gb)
 		return (size_t)-1;
 	}
 
-	return info.num_machine_cycles;
+	return result;
 }
 
 uint32_t
