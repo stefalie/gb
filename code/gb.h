@@ -195,7 +195,7 @@ gb_MagFramebufferSizeInBytes(gb_MagFilter mag_filter);
 
 // Returns the max framebuffer size for all magnification filters.
 uint32_t
-gb_MaxMagFramebufferSizeInBytes();
+gb_MaxMagFramebufferSizeInBytes(void);
 
 // Magnify 'gb's default framebuffer with a given filter and stores in user
 // provided buffer.

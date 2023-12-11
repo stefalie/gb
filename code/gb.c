@@ -17,7 +17,7 @@
 #include "tetris.h"
 
 void
-gb_Init(gb_GameBoy* gb)
+gb_Init(gb_GameBoy *gb)
 {
 	*gb = (gb_GameBoy){ 0 };
 	memcpy(gb->framebuffer.pixels, gb_tetris_splash_screen, sizeof(gb->framebuffer.pixels));
@@ -92,12 +92,12 @@ gb__LoHi(uint8_t lo, uint8_t hi)
 }
 
 bool
-gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom, uint32_t num_bytes)
+gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
 {
 	gb->rom.data = rom;
 	gb->rom.num_bytes = num_bytes;
 
-	const gb__RomHeader* header = (gb__RomHeader*)&(gb->rom.data[ROM_HEADER_START_ADDRESS]);
+	const gb__RomHeader *header = (gb__RomHeader *)&(gb->rom.data[ROM_HEADER_START_ADDRESS]);
 
 	const uint8_t nintendo_logo[] = { 0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00,
 		0x0C, 0x00, 0x0D, 0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9,
@@ -163,13 +163,13 @@ gb_LoadRom(gb_GameBoy* gb, const uint8_t* rom, uint32_t num_bytes)
 // If this is possible depends on how many virtual addresses there are that
 // behave different when reading from or writing to it.
 // We will know more towards the end fo the project.
-//static uint8_t*
-//gb__MemoryMap(gb_GameBoy* gb, uint16_t addr)
+// static uint8_t*
+// gb__MemoryMap(gb_GameBoy* gb, uint16_t addr)
 //{
 //}
 
 uint8_t
-gb_MemoryReadByte(const gb_GameBoy* gb, uint16_t addr)
+gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 {
 	switch (addr & 0xF000)
 	{
@@ -253,13 +253,13 @@ gb_MemoryReadByte(const gb_GameBoy* gb, uint16_t addr)
 }
 
 uint16_t
-gb_MemoryReadWord(const gb_GameBoy* gb, uint16_t addr)
+gb_MemoryReadWord(const gb_GameBoy *gb, uint16_t addr)
 {
 	return gb_MemoryReadByte(gb, addr) + (gb_MemoryReadByte(gb, addr + 1) << 8u);
 }
 
 static void
-gb__MemoryWriteByte(gb_GameBoy* gb, uint16_t addr, uint8_t value)
+gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 {
 	(void)gb;
 	(void)addr;
@@ -355,7 +355,7 @@ gb__MemoryWriteByte(gb_GameBoy* gb, uint16_t addr, uint8_t value)
 // }
 
 void
-gb_Reset(gb_GameBoy* gb)
+gb_Reset(gb_GameBoy *gb)
 {
 	gb->memory.bios_mapped = true;
 
@@ -404,7 +404,7 @@ gb_Reset(gb_GameBoy* gb)
 
 typedef struct
 {
-	char* name;
+	char *name;
 	uint8_t num_operand_bytes;
 	uint8_t num_machine_cycles;
 } gb__InstructionInfo;
@@ -446,7 +446,7 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 };
 
 gb_Instruction
-gb_FetchInstruction(const gb_GameBoy* gb, uint16_t addr)
+gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
 {
 	gb_Instruction inst = {
 		.opcode = gb_MemoryReadByte(gb, addr),
@@ -495,7 +495,7 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 }
 
 static inline void
-gb__SetFlags(gb_GameBoy* gb, bool zero, bool subtract, bool half_carry, bool carry)
+gb__SetFlags(gb_GameBoy *gb, bool zero, bool subtract, bool half_carry, bool carry)
 {
 	gb->cpu.flags.zero = zero ? 1 : 0;
 	gb->cpu.flags.subtract = subtract ? 1 : 0;
@@ -699,7 +699,7 @@ gb_MagFramebufferSizeInBytes(gb_MagFilter mag_filter)
 }
 
 uint32_t
-gb_MaxMagFramebufferSizeInBytes()
+gb_MaxMagFramebufferSizeInBytes(void)
 {
 	uint32_t bytes = 0;
 	for (int i = 0; i < GB_MAG_FILTER_MAX_VALUE; ++i)
@@ -729,7 +729,7 @@ gb__SrcPixel(const gb_Framebuffer input, int x, int y)
 // McGuire, Gagiu; 2021; MMPX Style-Preserving Pixel-Art Magnification)
 // Also see: https://www.scale2x.it
 static gb_Framebuffer
-gb__MagFramebufferEpxScale2xAdvMame2x(const gb_Framebuffer input, uint8_t* pixels)
+gb__MagFramebufferEpxScale2xAdvMame2x(const gb_Framebuffer input, uint8_t *pixels)
 {
 	for (int y = 0; y < input.height; ++y)
 	{
@@ -782,7 +782,7 @@ gb__MagFramebufferEpxScale2xAdvMame2x(const gb_Framebuffer input, uint8_t* pixel
 // McGuire, Gagiu; 2021; MMPX Style-Preserving Pixel-Art Magnification)
 // Also see: https://www.scale2x.it
 static gb_Framebuffer
-gb__MagFramebufferScale3xAdvMame3xScaleF(gb_Framebuffer input, uint8_t* pixels)
+gb__MagFramebufferScale3xAdvMame3xScaleF(gb_Framebuffer input, uint8_t *pixels)
 {
 	for (int y = 0; y < input.height; ++y)
 	{
@@ -861,10 +861,10 @@ gb__MagFramebufferScale3xAdvMame3xScaleF(gb_Framebuffer input, uint8_t* pixels)
 }
 
 static inline gb_Framebuffer
-gb__MagFramebufferScale4xAdvMame4x(const gb_Framebuffer input, uint8_t* pixels)
+gb__MagFramebufferScale4xAdvMame4x(const gb_Framebuffer input, uint8_t *pixels)
 {
 	// Run Scale2x twice.
-	uint8_t* pixels2x = pixels + (4 * input.width) * (4 * input.height);
+	uint8_t *pixels2x = pixels + (4 * input.width) * (4 * input.height);
 	const gb_Framebuffer fb2x = gb__MagFramebufferEpxScale2xAdvMame2x(input, pixels2x);
 	return gb__MagFramebufferEpxScale2xAdvMame2x(fb2x, pixels);
 }
@@ -913,7 +913,7 @@ gb__MagFramebufferScale4xAdvMame4x(const gb_Framebuffer input, uint8_t* pixels)
 
 static inline void
 gb__XbrFilter2(uint8_t E, uint8_t I, uint8_t H, uint8_t F, uint8_t G, uint8_t C, uint8_t D, uint8_t B, uint8_t F4,
-		uint8_t I4, uint8_t H5, uint8_t I5, int N1, int N2, int N3, uint8_t* E_out)
+		uint8_t I4, uint8_t H5, uint8_t I5, int N1, int N2, int N3, uint8_t *E_out)
 {
 	if (E != H && E != F)
 	{
@@ -960,20 +960,20 @@ gb__XbrFilter2(uint8_t E, uint8_t I, uint8_t H, uint8_t F, uint8_t G, uint8_t C,
 }
 
 static gb_Framebuffer
-gb__MagFramebufferXbr2(const gb_Framebuffer input, uint8_t* pixels)
+gb__MagFramebufferXbr2(const gb_Framebuffer input, uint8_t *pixels)
 {
 	const int nl = input.width * 2;
 
 	for (int y = 0; y < input.height; ++y)
 	{
 		// Output
-		uint8_t* E_out = pixels + y * input.width * 2 * 2;
+		uint8_t *E_out = pixels + y * input.width * 2 * 2;
 
-		const uint8_t* row0 = input.pixels + (y - 2) * input.width - 2;
-		const uint8_t* row1 = row0 + input.width;
-		const uint8_t* row2 = row1 + input.width;
-		const uint8_t* row3 = row2 + input.width;
-		const uint8_t* row4 = row3 + input.width;
+		const uint8_t *row0 = input.pixels + (y - 2) * input.width - 2;
+		const uint8_t *row1 = row0 + input.width;
+		const uint8_t *row2 = row1 + input.width;
+		const uint8_t *row3 = row2 + input.width;
+		const uint8_t *row4 = row3 + input.width;
 
 		// Clamping
 		if (y == 0)
@@ -1053,7 +1053,7 @@ gb__MagFramebufferXbr2(const gb_Framebuffer input, uint8_t* pixels)
 }
 
 gb_Framebuffer
-gb_MagFramebuffer(const gb_GameBoy* gb, gb_MagFilter mag_filter, uint8_t* pixels)
+gb_MagFramebuffer(const gb_GameBoy *gb, gb_MagFilter mag_filter, uint8_t *pixels)
 {
 	const gb_Framebuffer input = {
 		.width = GB_FRAMEBUFFER_WIDTH,

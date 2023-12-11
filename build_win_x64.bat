@@ -115,5 +115,5 @@ set EndTime=%time%
 popd
 
 echo Start time: %StartTime%
-echo End time:	 %EndTime%
+echo End time:   %EndTime%
 

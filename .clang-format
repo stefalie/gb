@@ -14,7 +14,7 @@ AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 # See here: https://twitter.com/pervognsen/status/1329752206493380608
-AlwaysBreakAfterReturnType: All
+AlwaysBreakAfterReturnType: TopLevel
 AlwaysBreakBeforeMultilineStrings: true
 AlwaysBreakTemplateDeclarations: true
 BinPackArguments: true
@@ -85,14 +85,15 @@ PenaltyBreakString: 1000
 PenaltyBreakTemplateDeclaration: 10
 PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 0
-PointerAlignment: Left
+PointerAlignment: Right
+QualifierAlignment: Left
 PPIndentWidth: -1
 RawStringFormats:
   - Language: Cpp
     Delimiters:
       - 'cpp'
     CanonicalDelimiter: 'cpp'
-ReferenceAlignment: Left
+ReferenceAlignment: Right
 ReflowComments: true
 #SeparateDefinitionBlocks: Always
 SortIncludes: true
