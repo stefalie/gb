@@ -182,6 +182,27 @@ static const struct
 };
 static const size_t num_mag_options = sizeof(mag_options) / sizeof(mag_options[0]);
 
+enum Speed
+{
+	SPEED_DEFAULT = 1,
+	SPEED_2X = 2,
+	SPEED_4X = 4,
+	SPEED_8X = 8,
+	SPEED_16X = 16,
+};
+static const struct
+{
+	Speed type;
+	const char* nice_name = NULL;
+} speed_options[] = {
+	{ SPEED_DEFAULT, "Default" },
+	{ SPEED_2X, "2x" },
+	{ SPEED_4X, "4x" },
+	{ SPEED_8X, "8x" },
+	{ SPEED_16X, "16x" },
+};
+static const size_t num_speed_options = sizeof(speed_options) / sizeof(speed_options[0]);
+
 float
 DpiScale()
 {
@@ -447,6 +468,7 @@ struct Config
 		bool fullscreen = false;
 
 		bool mag_filter_changed = true;
+		int speed_frame_multiplier = 1;
 
 		bool single_step_mode = false;
 		bool exec_next_step = false;
@@ -664,10 +686,13 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 			}
 			if (ImGui::BeginMenu("Speed"))
 			{
-				ImGui::MenuItem("Default", NULL, true);
-				ImGui::MenuItem("Faster");
-				ImGui::MenuItem("Slower");
-				ImGui::MenuItem("Unthrottled", NULL, false);
+				for (size_t i = 0; i < num_speed_options; ++i)
+				{
+					if (ImGui::MenuItem(speed_options[i].nice_name, NULL, config->gui.speed_frame_multiplier == speed_options[i].type))
+					{
+						config->gui.speed_frame_multiplier = mag_options[i].type;
+					}
+				}
 				ImGui::EndMenu();
 			}
 			if (ImGui::MenuItem("Configure Input"))
@@ -1343,49 +1368,12 @@ main(int argc, char* argv[])
 
 	const uint64_t counter_freq = SDL_GetPerformanceFrequency();
 	uint64_t prev_time = SDL_GetPerformanceCounter();
-	// TODO: move constant to gb file
-	const uint32_t GB_MACHINE_FREQ = 1048576;
-	const uint32_t GB_MACHINE_CYCLES_PER_FRAME = 70224;
-	const uint32_t machine_cycle_acc = 0;
+
+	uint32_t machine_cycle_acc = 0;
 
 	// Main Loop
 	while (!config.quit)
 	{
-		// TODO: should this be moved right before the actual emu update?
-		const uint64_t curr_time = SDL_GetPerformanceCounter();
-		const double dt_in_s = (double)(curr_time - prev_time) / counter_freq;
-		const uint32_t elapsed_machine_cycles = dt_in_s* GB_MACHINE_FREQ machine_cycle_acc += elapsed_machine_cycles;
-		prev_time = curr_time;
-
-		while (machine_cycle_acc >= GB_MACHINE_CYCLES_PER_FRAME)
-		{
-			// TODO: emulate frame
-			machine_cycle_acc -= GB_MACHINE_CYCLES_PER_FRAME;
-		}
-
-		//// Timing
-		//// TODO: stretch elapsed gb time according to emulation speed.
-		//// TODO: don't sleep at all for max game speed.
-		//// TODO: move constant to gb file
-		// const double elapsed_gb_time_in_ms = (double)elapsed_machine_cycles / GB_MACHINE_FREQ * 1000.0;
-		// const uint64_t curr_time = SDL_GetPerformanceCounter();
-		// const double dt_in_ms = (double)(curr_time - prev_time) / counter_freq * 1000.0;
-		// const int wait_ms = (int)round(elapsed_gb_time_in_ms - dt_in_ms);
-		//// TODO: start rem
-		// static uint32_t counter = 0;
-		// if (counter++ % 100 == 0)
-		//{
-		//	SDL_Log("elapsed cycles: %i\n", elapsed_machine_cycles);
-		//	SDL_Log("elapsed gb time: %f\n", elapsed_gb_time_in_ms);
-		//	SDL_Log("dt in ms: %f\n", dt_in_ms);
-		//	SDL_Log("Wait time: %i\n", wait_ms);
-		// }
-		//// TODO: end rem
-		// if (wait_ms > 0)
-		//{
-		//	SDL_Delay(wait_ms);
-		// }
-
 		// Make sure the right ImGui context gets the event.
 		if (SDL_GetWindowFlags(config.handles.debug_window) & SDL_WINDOW_INPUT_FOCUS)
 		{
@@ -1538,23 +1526,54 @@ main(int argc, char* argv[])
 		}
 		ImGui::SetCurrentContext(config.handles.imgui);  // Reset (if changed)
 
+		const uint64_t curr_time = SDL_GetPerformanceCounter();
+		const double dt_in_s = (double)(curr_time - prev_time) / counter_freq;
+		const uint32_t elapsed_machine_cycles = (uint32_t)(dt_in_s * GB_MACHINE_FREQ);
+		machine_cycle_acc += config.gui.speed_frame_multiplier * elapsed_machine_cycles;
+		prev_time = curr_time;
+
 		// Run emulator
-		size_t elapsed_machine_cycles = 0;
-		if (config.gui.has_active_rom && (!config.gui.single_step_mode || config.gui.exec_next_step))
+		const bool is_running_debug_mode =
+				config.gui.has_active_rom && config.gui.single_step_mode && config.gui.exec_next_step;
+		const bool is_running_normal_mode = config.gui.has_active_rom && !config.gui.single_step_mode;
+
+		if (is_running_debug_mode)
 		{
-			config.gui.exec_next_step = false;
-
-			elapsed_machine_cycles = gb_ExecuteNextInstruction(&gb);
-
+			const size_t inst_machine_cycles = gb_ExecuteNextInstruction(&gb);
 			// Break and open the debugger if -1 was returned from the execution
 			// of the instruction. This was used for the step by step implementation
 			// of instructions when missing ones would return -1.
-			if (elapsed_machine_cycles == (size_t)-1)
+			if (inst_machine_cycles == (size_t)-1)
 			{
 				config.debug.show = true;
 				config.gui.single_step_mode = true;
 			}
+
+			machine_cycle_acc = 0;
 		}
+		else if (is_running_normal_mode)
+		{
+			while (machine_cycle_acc >= GB_MACHINE_CYCLES_PER_FRAME)
+			{
+				uint32_t frame_acc = 0;
+				while (frame_acc < GB_MACHINE_CYCLES_PER_FRAME)
+				{
+					const size_t inst_machine_cycles = gb_ExecuteNextInstruction(&gb);
+					frame_acc += (uint32_t)inst_machine_cycles;
+
+					// See reasoning above for debug mode.
+					if (inst_machine_cycles == (size_t)-1)
+					{
+						config.debug.show = true;
+						config.gui.single_step_mode = true;
+						goto exit;
+					}
+				}
+				machine_cycle_acc -= frame_acc;
+			}
+		exit:;
+		}
+		config.gui.exec_next_step = false;
 
 		// OpenGL drawing
 		int fb_width, fb_height;
@@ -1669,31 +1688,6 @@ main(int argc, char* argv[])
 				SDL_HideWindow(config.handles.debug_window);
 			}
 		}
-
-		//// Timing
-		//// TODO: stretch elapsed gb time according to emulation speed.
-		//// TODO: don't sleep at all for max game speed.
-		//// TODO: move constant to gb file
-		// const uint32_t GB_MACHINE_FREQ = 1048576;
-		// const double elapsed_gb_time_in_ms = (double)elapsed_machine_cycles / GB_MACHINE_FREQ * 1000.0;
-		// const uint64_t curr_time = SDL_GetPerformanceCounter();
-		// const double dt_in_ms = (double)(curr_time - prev_time) / counter_freq * 1000.0;
-		// const int wait_ms = (int)round(elapsed_gb_time_in_ms - dt_in_ms);
-		//// TODO: start rem
-		// static uint32_t counter = 0;
-		// if (counter++ % 100 == 0)
-		//{
-		//	SDL_Log("elapsed cycles: %i\n", elapsed_machine_cycles);
-		//	SDL_Log("elapsed gb time: %f\n", elapsed_gb_time_in_ms);
-		//	SDL_Log("dt in ms: %f\n", dt_in_ms);
-		//	SDL_Log("Wait time: %i\n", wait_ms);
-		// }
-		//// TODO: end rem
-		// if (wait_ms > 0)
-		//{
-		//	SDL_Delay(wait_ms);
-		// }
-		// prev_time = curr_time;
 	}
 
 	glDeleteTextures(1, &texture);
