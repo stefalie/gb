@@ -102,7 +102,7 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
 	const uint8_t nintendo_logo[] = { 0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00,
 		0x0C, 0x00, 0x0D, 0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9,
 		0x99, 0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E };
-	// TODO: I think this is identical.
+	// TODO: I think this is identical. Identical to what?
 	// TODO: I think this can be skipped if we execute the BIOS startup sequence:
 	// the comparison still happens, but it will be emulated.
 	// const uint8_t* nintendo_logo = &gb__bios[120];
@@ -265,86 +265,86 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	(void)addr;
 	(void)value;
 
-//	switch (addr & 0xF000)
-//	{
-//	// ROM bank 0 or BIOS
-//	case 0x0000:
-//	case 0x1000:
-//	case 0x2000:
-//	case 0x3000:
-//		if (gb->memory.bios_mapped && addr < 0x100)
-//		{
-//			assert(false);
-//		}
-//		assert(!"TODO");
-//		break;
-//	// Switchable ROM bank
-//	case 0x4000:
-//	case 0x5000:
-//	case 0x6000:
-//	case 0x7000:
-//		assert(!"TODO");
-//		break;
-//	// VRAM
-//	case 0x8000:
-//	case 0x9000:
-//		assert(!"TODO");
-//		break;
-//	// Switchable RAM bank
-//	case 0xA000:
-//	case 0xB000:
-//		assert(!"TODO");
-//		gb->memory.external_ram[addr & 0x1FFF] = value;
-//		break;
-//	// (Internal) working RAM
-//	case 0xC000:
-//	case 0xD000:
-//		assert(!"TODO");
-//		gb->memory.wram[addr & 0x1FFF] = value;
-//		break;
-//	// Echo of (Internal) working RAM, I/O, zero page
-//	case 0xE000:
-//	case 0xF000:
-//		switch (addr & 0x0F00)
-//		{
-//		// Echo of (Internal) working RAM
-//		default:  // [0xE000, 0xFE00)
-//			assert((addr - 0xE000) < 0x1E00);
-//			gb->memory.wram[addr & 0x1FFF] = value;
-//		case 0x0E00:
-//			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
-//			{
-//				assert(!"TODO");
-//			}
-//			else
-//			{
-//				// The empty area is ignored
-//				assert(!"TODO");
-//			}
-//			break;
-//		case 0x0F00:
-//			if (addr < 0xFF4C)  // I/O
-//			{
-//				assert(!"TODO");
-//			}
-//			else if (addr < 0xFF80)
-//			{
-//				// The empty area is ignored
-//				assert(!"TODO");
-//			}
-//			else  // Zero page
-//			{
-//				assert((addr - 0xFF80) < 0x80);
-//				assert(!"TODO");
-//				gb->memory.zero_page[addr & 0x7F] = value;
-//			}
-//			break;
-//		}
-//		break;
-//	default:
-//		assert(false);
-//		break;
-//	}
+	//	switch (addr & 0xF000)
+	//	{
+	//	// ROM bank 0 or BIOS
+	//	case 0x0000:
+	//	case 0x1000:
+	//	case 0x2000:
+	//	case 0x3000:
+	//		if (gb->memory.bios_mapped && addr < 0x100)
+	//		{
+	//			assert(false);
+	//		}
+	//		assert(!"TODO");
+	//		break;
+	//	// Switchable ROM bank
+	//	case 0x4000:
+	//	case 0x5000:
+	//	case 0x6000:
+	//	case 0x7000:
+	//		assert(!"TODO");
+	//		break;
+	//	// VRAM
+	//	case 0x8000:
+	//	case 0x9000:
+	//		assert(!"TODO");
+	//		break;
+	//	// Switchable RAM bank
+	//	case 0xA000:
+	//	case 0xB000:
+	//		assert(!"TODO");
+	//		gb->memory.external_ram[addr & 0x1FFF] = value;
+	//		break;
+	//	// (Internal) working RAM
+	//	case 0xC000:
+	//	case 0xD000:
+	//		assert(!"TODO");
+	//		gb->memory.wram[addr & 0x1FFF] = value;
+	//		break;
+	//	// Echo of (Internal) working RAM, I/O, zero page
+	//	case 0xE000:
+	//	case 0xF000:
+	//		switch (addr & 0x0F00)
+	//		{
+	//		// Echo of (Internal) working RAM
+	//		default:  // [0xE000, 0xFE00)
+	//			assert((addr - 0xE000) < 0x1E00);
+	//			gb->memory.wram[addr & 0x1FFF] = value;
+	//		case 0x0E00:
+	//			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
+	//			{
+	//				assert(!"TODO");
+	//			}
+	//			else
+	//			{
+	//				// The empty area is ignored
+	//				assert(!"TODO");
+	//			}
+	//			break;
+	//		case 0x0F00:
+	//			if (addr < 0xFF4C)  // I/O
+	//			{
+	//				assert(!"TODO");
+	//			}
+	//			else if (addr < 0xFF80)
+	//			{
+	//				// The empty area is ignored
+	//				assert(!"TODO");
+	//			}
+	//			else  // Zero page
+	//			{
+	//				assert((addr - 0xFF80) < 0x80);
+	//				assert(!"TODO");
+	//				gb->memory.zero_page[addr & 0x7F] = value;
+	//			}
+	//			break;
+	//		}
+	//		break;
+	//	default:
+	//		assert(false);
+	//		break;
+	//	}
 }
 // TODO: needed?
 // static inline void
@@ -355,7 +355,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 // }
 
 void
-gb_Reset(gb_GameBoy *gb)
+gb_Reset(gb_GameBoy *gb, bool skip_bios)
 {
 	gb->memory.bios_mapped = true;
 
@@ -366,8 +366,17 @@ gb_Reset(gb_GameBoy *gb)
 	gb->cpu.de = 0x00D8;
 	gb->cpu.hl = 0x014D;
 	gb->cpu.sp = 0xFFFE;
-	gb->cpu.pc = 0x0;  // TODO: do we end up here autmatically?
-	// gb->cpu.pc = 0x0100;  // TODO: do we end up here autmatically?
+	if (!skip_bios)
+	{
+		gb->cpu.pc = 0x0;
+	}
+	else
+	{
+		gb->cpu.pc = 0x0100;
+	}
+	// TODO: Do we automatically end up at 0x0100 if we run from 0x0?
+
+	gb->cpu.halt = false;
 
 	gb__MemoryWriteByte(gb, 0xFF05, 0x00);
 	gb__MemoryWriteByte(gb, 0xFF06, 0x00);
@@ -414,43 +423,169 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 
 	[0x01] = { "LD BC", 2, 3 },
 
-	[0x07] = { "RLC A", 0, 1 },
+	[0x07] = { "RLCA", 0, 1 },
 
-	[0x0F] = { "RRC A", 0, 1 },
+	[0x0F] = { "RRCA", 0, 1 },
 
 	[0x11] = { "LD DE", 2, 3 },
 
-	[0x17] = { "RL A", 0, 1 },
+	[0x17] = { "RLA", 0, 1 },
 
-	[0x1F] = { "RR A", 0, 1 },
+	[0x1F] = { "RRA", 0, 1 },
 
 	[0x21] = { "LD HL", 2, 3 },
 
 	[0x31] = { "LD SP", 2, 3 },
 	[0x32] = { "LD (HL-), A", 0, 1 },
 
-	[0xA0] = { "AND B", 0, 1 },
-	[0xA1] = { "AND C", 0, 1 },
-	[0xA2] = { "AND D", 0, 1 },
-	[0xA3] = { "AND E", 0, 1 },
-	[0xA4] = { "AND H", 0, 1 },
-	[0xA5] = { "AND L", 0, 1 },
-	[0xA6] = { "AND (HL)", 0, 2 },
-	[0xA7] = { "AND A", 0, 1 },
+	[0x40] = { "LD B, B", 0, 1 },
+	[0x41] = { "LD B, C", 0, 1 },
+	[0x42] = { "LD B, D", 0, 1 },
+	[0x43] = { "LD B, E", 0, 1 },
+	[0x44] = { "LD B, H", 0, 1 },
+	[0x45] = { "LD B, L", 0, 1 },
+	[0x46] = { "LD B, (HL)", 0, 2 },
+	[0x47] = { "LD B, A", 0, 1 },
+
+	[0x48] = { "LD C, B", 0, 1 },
+	[0x49] = { "LD C, C", 0, 1 },
+	[0x4A] = { "LD C, D", 0, 1 },
+	[0x4B] = { "LD C, E", 0, 1 },
+	[0x4C] = { "LD C, H", 0, 1 },
+	[0x4D] = { "LD C, L", 0, 1 },
+	[0x4E] = { "LD C, (HL)", 0, 2 },
+	[0x4F] = { "LD C, A", 0, 1 },
+
+	[0x50] = { "LD D, B", 0, 1 },
+	[0x51] = { "LD D, C", 0, 1 },
+	[0x52] = { "LD D, D", 0, 1 },
+	[0x53] = { "LD D, E", 0, 1 },
+	[0x54] = { "LD D, H", 0, 1 },
+	[0x55] = { "LD D, L", 0, 1 },
+	[0x56] = { "LD D, (HL)", 0, 2 },
+	[0x57] = { "LD D, A", 0, 1 },
+
+	[0x58] = { "LD E, B", 0, 1 },
+	[0x59] = { "LD E, C", 0, 1 },
+	[0x5A] = { "LD E, D", 0, 1 },
+	[0x5B] = { "LD E, E", 0, 1 },
+	[0x5C] = { "LD E, H", 0, 1 },
+	[0x5D] = { "LD E, L", 0, 1 },
+	[0x5E] = { "LD E, (HL)", 0, 2 },
+	[0x5F] = { "LD E, A", 0, 1 },
+
+	[0x60] = { "LD H, B", 0, 1 },
+	[0x61] = { "LD H, C", 0, 1 },
+	[0x62] = { "LD H, D", 0, 1 },
+	[0x63] = { "LD H, E", 0, 1 },
+	[0x64] = { "LD H, H", 0, 1 },
+	[0x65] = { "LD H, L", 0, 1 },
+	[0x66] = { "LD H, (HL)", 0, 2 },
+	[0x67] = { "LD H, A", 0, 1 },
+
+	[0x68] = { "LD L, B", 0, 1 },
+	[0x69] = { "LD L, C", 0, 1 },
+	[0x6A] = { "LD L, D", 0, 1 },
+	[0x6B] = { "LD L, E", 0, 1 },
+	[0x6C] = { "LD L, H", 0, 1 },
+	[0x6D] = { "LD L, L", 0, 1 },
+	[0x6E] = { "LD L, (HL)", 0, 2 },
+	[0x6F] = { "LD L, A", 0, 1 },
+
+	[0x70] = { "LD (HL), B", 0, 2 },
+	[0x71] = { "LD (HL), C", 0, 2 },
+	[0x72] = { "LD (HL), D", 0, 2 },
+	[0x73] = { "LD (HL), E", 0, 2 },
+	[0x74] = { "LD (HL), H", 0, 2 },
+	[0x75] = { "LD (HL), L", 0, 2 },
+	[0x76] = { "HALT", 0, 2 },
+	[0x77] = { "LD (HL), A", 0, 2 },
+
+	[0x78] = { "LD A, B", 0, 1 },
+	[0x79] = { "LD A, C", 0, 1 },
+	[0x7A] = { "LD A, D", 0, 1 },
+	[0x7B] = { "LD A, E", 0, 1 },
+	[0x7C] = { "LD A, H", 0, 1 },
+	[0x7D] = { "LD A, L", 0, 1 },
+	[0x7E] = { "LD A, (HL)", 0, 2 },
+	[0x7F] = { "LD A, A", 0, 1 },
+
+	[0x80] = { "ADD A, B", 0, 1 },
+	[0x81] = { "ADD A, C", 0, 1 },
+	[0x82] = { "ADD A, D", 0, 1 },
+	[0x83] = { "ADD A, E", 0, 1 },
+	[0x84] = { "ADD A, H", 0, 1 },
+	[0x85] = { "ADD A, L", 0, 1 },
+	[0x86] = { "ADD A, (HL)", 0, 2 },
+	[0x87] = { "ADD A, A", 0, 1 },
+
+	[0x88] = { "ADC A, B", 0, 1 },
+	[0x89] = { "ADC A, C", 0, 1 },
+	[0x8A] = { "ADC A, D", 0, 1 },
+	[0x8B] = { "ADC A, E", 0, 1 },
+	[0x8C] = { "ADC A, H", 0, 1 },
+	[0x8D] = { "ADC A, L", 0, 1 },
+	[0x8E] = { "ADC A, (HL)", 0, 2 },
+	[0x8F] = { "ADC A, A", 0, 1 },
+
+	[0x90] = { "SUB A, B", 0, 1 },
+	[0x91] = { "SUB A, C", 0, 1 },
+	[0x92] = { "SUB A, D", 0, 1 },
+	[0x93] = { "SUB A, E", 0, 1 },
+	[0x94] = { "SUB A, H", 0, 1 },
+	[0x95] = { "SUB A, L", 0, 1 },
+	[0x96] = { "SUB A, (HL)", 0, 2 },
+	[0x97] = { "SUB A, A", 0, 1 },
+
+	[0x98] = { "SBC A, B", 0, 1 },
+	[0x99] = { "SBC A, C", 0, 1 },
+	[0x9A] = { "SBC A, D", 0, 1 },
+	[0x9B] = { "SBC A, E", 0, 1 },
+	[0x9C] = { "SBC A, H", 0, 1 },
+	[0x9D] = { "SBC A, L", 0, 1 },
+	[0x9E] = { "SBC A, (HL)", 0, 2 },
+	[0x9F] = { "SBC A, A", 0, 1 },
+
+	[0xA0] = { "AND A, B", 0, 1 },
+	[0xA1] = { "AND A, C", 0, 1 },
+	[0xA2] = { "AND A, D", 0, 1 },
+	[0xA3] = { "AND A, E", 0, 1 },
+	[0xA4] = { "AND A, H", 0, 1 },
+	[0xA5] = { "AND A, L", 0, 1 },
+	[0xA6] = { "AND A, (HL)", 0, 2 },
+	[0xA7] = { "AND A, A", 0, 1 },
+
+	[0xA8] = { "XOR A, B", 0, 1 },
+	[0xA9] = { "XOR A, C", 0, 1 },
+	[0xAA] = { "XOR A, D", 0, 1 },
+	[0xAB] = { "XOR A, E", 0, 1 },
+	[0xAC] = { "XOR A, H", 0, 1 },
+	[0xAD] = { "XOR A, L", 0, 1 },
+	[0xAE] = { "XOR A, (HL)", 0, 2 },
+	[0xAF] = { "XOR A, A", 0, 1 },
+
+	[0xB0] = { "OR A, B", 0, 1 },
+	[0xB1] = { "OR A, C", 0, 1 },
+	[0xB2] = { "OR A, D", 0, 1 },
+	[0xB3] = { "OR A, E", 0, 1 },
+	[0xB4] = { "OR A, H", 0, 1 },
+	[0xB5] = { "OR A, L", 0, 1 },
+	[0xB6] = { "OR A, (HL)", 0, 2 },
+	[0xB7] = { "OR A, A", 0, 1 },
+
+	[0xB8] = { "CP A, B", 0, 1 },
+	[0xB9] = { "CP A, C", 0, 1 },
+	[0xBA] = { "CP A, D", 0, 1 },
+	[0xBB] = { "CP A, E", 0, 1 },
+	[0xBC] = { "CP A, H", 0, 1 },
+	[0xBD] = { "CP A, L", 0, 1 },
+	[0xBE] = { "CP A, (HL)", 0, 2 },
+	[0xBF] = { "CP A, A", 0, 1 },
 
 	[0xCB] = { "PREFIX", 0, 0 },  // Num cycles is 0 here because it's taken from the extended instruction table.
 
-	[0xA8] = { "XOR B", 0, 1 },
-	[0xA9] = { "XOR C", 0, 1 },
-	[0xAA] = { "XOR D", 0, 1 },
-	[0xAB] = { "XOR E", 0, 1 },
-	[0xAC] = { "XOR H", 0, 1 },
-	[0xAD] = { "XOR L", 0, 1 },
-	[0xAE] = { "XOR (HL)", 0, 2 },
-	[0xAF] = { "XOR A", 0, 1 },
-
-	[0xE7] = { "AND n", 1, 2 },
-	[0xEE] = { "XOR n", 1, 2 },
+	[0xE6] = { "AND A, n", 1, 2 },
+	[0xEE] = { "XOR A, n", 1, 2 },
 };
 
 static const gb__InstructionInfo gb__extended_instruction_infos[256] = {
@@ -462,6 +597,7 @@ static const gb__InstructionInfo gb__extended_instruction_infos[256] = {
 	[0x05] = { "RLC L", 0, 2 },
 	[0x06] = { "RLC (HL)", 0, 4 },
 	[0x07] = { "RLC A", 0, 2 },
+
 	[0x08] = { "RRC B", 0, 2 },
 	[0x09] = { "RRC C", 0, 2 },
 	[0x0A] = { "RRC D", 0, 2 },
@@ -470,6 +606,7 @@ static const gb__InstructionInfo gb__extended_instruction_infos[256] = {
 	[0x0D] = { "RRC L", 0, 2 },
 	[0x0E] = { "RRC (HL)", 0, 4 },
 	[0x0F] = { "RRC A", 0, 2 },
+
 	[0x10] = { "RL B", 0, 2 },
 	[0x11] = { "RL C", 0, 2 },
 	[0x12] = { "RL D", 0, 2 },
@@ -478,6 +615,7 @@ static const gb__InstructionInfo gb__extended_instruction_infos[256] = {
 	[0x15] = { "RL L", 0, 2 },
 	[0x16] = { "RL (HL)", 0, 4 },
 	[0x17] = { "RL A", 0, 2 },
+
 	[0x18] = { "RR B", 0, 2 },
 	[0x19] = { "RR C", 0, 2 },
 	[0x1A] = { "RR D", 0, 2 },
@@ -487,7 +625,77 @@ static const gb__InstructionInfo gb__extended_instruction_infos[256] = {
 	[0x1E] = { "RR (HL)", 0, 4 },
 	[0x1F] = { "RR A", 0, 2 },
 
-	[0x7C] = { "BIT 7,H", 0, 2 },
+	[0x40] = { "BIT 0, B", 0, 2 },
+	[0x41] = { "BIT 0, C", 0, 2 },
+	[0x42] = { "BIT 0, D", 0, 2 },
+	[0x43] = { "BIT 0, E", 0, 2 },
+	[0x44] = { "BIT 0, H", 0, 2 },
+	[0x45] = { "BIT 0, L", 0, 2 },
+	[0x46] = { "BIT 0, (HL)", 0, 3 },
+	[0x47] = { "BIT 0, A", 0, 2 },
+
+	[0x48] = { "BIT 1, B", 0, 2 },
+	[0x49] = { "BIT 1, C", 0, 2 },
+	[0x4A] = { "BIT 1, D", 0, 2 },
+	[0x4B] = { "BIT 1, E", 0, 2 },
+	[0x4C] = { "BIT 1, H", 0, 2 },
+	[0x4D] = { "BIT 1, L", 0, 2 },
+	[0x4E] = { "BIT 1, (HL)", 0, 3 },
+	[0x4F] = { "BIT 1, A", 0, 2 },
+
+	[0x50] = { "BIT 2, B", 0, 2 },
+	[0x51] = { "BIT 2, C", 0, 2 },
+	[0x52] = { "BIT 2, D", 0, 2 },
+	[0x53] = { "BIT 2, E", 0, 2 },
+	[0x54] = { "BIT 2, H", 0, 2 },
+	[0x55] = { "BIT 2, L", 0, 2 },
+	[0x56] = { "BIT 2, (HL)", 0, 3 },
+	[0x57] = { "BIT 2, A", 0, 2 },
+
+	[0x58] = { "BIT 3, B", 0, 2 },
+	[0x59] = { "BIT 3, C", 0, 2 },
+	[0x5A] = { "BIT 3, D", 0, 2 },
+	[0x5B] = { "BIT 3, E", 0, 2 },
+	[0x5C] = { "BIT 3, H", 0, 2 },
+	[0x5D] = { "BIT 3, L", 0, 2 },
+	[0x5E] = { "BIT 3, (HL)", 0, 3 },
+	[0x5F] = { "BIT 3, A", 0, 2 },
+
+	[0x60] = { "BIT 4, B", 0, 2 },
+	[0x61] = { "BIT 4, C", 0, 2 },
+	[0x62] = { "BIT 4, D", 0, 2 },
+	[0x63] = { "BIT 4, E", 0, 2 },
+	[0x64] = { "BIT 4, H", 0, 2 },
+	[0x65] = { "BIT 4, L", 0, 2 },
+	[0x66] = { "BIT 4, (HL)", 0, 3 },
+	[0x67] = { "BIT 4, A", 0, 2 },
+
+	[0x68] = { "BIT 5, B", 0, 2 },
+	[0x69] = { "BIT 5, C", 0, 2 },
+	[0x6A] = { "BIT 5, D", 0, 2 },
+	[0x6B] = { "BIT 5, E", 0, 2 },
+	[0x6C] = { "BIT 5, H", 0, 2 },
+	[0x6D] = { "BIT 5, L", 0, 2 },
+	[0x6E] = { "BIT 5, (HL)", 0, 3 },
+	[0x6F] = { "BIT 5, A", 0, 2 },
+
+	[0x70] = { "BIT 6, B", 0, 2 },
+	[0x71] = { "BIT 6, C", 0, 2 },
+	[0x72] = { "BIT 6, D", 0, 2 },
+	[0x73] = { "BIT 6, E", 0, 2 },
+	[0x74] = { "BIT 6, H", 0, 2 },
+	[0x75] = { "BIT 6, L", 0, 2 },
+	[0x76] = { "BIT 6, (HL)", 0, 3 },
+	[0x77] = { "BIT 6, A", 0, 2 },
+
+	[0x78] = { "BIT 7, B", 0, 2 },
+	[0x79] = { "BIT 7, C", 0, 2 },
+	[0x7A] = { "BIT 7, D", 0, 2 },
+	[0x7B] = { "BIT 7, E", 0, 2 },
+	[0x7C] = { "BIT 7, H", 0, 2 },
+	[0x7D] = { "BIT 7, L", 0, 2 },
+	[0x7E] = { "BIT 7, (HL)", 0, 3 },
+	[0x7F] = { "BIT 7, A", 0, 2 },
 };
 
 
@@ -498,7 +706,21 @@ gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
 		.opcode = gb_MemoryReadByte(gb, addr),
 	};
 
-	const gb__InstructionInfo info = gb__instruction_infos[inst.opcode];
+	gb__InstructionInfo info;
+
+	const uint8_t extended_inst_prefix = 0xCB;
+	if (addr > 0 && gb_MemoryReadByte(gb, addr - 1) == extended_inst_prefix)
+	{
+		inst.is_extended = true;
+		info = gb__extended_instruction_infos[inst.opcode];
+		assert(info.num_operand_bytes == 0);
+	}
+	else
+	{
+		inst.is_extended = false;
+		info = gb__instruction_infos[inst.opcode];
+	}
+
 	inst.num_operand_bytes = info.num_operand_bytes;
 	inst.num_machine_cycles = info.num_machine_cycles;
 
@@ -514,29 +736,13 @@ gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
 	return inst;
 }
 
-gb_Instruction
-gb__ExtendedFetchInstruction(const gb_GameBoy *gb, uint16_t addr)
-{
-	// Assert that extended instruction are prefixed properly.
-	assert(gb_MemoryReadByte(gb, addr - 1) == 0xCB);
-
-	gb_Instruction inst = {
-		.opcode = gb_MemoryReadByte(gb, addr),
-	};
-
-	const gb__InstructionInfo info = gb__instruction_infos[inst.opcode];
-	assert(info.num_operand_bytes == 0);
-	inst.num_machine_cycles = info.num_machine_cycles;
-
-	return inst;
-}
-
 // TODO: get rid of snprintf, strlen, memcpy to avoid std includes.
 // should all be easy, and from snprintf you only need to know how to convert 1 byte numbers to 2-char strings.
 size_t
 gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_len)
 {
-	const gb__InstructionInfo info = gb__instruction_infos[inst.opcode];
+	const gb__InstructionInfo info =
+			inst.is_extended ? gb__extended_instruction_infos[inst.opcode] : gb__instruction_infos[inst.opcode];
 	if (!info.name)
 	{
 		snprintf(str_buf, str_buf_len, "OpCode 0x%02X info is missing!", inst.opcode);
@@ -551,7 +757,7 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 	else
 	{
 		assert(info.num_operand_bytes > 0 && info.num_operand_bytes < 3);
-		snprintf(str_buf, str_buf_len, "%s, 0x%0*X", info.name, info.num_operand_bytes * 2,
+		snprintf(str_buf, str_buf_len, "0x%04X: %s, 0x%0*X", inst.opcode, info.name, info.num_operand_bytes * 2,
 				info.num_operand_bytes == 1 ? inst.operand_byte : inst.operand_word);
 	}
 	return strlen(str_buf);
@@ -639,10 +845,41 @@ gb__RotateRight(gb_GameBoy *gb, uint8_t val, bool clear_zero)
 	return val;
 }
 
+uint8_t
+gb__Add(gb_GameBoy *gb, uint8_t lhs, uint8_t rhs, bool carry_in)
+{
+	uint8_t ci = (carry_in ? gb->cpu.flags.carry : 0);
+	uint16_t sum = lhs + rhs + ci;
+	bool half_carry = (lhs & 0x0F) + (rhs & 0x0F) + ci > 0x0F;
+	bool co = sum > 0xFF;
+	uint8_t result = (uint8_t)sum;
+	gb__SetFlags(gb, result == 0, false, half_carry, co);
+	return result;
+}
+
+// Could this be implemented by doing gb__Add(lhs, 2's complement of (rhs + carry_if_enable)),
+// and then by flipping the half carry, carry, and negate flags?
+// I think so. See here in MAME where SBC and ADC are essentially identical (besides the +/-):
+// https://github.com/mamedev/mame/blob/1fdf6d10a7907bc92cd9f36eda1eca0484e47aba/src/devices/cpu/lr35902/opc_main.hxx#L4
+uint8_t
+gb__Sub(gb_GameBoy *gb, uint8_t lhs, uint8_t rhs, bool carry_in)
+{
+	uint8_t ci = (carry_in ? gb->cpu.flags.carry : 0);
+	uint16_t diff = lhs - rhs - ci;
+	bool half_carry = (lhs & 0x0F) < (rhs & 0x0F) + ci;
+	bool co = diff > 0xFF;
+	uint8_t result = (uint8_t)diff;
+	gb__SetFlags(gb, result == 0, true, half_carry, co);
+	return result;
+}
+
 size_t
 gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
 {
-	const gb_Instruction inst = gb__ExtendedFetchInstruction(gb, gb->cpu.pc);
+	const uint8_t extended_inst_prefix = 0xCB;
+	assert(gb_MemoryReadByte(gb, gb->cpu.pc - 1) == extended_inst_prefix);
+
+	const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
 	const gb__InstructionInfo info = gb__extended_instruction_infos[inst.opcode];
 
 	gb->cpu.pc += 1;
@@ -734,9 +971,82 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
 		break;
 	}
 
+	case 0x40:  // BIT 0, B
+	case 0x41:  // BIT 0, C
+	case 0x42:  // BIT 0, D
+	case 0x43:  // BIT 0, E
+	case 0x44:  // BIT 0, H
+	case 0x45:  // BIT 0, L
+	case 0x46:  // BIT 0, (HL)
+	case 0x47:  // BIT 0, A
+
+	case 0x48:  // BIT 1, B
+	case 0x49:  // BIT 1, C
+	case 0x4A:  // BIT 1, D
+	case 0x4B:  // BIT 1, E
+	case 0x4C:  // BIT 1, H
+	case 0x4D:  // BIT 1, L
+	case 0x4E:  // BIT 1, (HL)
+	case 0x4F:  // BIT 1, A
+
+	case 0x50:  // BIT 2, B
+	case 0x51:  // BIT 2, C
+	case 0x52:  // BIT 2, D
+	case 0x53:  // BIT 2, E
+	case 0x54:  // BIT 2, H
+	case 0x55:  // BIT 2, L
+	case 0x56:  // BIT 2, (HL)
+	case 0x57:  // BIT 2, A
+
+	case 0x58:  // BIT 3, B
+	case 0x59:  // BIT 3, C
+	case 0x5A:  // BIT 3, D
+	case 0x5B:  // BIT 3, E
+	case 0x5C:  // BIT 3, H
+	case 0x5D:  // BIT 3, L
+	case 0x5E:  // BIT 3, (HL)
+	case 0x5F:  // BIT 3, A
+
+	case 0x60:  // BIT 4, B
+	case 0x61:  // BIT 4, C
+	case 0x62:  // BIT 4, D
+	case 0x63:  // BIT 4, E
+	case 0x64:  // BIT 4, H
+	case 0x65:  // BIT 4, L
+	case 0x66:  // BIT 4, (HL)
+	case 0x67:  // BIT 4, A
+
+	case 0x68:  // BIT 5, B
+	case 0x69:  // BIT 5, C
+	case 0x6A:  // BIT 5, D
+	case 0x6B:  // BIT 5, E
+	case 0x6C:  // BIT 5, H
+	case 0x6D:  // BIT 5, L
+	case 0x6E:  // BIT 5, (HL)
+	case 0x6F:  // BIT 5, A
+
+	case 0x70:  // BIT 6, B
+	case 0x71:  // BIT 6, C
+	case 0x72:  // BIT 6, D
+	case 0x73:  // BIT 6, E
+	case 0x74:  // BIT 6, H
+	case 0x75:  // BIT 6, L
+	case 0x76:  // BIT 6, (HL)
+	case 0x77:  // BIT 6, A
+
+	case 0x78:  // BIT 7, B
+	case 0x79:  // BIT 7, C
+	case 0x7A:  // BIT 7, D
+	case 0x7B:  // BIT 7, E
+	case 0x7C:  // BIT 7, H
+	case 0x7D:  // BIT 7, L
+	case 0x7E:  // BIT 7, (HL)
+	case 0x7F:  // BIT 7, A
+		//break;
+
 	default:
 		// Revert PC
-		gb->cpu.pc -= 1;
+		gb->cpu.pc -= 1 /* prefix */ + 1 /* opcode */;
 		// See note in the end of gb_ExecuteNextInstruction.
 		return (size_t)-1;
 	}
@@ -772,12 +1082,12 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		assert(false);
 		break;
 
-	case 0x07:  // RLC A
+	case 0x07:  // RLCA
 		gb->cpu.a = gb__RotateLeftCircular(gb, gb->cpu.a, true);
 		assert(false);
 		break;
 
-	case 0x0F:  // RRC A
+	case 0x0F:  // RRCA
 		gb->cpu.a = gb__RotateRightCircular(gb, gb->cpu.a, true);
 		assert(false);
 		break;
@@ -787,12 +1097,12 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		assert(false);
 		break;
 
-	case 0x17:  // RL A
+	case 0x17:  // RLA
 		gb->cpu.a = gb__RotateLeft(gb, gb->cpu.a, true);
 		assert(false);
 		break;
 
-	case 0x1F:  // RR A
+	case 0x1F:  // RRA
 		gb->cpu.a = gb__RotateRight(gb, gb->cpu.a, true);
 		assert(false);
 		break;
@@ -809,47 +1119,215 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		--gb->cpu.hl;
 		break;
 
-	case 0xA0:  // AND B
-	case 0xA1:  // AND C
-	case 0xA2:  // AND D
-	case 0xA3:  // AND E
-	case 0xA4:  // AND H
-	case 0xA5:  // AND L
-	case 0xA7:  // AND A
-		gb->cpu.a &= *gl__MapIndexToReg(gb, inst.opcode);
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
-		break;
-	case 0xA6:  // AND (HL)
-		gb->cpu.a &= gb_MemoryReadByte(gb, gb->cpu.hl);
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+	case 0x40:  // LD B, B
+	case 0x41:  // LD B, C
+	case 0x42:  // LD B, D
+	case 0x43:  // LD B, E
+	case 0x44:  // LD B, H
+	case 0x45:  // LD B, L
+	case 0x47:  // LD B, A
+	case 0x48:  // LD C, B
+	case 0x49:  // LD C, C
+	case 0x4A:  // LD C, D
+	case 0x4B:  // LD C, E
+	case 0x4C:  // LD C, H
+	case 0x4D:  // LD C, L
+	case 0x4F:  // LD C, A
+	case 0x50:  // LD D, B
+	case 0x51:  // LD D, C
+	case 0x52:  // LD D, D
+	case 0x53:  // LD D, E
+	case 0x54:  // LD D, H
+	case 0x55:  // LD D, L
+	case 0x57:  // LD D, A
+	case 0x58:  // LD E, B
+	case 0x59:  // LD E, C
+	case 0x5A:  // LD E, D
+	case 0x5B:  // LD E, E
+	case 0x5C:  // LD E, H
+	case 0x5D:  // LD E, L
+	case 0x5F:  // LD E, A
+	case 0x60:  // LD H, B
+	case 0x61:  // LD H, C
+	case 0x62:  // LD H, D
+	case 0x63:  // LD H, E
+	case 0x64:  // LD H, H
+	case 0x65:  // LD H, L
+	case 0x67:  // LD H, A
+	case 0x68:  // LD L, B
+	case 0x69:  // LD L, C
+	case 0x6A:  // LD L, D
+	case 0x6B:  // LD L, E
+	case 0x6C:  // LD L, H
+	case 0x6D:  // LD L, L
+	case 0x6F:  // LD L, A
+	case 0x78:  // LD A, B
+	case 0x79:  // LD A, C
+	case 0x7A:  // LD A, D
+	case 0x7B:  // LD A, E
+	case 0x7C:  // LD A, H
+	case 0x7D:  // LD A, L
+	case 0x7F:  // LD A, A
+		*gl__MapIndexToReg(gb, (inst.opcode - 0x40) >> 3u) = *gl__MapIndexToReg(gb, inst.opcode);
+		assert(false);
 		break;
 
-	case 0xA8:  // XOR B
-	case 0xA9:  // XOR C
-	case 0xAA:  // XOR D
-	case 0xAB:  // XOR E
-	case 0xAC:  // XOR H
-	case 0xAD:  // XOR L
-	case 0xAF:  // XOR A
+	case 0x46:  // LD B, (HL)
+	case 0x4E:  // LD C, (HL)
+	case 0x56:  // LD D, (HL)
+	case 0x5E:  // LD E, (HL)
+	case 0x66:  // LD H, (HL)
+	case 0x6E:  // LD L, (HL)
+	case 0x7E:  // LD A, (HL)
+		*gl__MapIndexToReg(gb, (inst.opcode - 0x40) >> 3u) = gb_MemoryReadByte(gb, gb->cpu.hl);
+		assert(false);
+		break;
+
+	case 0x70:  // LD (HL), B
+	case 0x71:  // LD (HL), C
+	case 0x72:  // LD (HL), D
+	case 0x73:  // LD (HL), E
+	case 0x74:  // LD (HL), H
+	case 0x75:  // LD (HL), L
+	case 0x77:  // LD (HL), A
+		gb__MemoryWriteByte(gb, gb->cpu.hl, *gl__MapIndexToReg(gb, inst.opcode));
+		assert(false);
+		break;
+
+	case 0x76:  // HALT
+		gb->cpu.halt = true;
+		// TODO: handle interrupts, etc.
+		// Read page 19+ in the CPU manual
+		assert(false);
+		break;
+
+	case 0x80:  // ADD A, B
+	case 0x81:  // ADD A, C
+	case 0x82:  // ADD A, D
+	case 0x83:  // ADD A, E
+	case 0x84:  // ADD A, H
+	case 0x85:  // ADD A, L
+	case 0x87:  // ADD A, A
+		gb->cpu.a = gb__Add(gb, gb->cpu.a, *gl__MapIndexToReg(gb, inst.opcode), false);
+		break;
+	case 0x86:  // ADD A, (HL)
+		gb->cpu.a = gb__Add(gb, gb->cpu.a, gb_MemoryReadByte(gb, gb->cpu.hl), false);
+		break;
+
+	case 0x88:  // ADC A, B
+	case 0x89:  // ADC A, C
+	case 0x8A:  // ADC A, D
+	case 0x8B:  // ADC A, E
+	case 0x8C:  // ADC A, H
+	case 0x8D:  // ADC A, L
+	case 0x8F:  // ADC A, A
+		gb->cpu.a = gb__Add(gb, gb->cpu.a, *gl__MapIndexToReg(gb, inst.opcode), true);
+		break;
+	case 0x8E:  // ADC A, (HL)
+		gb->cpu.a = gb__Add(gb, gb->cpu.a, gb_MemoryReadByte(gb, gb->cpu.hl), true);
+		break;
+
+	case 0x90:  // SUB A, B
+	case 0x91:  // SUB A, C
+	case 0x92:  // SUB A, D
+	case 0x93:  // SUB A, E
+	case 0x94:  // SUB A, H
+	case 0x95:  // SUB A, L
+	case 0x97:  // SUB A, A
+		gb->cpu.a = gb__Sub(gb, gb->cpu.a, *gl__MapIndexToReg(gb, inst.opcode), false);
+		break;
+	case 0x96:  // SUB A, (HL)
+		gb->cpu.a = gb__Sub(gb, gb->cpu.a, gb_MemoryReadByte(gb, gb->cpu.hl), false);
+		break;
+
+	case 0x98:  // SBC A, B
+	case 0x99:  // SBC A, C
+	case 0x9A:  // SBC A, D
+	case 0x9B:  // SBC A, E
+	case 0x9C:  // SBC A, H
+	case 0x9D:  // SBC A, L
+	case 0x9F:  // SBC A, A
+		gb->cpu.a = gb__Sub(gb, gb->cpu.a, *gl__MapIndexToReg(gb, inst.opcode), true);
+		break;
+	case 0x9E:  // SBC A, (HL)
+		gb->cpu.a = gb__Sub(gb, gb->cpu.a, gb_MemoryReadByte(gb, gb->cpu.hl), true);
+		break;
+
+	case 0xA0:  // AND A, B
+	case 0xA1:  // AND A, C
+	case 0xA2:  // AND A, D
+	case 0xA3:  // AND A, E
+	case 0xA4:  // AND A, H
+	case 0xA5:  // AND A, L
+	case 0xA7:  // AND A, A
+		gb->cpu.a &= *gl__MapIndexToReg(gb, inst.opcode);
+		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		break;
+	case 0xA6:  // AND A, (HL)
+		gb->cpu.a &= gb_MemoryReadByte(gb, gb->cpu.hl);
+		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		break;
+
+	case 0xA8:  // XOR A, B
+	case 0xA9:  // XOR A, C
+	case 0xAA:  // XOR A, D
+	case 0xAB:  // XOR A, E
+	case 0xAC:  // XOR A, H
+	case 0xAD:  // XOR A, L
+	case 0xAF:  // XOR A, A
 		gb->cpu.a ^= *gl__MapIndexToReg(gb, inst.opcode);
 		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
 		break;
-	case 0xAE:  // XOR (HL)
+	case 0xAE:  // XOR A, (HL)
 		gb->cpu.a ^= gb_MemoryReadByte(gb, gb->cpu.hl);
 		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
 		break;
+
+	case 0xB0:  // OR A, B
+	case 0xB1:  // OR A, C
+	case 0xB2:  // OR A, D
+	case 0xB3:  // OR A, E
+	case 0xB4:  // OR A, H
+	case 0xB5:  // OR A, L
+	case 0xB7:  // OR A, A
+		gb->cpu.a |= *gl__MapIndexToReg(gb, inst.opcode);
+		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		break;
+	case 0xB6:  // OR A, (HL)
+		gb->cpu.a |= gb_MemoryReadByte(gb, gb->cpu.hl);
+		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		break;
+
+	case 0xB8:  // CP A, B
+	case 0xB9:  // CP A, C
+	case 0xBA:  // CP A, D
+	case 0xBB:  // CP A, E
+	case 0xBC:  // CP A, H
+	case 0xBD:  // CP A, L
+	case 0xBF:  // CP A, A
+	{
+		uint8_t val = *gl__MapIndexToReg(gb, inst.opcode);
+		gb__SetFlags(gb, gb->cpu.a == val, false, (gb->cpu.a & 0x0F) < (val & 0x0F), gb->cpu.a < val);
+		break;
+	}
+	case 0xBE:  // CP A, (HL)
+	{
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		gb__SetFlags(gb, gb->cpu.a == val, false, (gb->cpu.a & 0x0F) < (val & 0x0F), gb->cpu.a < val);
+		break;
+	}
 
 	case 0xCB:  // PREFIX
 		result = gb__ExecuteExtendedInstruction(gb);
 		break;
 
-	case 0xE7:  // AND n
+	case 0xE6:  // AND A, n
 		gb->cpu.a &= inst.operand_byte;
 		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
 		assert(false);
 		break;
 
-	case 0xEE:  // XOR n
+	case 0xEE:  // XOR A, n
 		gb->cpu.a ^= inst.operand_byte;
 		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
 		assert(false);

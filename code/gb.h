@@ -68,6 +68,8 @@ typedef struct gb_GameBoy
 		};
 		uint16_t pc;  // Program counter
 		uint16_t sp;  // Stack pointer
+
+		bool halt;
 	} cpu;
 
 	struct Memory
@@ -101,12 +103,9 @@ typedef struct gb_GameBoy
 	} rom;
 } gb_GameBoy;
 
-// TODO rem
+// TODO rem, I think reset is enough
 void
 gb_Init(gb_GameBoy* gb);
-
-// void
-// gb_Reset(gb_GameBoy* gb);
 
 // Returns true in error case if the ROM cannot be loaded, is broken,
 // or is not for GameBoy.
@@ -122,12 +121,13 @@ gb_MemoryReadWord(const gb_GameBoy* gb, uint16_t addr);
 
 // Resets the GameBoy.
 void
-gb_Reset(gb_GameBoy* gb);
+gb_Reset(gb_GameBoy* gb, bool skip_bios);
 
 // A GameBoy assembly instruction.
 typedef struct gb_Instruction
 {
 	uint8_t opcode;
+	bool is_extended;
 	uint8_t num_operand_bytes;
 	union
 	{

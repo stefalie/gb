@@ -470,6 +470,7 @@ struct Config
 		bool mag_filter_changed = true;
 		int speed_frame_multiplier = 1;
 
+		bool skip_bios = false;
 		bool single_step_mode = false;
 		bool exec_next_step = false;
 	} gui;
@@ -531,7 +532,7 @@ LoadRomFromFile(Config* config, gb_GameBoy* gb, const char* file_path)
 		{
 			config->gui.has_active_rom = true;
 			config->gui.exec_next_step = false;
-			gb_Reset(gb);
+			gb_Reset(gb, config->gui.skip_bios);
 
 			// TODO: print cleanup
 			SDL_Log("Loaded ROM: %s\n", gb->rom.name);
@@ -543,7 +544,7 @@ LoadRomFromFile(Config* config, gb_GameBoy* gb, const char* file_path)
 			{
 				const gb_Instruction inst = gb_FetchInstruction(gb, addr);
 				gb_DisassembleInstruction(inst, str_buf, sizeof(str_buf));
-				SDL_Log("%s\n", str_buf);
+				SDL_Log("0x%04X: %s\n", inst.opcode, str_buf);
 				addr += inst.num_operand_bytes + 1;
 			}
 			SDL_Log("Start execution:\n");
@@ -624,7 +625,7 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 		{
 			if (ImGui::MenuItem("Reset"))
 			{
-				gb_Reset(gb);
+				gb_Reset(gb, config->gui.skip_bios);
 			}
 			ImGui::MenuItem("Pause", "Space", false, config->gui.has_active_rom);
 			ImGui::Separator();
@@ -706,6 +707,10 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 			if (ImGui::MenuItem("Open Debugger", NULL, config->debug.show))
 			{
 				config->debug.show = !config->debug.show;
+			}
+			if (ImGui::MenuItem("Skip BIOS", NULL, config->gui.skip_bios))
+			{
+				config->gui.skip_bios = !config->gui.skip_bios;
 			}
 			if (ImGui::MenuItem("Single step mode", NULL, config->gui.single_step_mode))
 			{
@@ -967,13 +972,19 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 			ImGui::DockBuilderDockWindow(tab_name_mem_view, dock_id_left);
 			ImGui::DockBuilderDockWindow(tab_name_options, dock_id_right_top);
 			ImGui::DockBuilderDockWindow(tab_name_disassembly, dock_id_right_middle);
-			ImGui::DockBuilderDockWindow(tab_name_cpu, dock_id_right_middle);
+			ImGui::DockBuilderDockWindow(tab_name_cpu, dock_id_right_bottom);
 			ImGui::DockBuilderDockWindow(tab_name_sprites, dock_id_right_bottom);
 			ImGui::DockBuilderDockWindow(tab_name_righttab2, dock_id_right_bottom);
 			ImGui::DockBuilderFinish(dockspace_id);
 		}
 
 		ImGui::DockSpace(dockspace_id);
+		ImGui::End();
+	}
+
+	{
+		ImGui::Begin(tab_name_righttab2);
+		ImGui::Text("text text text left");
 		ImGui::End();
 	}
 
@@ -1007,20 +1018,10 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		mem_view->DrawContents(gb, 0xFFFF);
 		ImGui::End();
 
-		ImGui::Begin(tab_name_cpu);
-		ImGui::Text("af = 0x%04X\n", gb->cpu.af);
-		ImGui::Text("bc = 0x%04X\n", gb->cpu.bc);
-		ImGui::Text("de = 0x%04X\n", gb->cpu.de);
-		ImGui::Text("hl = 0x%04X\n", gb->cpu.hl);
-		ImGui::Text("sp = 0x%04X\n", gb->cpu.sp);
-		ImGui::Text("pc = 0x%04X\n", gb->cpu.pc);
-		// TODO z n h c flags
-		ImGui::End();
-
 		{
 			ImGui::Begin(tab_name_disassembly);
 			const size_t num_instructions = 20;
-			const size_t buf_len = (32 + 1) * num_instructions;  // 32 + 1 newline chars per line
+			const size_t buf_len = (6 + 32 + 1) * num_instructions;  // opcode + 32 + 1 newline chars per line
 			char buf[buf_len];
 			// Ideally we would go a few instruction back in time.
 			// But for that we would have to track the instructions because otherwise
@@ -1043,6 +1044,21 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		ImGui::Begin(tab_name_sprites);
 		ImGui::Text("TODO");
 		ImGui::End();
+
+		{
+			ImGui::Begin(tab_name_cpu);
+			ImGui::Text("Registers:");
+			ImGui::Text("a = 0x%02X\tf = 0x%02X\taf = 0x%04X\n", gb->cpu.a, gb->cpu.f, gb->cpu.af);
+			ImGui::Text("b = 0x%02X\tc = 0x%02X\tbc = 0x%04X\n", gb->cpu.b, gb->cpu.c, gb->cpu.bc);
+			ImGui::Text("d = 0x%02X\te = 0x%02X\tde = 0x%04X\n", gb->cpu.d, gb->cpu.e, gb->cpu.de);
+			ImGui::Text("h = 0x%02X\tl = 0x%02X\thl = 0x%04X\n", gb->cpu.h, gb->cpu.l, gb->cpu.hl);
+			ImGui::Text("sp = 0x%04X\n", gb->cpu.sp);
+			ImGui::Text("pc = 0x%04X\n", gb->cpu.pc);
+			ImGui::Text("");
+			ImGui::Text("Flags:");
+			ImGui::Text("z = %d\tn = %d\th = %d\tc = %d\t", gb->cpu.flags.zero, gb->cpu.flags.subtract, gb->cpu.flags.half_carry, gb->cpu.flags.carry);
+			ImGui::End();
+		}
 	}
 	else
 	{
@@ -1057,10 +1073,10 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		ImGui::Begin(tab_name_disassembly);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
-		ImGui::Begin(tab_name_cpu);
+		ImGui::Begin(tab_name_sprites);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
-		ImGui::Begin(tab_name_sprites);
+		ImGui::Begin(tab_name_cpu);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
 	}
@@ -1087,13 +1103,6 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 
 		ImGui::End();
 	}
-
-	{
-		ImGui::Begin(tab_name_righttab2);
-		ImGui::Text("text text text left");
-		ImGui::End();
-	}
-
 
 	// ImGui demo window
 	// static bool show_demo = true;
