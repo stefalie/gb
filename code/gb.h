@@ -134,12 +134,17 @@ typedef struct gb_Instruction
 		uint8_t operand_byte;
 		uint16_t operand_word;
 	};
-	uint8_t num_machine_cycles;
+	uint8_t min_num_machine_cycles;
 } gb_Instruction;
 
 // Fetches assembly instruction at 'addr' (which needs to point to a valid instruction).
 gb_Instruction
 gb_FetchInstruction(const gb_GameBoy* gb, uint16_t addr);
+
+// Returns the total number of bytes that the instruction uses for opcode, extended
+// opcode (if applicable), and operand.
+uint16_t
+gb_InstructionSize(gb_Instruction inst);
 
 // Disassembles 'inst' into 'str_buf'. Appends a NUL suffix.
 // A 32 byte buffer is sufficient for any instruction.

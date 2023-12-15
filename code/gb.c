@@ -415,12 +415,11 @@ typedef struct
 {
 	char *name;
 	uint8_t num_operand_bytes;
-	uint8_t num_machine_cycles;
+	uint8_t min_num_machine_cycles;  // -1 if depending
 } gb__InstructionInfo;
 
 static const gb__InstructionInfo gb__instruction_infos[256] = {
 	[0x00] = { "NOP", 0, 1 },
-
 	[0x01] = { "LD BC", 2, 3 },
 
 	[0x07] = { "RLCA", 0, 1 },
@@ -430,13 +429,21 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 	[0x11] = { "LD DE", 2, 3 },
 
 	[0x17] = { "RLA", 0, 1 },
+	[0x18] = { "JR n", 1, 3 },
 
 	[0x1F] = { "RRA", 0, 1 },
 
+	[0x20] = { "JR NZ, n", 1, (uint8_t)-1 },
+
 	[0x21] = { "LD HL", 2, 3 },
 
+	[0x28] = { "JR Z, n", 1, (uint8_t)-1 },
+
+	[0x30] = { "JR NC, n", 1, (uint8_t)-1 },
 	[0x31] = { "LD SP", 2, 3 },
 	[0x32] = { "LD (HL-), A", 0, 1 },
+
+	[0x38] = { "JR C, n", 1, (uint8_t)-1 },
 
 	[0x40] = { "LD B, B", 0, 1 },
 	[0x41] = { "LD B, C", 0, 1 },
@@ -708,11 +715,12 @@ gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
 
 	gb__InstructionInfo info;
 
-	// TODO: this doesn't work! what if we execute the  ....
 	const uint8_t extended_inst_prefix = 0xCB;
-	if (addr > 0 && gb_MemoryReadByte(gb, addr - 1) == extended_inst_prefix)
+	if (inst.opcode == extended_inst_prefix)
 	{
+		++addr;
 		inst.is_extended = true;
+		inst.opcode = gb_MemoryReadByte(gb, addr);
 		info = gb__extended_instruction_infos[inst.opcode];
 		assert(info.num_operand_bytes == 0);
 	}
@@ -723,7 +731,7 @@ gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
 	}
 
 	inst.num_operand_bytes = info.num_operand_bytes;
-	inst.num_machine_cycles = info.num_machine_cycles;
+	inst.min_num_machine_cycles = info.min_num_machine_cycles;
 
 	if (inst.num_operand_bytes == 1)
 	{
@@ -735,6 +743,12 @@ gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
 	}
 
 	return inst;
+}
+
+uint16_t
+gb_InstructionSize(gb_Instruction inst)
+{
+	return inst.is_extended ? 2 : 1 + inst.num_operand_bytes;
 }
 
 // TODO: get rid of snprintf, strlen, memcpy to avoid std includes.
@@ -875,15 +889,10 @@ gb__Sub(gb_GameBoy *gb, uint8_t lhs, uint8_t rhs, bool carry_in)
 }
 
 size_t
-gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
+gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 {
 	const uint8_t extended_inst_prefix = 0xCB;
-	assert(gb_MemoryReadByte(gb, gb->cpu.pc - 1) == extended_inst_prefix);
-
-	const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
-	const gb__InstructionInfo info = gb__extended_instruction_infos[inst.opcode];
-
-	gb->cpu.pc += 1;
+	assert(gb_MemoryReadByte(gb, gb->cpu.pc - 2) == extended_inst_prefix);
 
 	switch (inst.opcode)
 	{
@@ -1060,13 +1069,12 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
 	}
 
 	default:
-		// Revert PC
-		gb->cpu.pc -= 1 /* prefix */ + 1 /* opcode */;
 		// See note in the end of gb_ExecuteNextInstruction.
+		gb->cpu.pc -= gb_InstructionSize(inst);
 		return (size_t)-1;
 	}
 
-	return info.num_machine_cycles;
+	return inst.min_num_machine_cycles;
 }
 
 size_t
@@ -1081,11 +1089,14 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	}
 
 	const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
-	const gb__InstructionInfo info = gb__instruction_infos[inst.opcode];
+	gb->cpu.pc += gb_InstructionSize(inst);
 
-	gb->cpu.pc += 1 /* opcode */ + info.num_operand_bytes;
+	if (inst.is_extended)
+	{
+		return gb__ExecuteExtendedInstruction(gb, inst);
+	}
 
-	size_t result = info.num_machine_cycles;
+	size_t result = inst.min_num_machine_cycles;
 
 	switch (inst.opcode)
 	{
@@ -1121,17 +1132,66 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		gb->cpu.a = gb__RotateRight(gb, gb->cpu.a, true);
 		assert(false);
 		break;
+	case 0x18:  // JR n
+		gb->cpu.pc += inst.operand_byte;
+		break;
 
+	case 0x20:  // JR NZ, n
+		if (gb->cpu.flags.zero == 0)
+		{
+			gb->cpu.pc += inst.operand_byte;
+			result = 3;
+		}
+		else
+		{
+			result = 2;
+		}
+		break;
 	case 0x21:  // LD HL, nn
 		gb->cpu.hl = inst.operand_word;
 		break;
 
+	case 0x28:  // JR Z, n
+		if (gb->cpu.flags.zero == 1)
+		{
+			gb->cpu.pc += inst.operand_byte;
+			result = 3;
+		}
+		else
+		{
+			result = 2;
+		}
+		break;
+
+	case 0x30:  // JR NC, n
+		if (gb->cpu.flags.carry == 0)
+		{
+			gb->cpu.pc += inst.operand_byte;
+			result = 3;
+		}
+		else
+		{
+			result = 2;
+		}
+		break;
 	case 0x31:  // LD SP, nn
 		gb->cpu.sp = inst.operand_word;
 		break;
 	case 0x32:  // LD (HL-), A
 		gb__MemoryWriteByte(gb, gb->cpu.hl, gb->cpu.a);
 		--gb->cpu.hl;
+		break;
+
+	case 0x38:  // JR C, n
+		if (gb->cpu.flags.carry == 1)
+		{
+			gb->cpu.pc += inst.operand_byte;
+			result = 3;
+		}
+		else
+		{
+			result = 2;
+		}
 		break;
 
 	case 0x40:  // LD B, B
@@ -1333,7 +1393,8 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	}
 
 	case 0xCB:  // PREFIX
-		result = gb__ExecuteExtendedInstruction(gb);
+		// Handled seperatly above.
+		assert(false);
 		break;
 
 	case 0xE6:  // AND A, n
@@ -1363,17 +1424,17 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		assert(false);
 		break;
 
-
 	default:
-		// Revert PC
-		gb->cpu.pc -= 1 /* opcode */ + info.num_operand_bytes;
 		// Asserting that the return value is not -1 in the caller allows
 		// implementing the instructions step by step. Whenever assert fails,
 		// it will tell us which is the next instruction that needs to be
 		// implemented next for the program to continue.
+		// Revert PC so that the debugger still displays the missing instruction.
+		gb->cpu.pc -= gb_InstructionSize(inst);
 		return (size_t)-1;
 	}
 
+	assert(result != -1);
 	return result;
 }
 

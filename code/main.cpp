@@ -545,7 +545,7 @@ LoadRomFromFile(Config* config, gb_GameBoy* gb, const char* file_path)
 				const gb_Instruction inst = gb_FetchInstruction(gb, addr);
 				gb_DisassembleInstruction(inst, str_buf, sizeof(str_buf));
 				SDL_Log("0x%04X: %s\n", inst.opcode, str_buf);
-				addr += inst.num_operand_bytes + 1;
+				addr += gb_InstructionSize(inst);
 			}
 			SDL_Log("Start execution:\n");
 		}
@@ -1032,7 +1032,7 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 				const gb_Instruction inst = gb_FetchInstruction(gb, addr);
 				size_t end = gb_DisassembleInstruction(inst, buf, buf_len);
 				buf[end] = '\0';
-				addr += inst.num_operand_bytes + 1;
+				addr += gb_InstructionSize(inst);
 				ImGui::Text("0x%02X: %s", inst.opcode, buf);
 			}
 			ImGui::End();
