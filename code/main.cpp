@@ -1021,23 +1021,20 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		{
 			ImGui::Begin(tab_name_disassembly);
 			const size_t num_instructions = 20;
-			const size_t buf_len = (6 + 32 + 1) * num_instructions;  // opcode + 32 + 1 newline chars per line
+			const size_t buf_len = (32 + 1);  // 32 + 1 newline chars per instruction
 			char buf[buf_len];
 			// Ideally we would go a few instruction back in time.
 			// But for that we would have to track the instructions because otherwise
 			// we cannot know how long (in bytes) they were.
 			uint16_t addr = gb->cpu.pc;
-			size_t buf_offset = 0;
 			for (size_t i = 0; i < num_instructions; ++i)
 			{
 				const gb_Instruction inst = gb_FetchInstruction(gb, addr);
-				buf_offset += gb_DisassembleInstruction(inst, buf + buf_offset, buf_len - buf_offset);
-				buf[buf_offset] = '\n';
-				++buf_offset;
+				size_t end = gb_DisassembleInstruction(inst, buf, buf_len);
+				buf[end] = '\0';
 				addr += inst.num_operand_bytes + 1;
+				ImGui::Text("0x%02X: %s", inst.opcode, buf);
 			}
-			buf[buf_offset] = '\0';
-			ImGui::Text("%s", buf);
 			ImGui::End();
 		}
 

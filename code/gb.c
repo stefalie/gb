@@ -708,6 +708,7 @@ gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
 
 	gb__InstructionInfo info;
 
+	// TODO: this doesn't work! what if we execute the  ....
 	const uint8_t extended_inst_prefix = 0xCB;
 	if (addr > 0 && gb_MemoryReadByte(gb, addr - 1) == extended_inst_prefix)
 	{
@@ -757,7 +758,7 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 	else
 	{
 		assert(info.num_operand_bytes > 0 && info.num_operand_bytes < 3);
-		snprintf(str_buf, str_buf_len, "0x%04X: %s, 0x%0*X", inst.opcode, info.name, info.num_operand_bytes * 2,
+		snprintf(str_buf, str_buf_len, "%s, 0x%0*X", info.name, info.num_operand_bytes * 2,
 				info.num_operand_bytes == 1 ? inst.operand_byte : inst.operand_word);
 	}
 	return strlen(str_buf);
@@ -928,6 +929,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
 		assert(false);
 		break;
 	}
+
 	case 0x10:  // RL B
 	case 0x11:  // RL C
 	case 0x12:  // RL D
@@ -949,6 +951,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
 		assert(false);
 		break;
 	}
+
 	case 0x18:  // RR B
 	case 0x19:  // RR C
 	case 0x1A:  // RR D
@@ -977,7 +980,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
 	case 0x43:  // BIT 0, E
 	case 0x44:  // BIT 0, H
 	case 0x45:  // BIT 0, L
-	case 0x46:  // BIT 0, (HL)
 	case 0x47:  // BIT 0, A
 
 	case 0x48:  // BIT 1, B
@@ -986,7 +988,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
 	case 0x4B:  // BIT 1, E
 	case 0x4C:  // BIT 1, H
 	case 0x4D:  // BIT 1, L
-	case 0x4E:  // BIT 1, (HL)
 	case 0x4F:  // BIT 1, A
 
 	case 0x50:  // BIT 2, B
@@ -995,7 +996,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
 	case 0x53:  // BIT 2, E
 	case 0x54:  // BIT 2, H
 	case 0x55:  // BIT 2, L
-	case 0x56:  // BIT 2, (HL)
 	case 0x57:  // BIT 2, A
 
 	case 0x58:  // BIT 3, B
@@ -1004,7 +1004,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
 	case 0x5B:  // BIT 3, E
 	case 0x5C:  // BIT 3, H
 	case 0x5D:  // BIT 3, L
-	case 0x5E:  // BIT 3, (HL)
 	case 0x5F:  // BIT 3, A
 
 	case 0x60:  // BIT 4, B
@@ -1013,7 +1012,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
 	case 0x63:  // BIT 4, E
 	case 0x64:  // BIT 4, H
 	case 0x65:  // BIT 4, L
-	case 0x66:  // BIT 4, (HL)
 	case 0x67:  // BIT 4, A
 
 	case 0x68:  // BIT 5, B
@@ -1022,7 +1020,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
 	case 0x6B:  // BIT 5, E
 	case 0x6C:  // BIT 5, H
 	case 0x6D:  // BIT 5, L
-	case 0x6E:  // BIT 5, (HL)
 	case 0x6F:  // BIT 5, A
 
 	case 0x70:  // BIT 6, B
@@ -1031,7 +1028,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
 	case 0x73:  // BIT 6, E
 	case 0x74:  // BIT 6, H
 	case 0x75:  // BIT 6, L
-	case 0x76:  // BIT 6, (HL)
 	case 0x77:  // BIT 6, A
 
 	case 0x78:  // BIT 7, B
@@ -1040,9 +1036,28 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb)
 	case 0x7B:  // BIT 7, E
 	case 0x7C:  // BIT 7, H
 	case 0x7D:  // BIT 7, L
-	case 0x7E:  // BIT 7, (HL)
 	case 0x7F:  // BIT 7, A
-		//break;
+	{
+		size_t bit_index = (inst.opcode - 0x40) >> 3u;
+		size_t bit = (*gl__MapIndexToReg(gb, inst.opcode) >> bit_index) & 0x01;
+		gb__SetFlags(gb, bit == 0, false, true, gb->cpu.flags.carry == 1);
+		break;
+	}
+
+	case 0x46:  // BIT 0, (HL)
+	case 0x4E:  // BIT 1, (HL)
+	case 0x56:  // BIT 2, (HL)
+	case 0x5E:  // BIT 3, (HL)
+	case 0x66:  // BIT 4, (HL)
+	case 0x6E:  // BIT 5, (HL)
+	case 0x76:  // BIT 6, (HL)
+	case 0x7E:  // BIT 7, (HL)
+	{
+		size_t bit_index = (inst.opcode - 0x40) >> 3u;
+		size_t bit = (gb_MemoryReadByte(gb, gb->cpu.hl) >> bit_index) & 0x01;
+		gb__SetFlags(gb, bit == 0, false, true, gb->cpu.flags.carry == 1);
+		break;
+	}
 
 	default:
 		// Revert PC
