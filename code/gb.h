@@ -134,7 +134,6 @@ typedef struct gb_Instruction
 		uint8_t operand_byte;
 		uint16_t operand_word;
 	};
-	uint8_t min_num_machine_cycles;
 } gb_Instruction;
 
 // Fetches assembly instruction at 'addr' (which needs to point to a valid instruction).

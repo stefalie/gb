@@ -198,7 +198,6 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	// VRAM
 	case 0x8000:
 	case 0x9000:
-		assert(!"TODO");
 		return gb->memory.vram[addr & 0x1FFF];
 	// Switchable RAM bank
 	case 0xA000:
@@ -731,7 +730,6 @@ gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
 	}
 
 	inst.num_operand_bytes = info.num_operand_bytes;
-	inst.min_num_machine_cycles = info.min_num_machine_cycles;
 
 	if (inst.num_operand_bytes == 1)
 	{
@@ -1074,7 +1072,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		return (size_t)-1;
 	}
 
-	return inst.min_num_machine_cycles;
+	return gb__extended_instruction_infos[inst.opcode].min_num_machine_cycles;
 }
 
 size_t
@@ -1096,7 +1094,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		return gb__ExecuteExtendedInstruction(gb, inst);
 	}
 
-	size_t result = inst.min_num_machine_cycles;
+	size_t result = gb__instruction_infos[inst.opcode].min_num_machine_cycles;
 
 	switch (inst.opcode)
 	{
