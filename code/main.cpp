@@ -38,7 +38,7 @@ extern "C" {
 }
 
 static inline void
-_SDL_CheckError(const char* file, int line)
+_SDL_CheckError(const char *file, int line)
 {
 	if (strcmp(SDL_GetError(), "") != 0)
 	{
@@ -48,18 +48,18 @@ _SDL_CheckError(const char* file, int line)
 }
 
 #ifndef NDEBUG
-#define SDL_CheckError() _SDL_CheckError(__FILE__, __LINE__)
+	#define SDL_CheckError() _SDL_CheckError(__FILE__, __LINE__)
 #else
-#define SDL_CheckError() ((void)0)
+	#define SDL_CheckError() ((void)0)
 #endif
 
 void
-_glCheckError(const char* file, int line)
+_glCheckError(const char *file, int line)
 {
 	GLenum error;
 	while ((error = glGetError()) != GL_NO_ERROR)
 	{
-		const char* error_str;
+		const char *error_str;
 		switch (error)
 		{
 #define CASE(error) \
@@ -85,9 +85,9 @@ _glCheckError(const char* file, int line)
 }
 
 #ifndef NDEBUG
-#define glCheckError() _glCheckError(__FILE__, __LINE__)
+	#define glCheckError() _glCheckError(__FILE__, __LINE__)
 #else
-#define glCheckError() ((void)0)
+	#define glCheckError() ((void)0)
 #endif
 
 struct Input
@@ -99,8 +99,8 @@ struct Input
 		TYPE_AXIS,
 	};
 
-	const char* name = NULL;
-	const char* nice_name = NULL;
+	const char *name = NULL;
+	const char *nice_name = NULL;
 	InputType type;
 	union
 	{
@@ -131,10 +131,10 @@ static const Input default_inputs[] = {
 };
 static const size_t num_inputs = sizeof(default_inputs) / sizeof(default_inputs[0]);
 
-static const char*
-InputSdlName(const Input* input)
+static const char *
+InputSdlName(const Input *input)
 {
-	const char* sdl_name = NULL;
+	const char *sdl_name = NULL;
 	switch (input->type)
 	{
 	case Input::TYPE_KEY:
@@ -159,8 +159,8 @@ enum Stretch
 static const struct
 {
 	Stretch type;
-	const char* name = NULL;
-	const char* nice_name = NULL;
+	const char *name = NULL;
+	const char *nice_name = NULL;
 } stretch_options[] = {
 	{ STRETCH_NORMAL, "normal", "Stretch" },
 	{ STRETCH_ASPECT_CORRECT, "aspect_correct", "Aspect Correct Stretch" },
@@ -171,8 +171,8 @@ static const size_t num_stretch_options = sizeof(stretch_options) / sizeof(stret
 static const struct
 {
 	gb_MagFilter type;
-	const char* name = NULL;
-	const char* nice_name = NULL;
+	const char *name = NULL;
+	const char *nice_name = NULL;
 } mag_options[] = {
 	{ GB_MAG_FILTER_NONE, "none", "None" },
 	{ GB_MAG_FILTER_EPX_SCALE2X_ADVMAME2X, "epx_scale2x_advmame2x", "EPX/Scale2x/AdvMAME2x" },
@@ -193,7 +193,7 @@ enum Speed
 static const struct
 {
 	Speed type;
-	const char* nice_name = NULL;
+	const char *nice_name = NULL;
 } speed_options[] = {
 	{ SPEED_DEFAULT, "Default" },
 	{ SPEED_2X, "2x" },
@@ -245,35 +245,35 @@ struct Ini
 // TODO(stefalie): Consider trimming whitespace off key and value.
 // TODO(stefalie): This doesn't deal with escaped special characters.
 static Ini
-IniLoadOrInit(const char* ini_path)
+IniLoadOrInit(const char *ini_path)
 {
 	Ini ini;
 
-	FILE* file = fopen(ini_path, "r");
+	FILE *file = fopen(ini_path, "r");
 	if (file)
 	{
 		char tmp[1024];
 		while (true)
 		{
-			char* line = fgets(tmp, 1024, file);
+			char *line = fgets(tmp, 1024, file);
 			if (!line)
 			{
 				break;
 			}
 
-			char* comment = strchr(line, '#');
+			char *comment = strchr(line, '#');
 			if (comment)
 			{
 				*comment = '\0';
 			}
 
-			char* header = strchr(line, '[');
+			char *header = strchr(line, '[');
 			if (header)
 			{
 				continue;
 			}
 
-			char* key = strtok(line, "=");
+			char *key = strtok(line, "=");
 			if (!key || (strlen(key) == 0))
 			{
 				SDL_LogWarn(
@@ -281,7 +281,7 @@ IniLoadOrInit(const char* ini_path)
 				continue;
 			}
 
-			char* val = strtok(NULL, "\n");
+			char *val = strtok(NULL, "\n");
 			if (!val || (strlen(val) == 0))
 			{
 				continue;
@@ -400,9 +400,9 @@ IniLoadOrInit(const char* ini_path)
 }
 
 static void
-IniSave(const char* ini_path, const Ini* ini)
+IniSave(const char *ini_path, const Ini *ini)
 {
-	FILE* file = fopen(ini_path, "w");
+	FILE *file = fopen(ini_path, "w");
 	assert(file);
 	if (file)
 	{
@@ -436,7 +436,7 @@ IniSave(const char* ini_path, const Ini* ini)
 
 struct Rom
 {
-	uint8_t* data = 0;
+	uint8_t *data = 0;
 	int size = 0;
 };
 
@@ -448,7 +448,7 @@ struct Config
 
 	bool quit = false;
 
-	Input* modify_input = NULL;
+	Input *modify_input = NULL;
 
 	struct Gui
 	{
@@ -485,31 +485,31 @@ struct Config
 
 	struct Handles
 	{
-		SDL_Window* window = NULL;
+		SDL_Window *window = NULL;
 		SDL_GLContext gl_context = NULL;
-		SDL_GameController* controller = NULL;
-		ImGuiContext* imgui = NULL;
-		ImFont* font = NULL;
+		SDL_GameController *controller = NULL;
+		ImGuiContext *imgui = NULL;
+		ImFont *font = NULL;
 
-		SDL_Window* debug_window = NULL;
-		ImGuiContext* debug_imgui = NULL;
-		ImFont* debug_font = NULL;
+		SDL_Window *debug_window = NULL;
+		ImGuiContext *debug_imgui = NULL;
+		ImFont *debug_font = NULL;
 	} handles;
 };
 
 static void
-LoadRomFromFile(Config* config, gb_GameBoy* gb, const char* file_path)
+LoadRomFromFile(Config *config, gb_GameBoy *gb, const char *file_path)
 {
 	Rom rom = {};
 
-	FILE* file = fopen(file_path, "rb");
+	FILE *file = fopen(file_path, "rb");
 	if (file)
 	{
 		fseek(file, 0, SEEK_END);
 		rom.size = ftell(file);
 		fseek(file, 0, SEEK_SET);
 
-		rom.data = (uint8_t*)malloc(rom.size);
+		rom.data = (uint8_t *)malloc(rom.size);
 		fread(rom.data, rom.size, 1, file);
 		fclose(file);
 	}
@@ -544,7 +544,7 @@ LoadRomFromFile(Config* config, gb_GameBoy* gb, const char* file_path)
 			{
 				const gb_Instruction inst = gb_FetchInstruction(gb, addr);
 				gb_DisassembleInstruction(inst, str_buf, sizeof(str_buf));
-				SDL_Log("0x%04X: %s\n", inst.opcode, str_buf);
+				SDL_Log("0x%04X: (0x%02X) %s\n", addr, inst.opcode, str_buf);
 				addr += gb_InstructionSize(inst);
 			}
 			SDL_Log("Start execution:\n");
@@ -559,21 +559,21 @@ LoadRomFromFile(Config* config, gb_GameBoy* gb, const char* file_path)
 // TODO(stefalie): Consider using only OpenGL 2.1 compatible functions, glCreateShaderProgram needs OpenGL 4.1.
 #define GL_API_LIST(ENTRY) \
 	ENTRY(void, glUseProgram, GLuint program) \
-	ENTRY(GLuint, glCreateShaderProgramv, GLenum type, GLsizei count, const GLchar* const* strings) \
-	ENTRY(void, glGetProgramiv, GLuint program, GLenum pname, GLint* params) \
-	ENTRY(void, glGetProgramInfoLog, GLuint program, GLsizei maxLength, GLsizei* length, GLchar* infoLog) \
-	ENTRY(GLint, glGetUniformLocation, GLuint program, const GLchar* name) \
+	ENTRY(GLuint, glCreateShaderProgramv, GLenum type, GLsizei count, const GLchar *const *strings) \
+	ENTRY(void, glGetProgramiv, GLuint program, GLenum pname, GLint *params) \
+	ENTRY(void, glGetProgramInfoLog, GLuint program, GLsizei maxLength, GLsizei *length, GLchar *infoLog) \
+	ENTRY(GLint, glGetUniformLocation, GLuint program, const GLchar *name) \
 	ENTRY(void, glUniform1i, GLint location, GLint v0) \
 	ENTRY(void, glUniform2i, GLint location, GLint v0, GLint v1)
 
 #define GL_API_DECL_ENTRY(return_type, name, ...) \
 	typedef return_type __stdcall name##Proc(__VA_ARGS__); \
-	name##Proc* name;
+	name##Proc *name;
 GL_API_LIST(GL_API_DECL_ENTRY)
 #undef GL_API_DECL_ENTRY
 
 static void
-ImGuiOpenCenteredPopup(const char* name)
+ImGuiOpenCenteredPopup(const char *name)
 {
 	// See https://github.com/ocornut/imgui/issues/2405
 	const ImVec2 display_size_half = { ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f };
@@ -582,7 +582,7 @@ ImGuiOpenCenteredPopup(const char* name)
 }
 
 static void
-GuiDraw(Config* config, gb_GameBoy* gb)
+GuiDraw(Config *config, gb_GameBoy *gb)
 {
 	ImGui::PushFont(config->handles.font);
 
@@ -689,7 +689,8 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 			{
 				for (size_t i = 0; i < num_speed_options; ++i)
 				{
-					if (ImGui::MenuItem(speed_options[i].nice_name, NULL, config->gui.speed_frame_multiplier == speed_options[i].type))
+					if (ImGui::MenuItem(speed_options[i].nice_name, NULL,
+								config->gui.speed_frame_multiplier == speed_options[i].type))
 					{
 						config->gui.speed_frame_multiplier = mag_options[i].type;
 					}
@@ -771,7 +772,7 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 		ImGui::Text("Click the buttons to change the input bindings.");
 
 		ImGui::Columns(3);
-		Ini* ini = &config->ini;
+		Ini *ini = &config->ini;
 		char label[64];
 
 		ImGui::Text("");
@@ -786,7 +787,7 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 		const int input_modify_order[] = { 0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 12, 6, 13, 7, 13 };
 		for (int i = 0; i < 16; ++i)
 		{
-			Input* input = &ini->inputs[input_modify_order[i]];
+			Input *input = &ini->inputs[input_modify_order[i]];
 
 			if (i % 2 == 0)
 			{
@@ -892,7 +893,7 @@ GuiDraw(Config* config, gb_GameBoy* gb)
 }
 
 static void
-DebuggerDraw(Config* config, gb_GameBoy* gb)
+DebuggerDraw(Config *config, gb_GameBoy *gb)
 {
 	ImGui::SetCurrentContext(config->handles.debug_imgui);
 	SDL_GL_MakeCurrent(config->handles.debug_window, config->handles.gl_context);
@@ -923,13 +924,13 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 	}
 	ImGui::EndMainMenuBar();
 
-	const char* tab_name_rom_view = "ROM View";
-	const char* tab_name_mem_view = "Memory View";
-	const char* tab_name_options = "Options and Info";
-	const char* tab_name_disassembly = "Disassembly at PC";
-	const char* tab_name_cpu = "CPU State";
-	const char* tab_name_sprites = "Sprites";
-	const char* tab_name_righttab2 = "Right Tab 2";  // TODO: rem
+	const char *tab_name_rom_view = "ROM View";
+	const char *tab_name_mem_view = "Memory View";
+	const char *tab_name_options = "Options and Info";
+	const char *tab_name_disassembly = "Disassembly at PC";
+	const char *tab_name_cpu = "CPU State";
+	const char *tab_name_sprites = "Sprites";
+	const char *tab_name_righttab2 = "Right Tab 2";  // TODO: rem
 
 	{  // Dock
 		// Unfortunately we can't use DockSpaceOverViewport(...) here because
@@ -937,7 +938,7 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		// need inject the docker builder code in between these two steps.
 		// The code here is replicated from DockSpaceOverViewport(...).
 
-		const ImGuiViewport* viewport = ImGui::GetMainViewport();
+		const ImGuiViewport *viewport = ImGui::GetMainViewport();
 		ImGui::SetNextWindowPos(viewport->WorkPos);
 		ImGui::SetNextWindowSize(viewport->WorkSize);
 		ImGui::SetNextWindowViewport(viewport->ID);
@@ -992,7 +993,7 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 	{
 		const uint16_t inst_num_bytes = gb_FetchInstruction(gb, gb->cpu.pc).num_operand_bytes + 1;
 
-		MemoryEditor* rom_view = &config->debug.rom_view;
+		MemoryEditor *rom_view = &config->debug.rom_view;
 		if (config->debug.views_follow_pc && (!gb->memory.bios_mapped || gb->cpu.pc >= 256))
 		{
 			rom_view->GotoAddrAndHighlight(gb->cpu.pc, gb->cpu.pc + inst_num_bytes);
@@ -1005,7 +1006,7 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 		rom_view->DrawContents(config->rom.data, config->rom.size);
 		ImGui::End();
 
-		MemoryEditor* mem_view = &config->debug.mem_view;
+		MemoryEditor *mem_view = &config->debug.mem_view;
 		if (config->debug.views_follow_pc)
 		{
 			mem_view->GotoAddrAndHighlight(gb->cpu.pc, gb->cpu.pc + inst_num_bytes);
@@ -1032,8 +1033,8 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 				const gb_Instruction inst = gb_FetchInstruction(gb, addr);
 				size_t end = gb_DisassembleInstruction(inst, buf, buf_len);
 				buf[end] = '\0';
+				ImGui::Text("0x%04X: (0x%02X) %s", addr, inst.opcode, buf);
 				addr += gb_InstructionSize(inst);
-				ImGui::Text("0x%02X: %s", inst.opcode, buf);
 			}
 			ImGui::End();
 		}
@@ -1053,13 +1054,14 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 			ImGui::Text("pc = 0x%04X\n", gb->cpu.pc);
 			ImGui::Text("");
 			ImGui::Text("Flags:");
-			ImGui::Text("z = %d\tn = %d\th = %d\tc = %d\t", gb->cpu.flags.zero, gb->cpu.flags.subtract, gb->cpu.flags.half_carry, gb->cpu.flags.carry);
+			ImGui::Text("z = %d\tn = %d\th = %d\tc = %d\t", gb->cpu.flags.zero, gb->cpu.flags.subtract,
+					gb->cpu.flags.half_carry, gb->cpu.flags.carry);
 			ImGui::End();
 		}
 	}
 	else
 	{
-		const char* placeholder = "No ROM loaded.";
+		const char *placeholder = "No ROM loaded.";
 
 		ImGui::Begin(tab_name_rom_view);
 		ImGui::Text("%s", placeholder);
@@ -1126,10 +1128,10 @@ DebuggerDraw(Config* config, gb_GameBoy* gb)
 }
 
 static uint8_t
-DebuggerMemoryViewReadFunc(const uint8_t* data, size_t off)
+DebuggerMemoryViewReadFunc(const uint8_t *data, size_t off)
 {
 	// This is a HACK. But without, gb would need to be global.
-	const gb_GameBoy* gb = (const gb_GameBoy*)data;
+	const gb_GameBoy *gb = (const gb_GameBoy *)data;
 
 	return gb_MemoryReadByte(gb, (uint16_t)off);
 }
@@ -1177,7 +1179,7 @@ static const char* fragment_shader_source =
 		"}\n";
 
 int
-main(int argc, char* argv[])
+main(int argc, char *argv[])
 {
 	(void)argc;
 	(void)argv;
@@ -1200,12 +1202,12 @@ main(int argc, char* argv[])
 	config.debug.mem_view.ReadOnly = true;
 	config.debug.mem_view.ReadFn = &DebuggerMemoryViewReadFunc;
 	config.debug.rom_view.ReadOnly = true;
-	char* save_path = SDL_GetPrefPath(NULL, "GB");
+	char *save_path = SDL_GetPrefPath(NULL, "GB");
 
 	// Load ini
-	const char* ini_name = "config.ini";
+	const char *ini_name = "config.ini";
 	const size_t ini_path_len = strlen(save_path) + strlen(ini_name);
-	char* ini_path = (char*)malloc(ini_path_len + 1);
+	char *ini_path = (char *)malloc(ini_path_len + 1);
 	strcpy(ini_path, save_path);
 	strcat(ini_path, ini_name);
 	ini_path[ini_path_len] = '\0';
@@ -1254,7 +1256,7 @@ main(int argc, char* argv[])
 		ImGui::SetCurrentContext(config.handles.imgui);
 
 		ImGui::GetStyle().ScaleAllSizes(main_window_scale);
-		ImGuiIO& io = ImGui::GetIO();
+		ImGuiIO &io = ImGui::GetIO();
 		io.IniFilename = NULL;
 		ImGui_ImplSDL2_InitForOpenGL(config.handles.window, config.handles.gl_context);
 		ImGui_ImplOpenGL2_Init();
@@ -1274,7 +1276,7 @@ main(int argc, char* argv[])
 		ImGui::SetCurrentContext(config.handles.debug_imgui);
 
 		ImGui::GetStyle().ScaleAllSizes(debug_window_scale);
-		ImGuiIO& io = ImGui::GetIO();
+		ImGuiIO &io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 		io.IniFilename = NULL;
 		ImGui_ImplSDL2_InitForOpenGL(config.handles.debug_window, config.handles.gl_context);
@@ -1293,7 +1295,7 @@ main(int argc, char* argv[])
 
 	{  // ImGui fonts
 		// Doesn't matter which context, only accessing shared fonts.
-		ImGuiIO& io = ImGui::GetIO();
+		ImGuiIO &io = ImGui::GetIO();
 
 		// First set the debug font. It will be used for newly created windows as default.
 		// Docking might create new windows in NewFrame() if a new dock space is created
@@ -1317,7 +1319,7 @@ main(int argc, char* argv[])
 	{
 		// Load OpenGL extensions.
 #define GL_API_GETPTR_ENTRY(return_type, name, ...) \
-	name = (name##Proc*)wglGetProcAddress(#name); \
+	name = (name##Proc *)wglGetProcAddress(#name); \
 	assert(name);
 		GL_API_LIST(GL_API_GETPTR_ENTRY)
 #undef GL_API_GETPTR_ENTRY
@@ -1360,7 +1362,7 @@ main(int argc, char* argv[])
 
 	gb_GameBoy gb = {};
 	gb_Init(&gb);
-	uint8_t* pixels = (uint8_t*)malloc(gb_MaxMagFramebufferSizeInBytes());
+	uint8_t *pixels = (uint8_t *)malloc(gb_MaxMagFramebufferSizeInBytes());
 	if (argc > 1)
 	{
 		LoadRomFromFile(&config, &gb, argv[1]);

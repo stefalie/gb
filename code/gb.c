@@ -191,7 +191,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	case 0x5000:
 	case 0x6000:
 	case 0x7000:
-		//assert(!"TODO");
+		// assert(!"TODO");
 		const size_t rom_bank = 1;  // TODO
 		const uint16_t rom_bank_0_end = 0x4000;
 		return gb->rom.data[(rom_bank - 1) * rom_bank_0_end + addr];
@@ -202,12 +202,12 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	// Switchable RAM bank
 	case 0xA000:
 	case 0xB000:
-		//assert(!"TODO");
+		// assert(!"TODO");
 		return gb->memory.external_ram[addr & 0x1FFF];
 	// (Internal) working RAM
 	case 0xC000:
 	case 0xD000:
-		//assert(!"TODO");
+		// assert(!"TODO");
 		return gb->memory.wram[addr & 0x1FFF];
 	// Echo of (Internal) working RAM, I/O, zero page
 	case 0xE000:
@@ -234,7 +234,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			}
 			else if (addr < 0xFF4C)  // I/O
 			{
-				//assert(!"TODO");
+				// assert(!"TODO");
 				return 0;
 			}
 			else if (addr < 0xFF80)  // Empty
@@ -244,7 +244,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			else  // Zero page
 			{
 				assert((addr - 0xFF80) < 0x80);
-				//assert(!"TODO");
+				// assert(!"TODO");
 				return gb->memory.zero_page_ram[addr & 0x7F];
 			}
 		}
