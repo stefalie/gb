@@ -895,7 +895,7 @@ size_t
 gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 {
 	const uint8_t extended_inst_prefix = 0xCB;
-	assert(gb_MemoryReadByte(gb, gb->cpu.pc - 2) == extended_inst_prefix);
+	assert(gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) == extended_inst_prefix);
 
 	switch (inst.opcode)
 	{
@@ -1072,8 +1072,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	}
 
 	default:
-		// See note in the end of gb_ExecuteNextInstruction.
-		gb->cpu.pc -= gb_InstructionSize(inst);
+		// See note in the end of gb__ExecuteBasicInstruction.
 		return (size_t)-1;
 	}
 
@@ -1081,23 +1080,11 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 }
 
 size_t
-gb_ExecuteNextInstruction(gb_GameBoy *gb)
+gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 {
-	assert(gb->rom.data);
-	assert(gb->rom.num_bytes);
-
-	if (gb->cpu.pc == 256)
-	{
-		gb->memory.bios_mapped = false;
-	}
-
-	const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
-	gb->cpu.pc += gb_InstructionSize(inst);
-
-	if (inst.is_extended)
-	{
-		return gb__ExecuteExtendedInstruction(gb, inst);
-	}
+	const uint8_t extended_inst_prefix = 0xCB;
+	assert(gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) != extended_inst_prefix ||
+			gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) - 1 == extended_inst_prefix);
 
 	size_t result = gb__instruction_infos[inst.opcode].min_num_machine_cycles;
 
@@ -1427,17 +1414,39 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		break;
 
 	default:
-		// Asserting that the return value is not -1 in the caller allows
-		// implementing the instructions step by step. Whenever assert fails,
-		// it will tell us which is the next instruction that needs to be
-		// implemented next for the program to continue.
-		// Revert PC so that the debugger still displays the missing instruction.
-		gb->cpu.pc -= gb_InstructionSize(inst);
-		return (size_t)-1;
+		// Checking that the return value is not -1 in the caller allows
+		// implementing the instructions step by step. Whenever the check fails,
+		// the debugger is openedn and it will tell us which instruction to
+		// implement next so that the program can continue.
+		result = (size_t)-1;
 	}
 
-	assert(result != -1);
 	return result;
+}
+
+size_t
+gb_ExecuteNextInstruction(gb_GameBoy *gb)
+{
+	assert(gb->rom.data);
+	assert(gb->rom.num_bytes);
+
+	if (gb->cpu.pc == 256)
+	{
+		gb->memory.bios_mapped = false;
+	}
+
+	const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
+	gb->cpu.pc += gb_InstructionSize(inst);
+
+	const size_t num_elapsed_cylces =
+			inst.is_extended ? gb__ExecuteExtendedInstruction(gb, inst) : gb__ExecuteBasicInstruction(gb, inst);
+
+	if (num_elapsed_cylces == -1)
+	{
+		// Revert PC so that the debugger still displays the missing instruction.
+		gb->cpu.pc -= gb_InstructionSize(inst);
+	}
+	return num_elapsed_cylces;
 }
 
 uint32_t
