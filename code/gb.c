@@ -27,7 +27,7 @@ gb_Init(gb_GameBoy *gb)
 // header struct:
 // https://github.com/ThomasRinsma/dromaius/blob/ffe8e2bead2c11c525a07578a99d5ae464515f76/src/memory.h#L62
 
-#define ROM_HEADER_START_ADDRESS 0x100
+#define ROM_HEADER_START_ADDRESS 0x0100
 typedef struct gb__RomHeader
 {
 	uint8_t begin_code_execution_point[4];
@@ -191,7 +191,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	case 0x5000:
 	case 0x6000:
 	case 0x7000:
-		assert(!"TODO");
+		//assert(!"TODO");
 		const size_t rom_bank = 1;  // TODO
 		const uint16_t rom_bank_0_end = 0x4000;
 		return gb->rom.data[(rom_bank - 1) * rom_bank_0_end + addr];
@@ -202,12 +202,12 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	// Switchable RAM bank
 	case 0xA000:
 	case 0xB000:
-		assert(!"TODO");
+		//assert(!"TODO");
 		return gb->memory.external_ram[addr & 0x1FFF];
 	// (Internal) working RAM
 	case 0xC000:
 	case 0xD000:
-		assert(!"TODO");
+		//assert(!"TODO");
 		return gb->memory.wram[addr & 0x1FFF];
 	// Echo of (Internal) working RAM, I/O, zero page
 	case 0xE000:
@@ -221,17 +221,20 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 		case 0x0E00:
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{
-				assert(!"TODO");
-				return 0;
+				return gb->gpu.oam[addr - 0xFEA0];
 			}
 			else  // Empty
 			{
 				return 0;
 			}
 		case 0x0F00:
-			if (addr < 0xFF4C)  // I/O
+			if (addr == 0xFFFF)  // Interrupt enable
 			{
-				assert(!"TODO");
+				return gb->cpu.interrupts;
+			}
+			else if (addr < 0xFF4C)  // I/O
+			{
+				//assert(!"TODO");
 				return 0;
 			}
 			else if (addr < 0xFF80)  // Empty
@@ -241,8 +244,8 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			else  // Zero page
 			{
 				assert((addr - 0xFF80) < 0x80);
-				assert(!"TODO");
-				return gb->memory.zero_page[addr & 0x7F];
+				//assert(!"TODO");
+				return gb->memory.zero_page_ram[addr & 0x7F];
 			}
 		}
 	default:
@@ -260,90 +263,92 @@ gb_MemoryReadWord(const gb_GameBoy *gb, uint16_t addr)
 static void
 gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 {
-	(void)gb;
-	(void)addr;
-	(void)value;
-
-	//	switch (addr & 0xF000)
-	//	{
-	//	// ROM bank 0 or BIOS
-	//	case 0x0000:
-	//	case 0x1000:
-	//	case 0x2000:
-	//	case 0x3000:
-	//		if (gb->memory.bios_mapped && addr < 0x100)
-	//		{
-	//			assert(false);
-	//		}
-	//		assert(!"TODO");
-	//		break;
-	//	// Switchable ROM bank
-	//	case 0x4000:
-	//	case 0x5000:
-	//	case 0x6000:
-	//	case 0x7000:
-	//		assert(!"TODO");
-	//		break;
-	//	// VRAM
-	//	case 0x8000:
-	//	case 0x9000:
-	//		assert(!"TODO");
-	//		break;
-	//	// Switchable RAM bank
-	//	case 0xA000:
-	//	case 0xB000:
-	//		assert(!"TODO");
-	//		gb->memory.external_ram[addr & 0x1FFF] = value;
-	//		break;
-	//	// (Internal) working RAM
-	//	case 0xC000:
-	//	case 0xD000:
-	//		assert(!"TODO");
-	//		gb->memory.wram[addr & 0x1FFF] = value;
-	//		break;
-	//	// Echo of (Internal) working RAM, I/O, zero page
-	//	case 0xE000:
-	//	case 0xF000:
-	//		switch (addr & 0x0F00)
-	//		{
-	//		// Echo of (Internal) working RAM
-	//		default:  // [0xE000, 0xFE00)
-	//			assert((addr - 0xE000) < 0x1E00);
-	//			gb->memory.wram[addr & 0x1FFF] = value;
-	//		case 0x0E00:
-	//			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
-	//			{
-	//				assert(!"TODO");
-	//			}
-	//			else
-	//			{
-	//				// The empty area is ignored
-	//				assert(!"TODO");
-	//			}
-	//			break;
-	//		case 0x0F00:
-	//			if (addr < 0xFF4C)  // I/O
-	//			{
-	//				assert(!"TODO");
-	//			}
-	//			else if (addr < 0xFF80)
-	//			{
-	//				// The empty area is ignored
-	//				assert(!"TODO");
-	//			}
-	//			else  // Zero page
-	//			{
-	//				assert((addr - 0xFF80) < 0x80);
-	//				assert(!"TODO");
-	//				gb->memory.zero_page[addr & 0x7F] = value;
-	//			}
-	//			break;
-	//		}
-	//		break;
-	//	default:
-	//		assert(false);
-	//		break;
-	//	}
+	switch (addr & 0xF000)
+	{
+	// ROM bank 0 or BIOS
+	case 0x0000:
+	case 0x1000:
+	case 0x2000:
+	case 0x3000:
+		if (gb->memory.bios_mapped && addr < 0x100)
+		{
+			assert(false);
+		}
+		assert(!"TODO");
+		break;
+	// Switchable ROM bank
+	case 0x4000:
+	case 0x5000:
+	case 0x6000:
+	case 0x7000:
+		assert(!"TODO");
+		break;
+	// VRAM
+	case 0x8000:
+	case 0x9000:
+		gb->memory.vram[addr & 0x1FFF] = value;
+		// TODO: Update tile?
+		break;
+	// Switchable RAM bank
+	case 0xA000:
+	case 0xB000:
+		assert(!"TODO");
+		gb->memory.external_ram[addr & 0x1FFF] = value;
+		break;
+	// (Internal) working RAM
+	case 0xC000:
+	case 0xD000:
+		assert(!"TODO");
+		gb->memory.wram[addr & 0x1FFF] = value;
+		break;
+	// Echo of (Internal) working RAM, I/O, zero page
+	case 0xE000:
+	case 0xF000:
+		switch (addr & 0x0F00)
+		{
+		// Echo of (Internal) working RAM
+		default:  // [0xE000, 0xFE00)
+			assert((addr - 0xE000) < 0x1E00);
+			gb->memory.wram[addr & 0x1FFF] = value;
+		case 0x0E00:
+			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
+			{
+				// return gb->gpu.oam[addr - 0xFEA0];
+				assert(!"TODO");
+			}
+			else
+			{
+				// The empty area is ignored
+				assert(!"TODO");
+			}
+			break;
+		case 0x0F00:
+			if (addr == 0xFFFF)  // Interrupt enable
+			{
+				gb->cpu.interrupts = value;
+			}
+			else if (addr < 0xFF4C)  // I/O
+			{
+				// TODO I/O
+				// assert(!"TODO");
+			}
+			else if (addr < 0xFF80)
+			{
+				// The empty area is ignored
+				assert(!"TODO");
+			}
+			else  // Zero page
+			{
+				assert((addr - 0xFF80) < 0x80);
+				gb->memory.zero_page_ram[addr & 0x7F] = value;
+			}
+			break;
+		}
+		break;
+	default:
+		assert(false);
+		break;
+	}
 }
 // TODO: needed?
 // static inline void
@@ -371,7 +376,7 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 	}
 	else
 	{
-		gb->cpu.pc = 0x0100;
+		gb->cpu.pc = ROM_HEADER_START_ADDRESS;
 	}
 	// TODO: Do we automatically end up at 0x0100 if we run from 0x0?
 
@@ -1131,13 +1136,13 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		assert(false);
 		break;
 	case 0x18:  // JR n
-		gb->cpu.pc += inst.operand_byte;
+		gb->cpu.pc += (int8_t)inst.operand_byte;
 		break;
 
 	case 0x20:  // JR NZ, n
 		if (gb->cpu.flags.zero == 0)
 		{
-			gb->cpu.pc += inst.operand_byte;
+			gb->cpu.pc += (int8_t)inst.operand_byte;
 			result = 3;
 		}
 		else
@@ -1152,7 +1157,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	case 0x28:  // JR Z, n
 		if (gb->cpu.flags.zero == 1)
 		{
-			gb->cpu.pc += inst.operand_byte;
+			gb->cpu.pc += (int8_t)inst.operand_byte;
 			result = 3;
 		}
 		else
@@ -1164,7 +1169,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	case 0x30:  // JR NC, n
 		if (gb->cpu.flags.carry == 0)
 		{
-			gb->cpu.pc += inst.operand_byte;
+			gb->cpu.pc += (int8_t)inst.operand_byte;
 			result = 3;
 		}
 		else
@@ -1183,7 +1188,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	case 0x38:  // JR C, n
 		if (gb->cpu.flags.carry == 1)
 		{
-			gb->cpu.pc += inst.operand_byte;
+			gb->cpu.pc += (int8_t)inst.operand_byte;
 			result = 3;
 		}
 		else
@@ -1253,7 +1258,6 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	case 0x6E:  // LD L, (HL)
 	case 0x7E:  // LD A, (HL)
 		*gl__MapIndexToReg(gb, (inst.opcode - 0x40) >> 3u) = gb_MemoryReadByte(gb, gb->cpu.hl);
-		assert(false);
 		break;
 
 	case 0x70:  // LD (HL), B

@@ -69,8 +69,23 @@ typedef struct gb_GameBoy
 		uint16_t pc;  // Program counter
 		uint16_t sp;  // Stack pointer
 
+		// TODO: init
+		uint8_t interrupts;
 		bool halt;
 	} cpu;
+
+	struct GPU
+	{
+		//uint8_t flags;
+		//uint8_t line;
+		//uint8_t lineComp;
+		uint8_t scx;
+		uint8_t scy;
+		uint8_t winx;
+		uint8_t winy;
+
+		uint8_t oam[160];  // Sprite attribute memory
+	} gpu;
 
 	struct Memory
 	{
@@ -79,7 +94,7 @@ typedef struct gb_GameBoy
 		uint8_t wram[8192];  // 8 KiB
 		uint8_t vram[8192];  // 8 KiB
 		uint8_t external_ram[8192];  // 8 KiB
-		uint8_t zero_page[128];
+		uint8_t zero_page_ram[128];
 	} memory;
 
 	struct Timer
@@ -92,6 +107,9 @@ typedef struct gb_GameBoy
 
 	struct Framebuffer
 	{
+		// One gray-scale 1-byte value per pixels. This is unlike the original GameBoy
+		// with only 2 bits per pixel. Using a full byte per pixel makes it easier to
+		// directly map the framebuffer onto a texture.
 		uint8_t pixels[GB_FRAMEBUFFER_WIDTH * GB_FRAMEBUFFER_HEIGHT];
 	} framebuffer;
 

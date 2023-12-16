@@ -1131,12 +1131,6 @@ DebuggerMemoryViewReadFunc(const uint8_t* data, size_t off)
 	// This is a HACK. But without, gb would need to be global.
 	const gb_GameBoy* gb = (const gb_GameBoy*)data;
 
-	// TODO: remove this. Memory mapping is not finished yet.
-	const uint16_t rom_bank_0_end = 0x4000;
-	if (off >= rom_bank_0_end)
-	{
-		return gb->rom.data[off];
-	}
 	return gb_MemoryReadByte(gb, (uint16_t)off);
 }
 
