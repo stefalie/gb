@@ -1078,14 +1078,14 @@ gb__Sub(gb_GameBoy *gb, uint8_t lhs, uint8_t rhs, bool carry_in)
 }
 
 void
-gb__Inc(gb_GameBoy *gb, uint8_t* val)
+gb__Inc(gb_GameBoy *gb, uint8_t *val)
 {
 	++(*val);
 	gb__SetFlags(gb, (*val) == 0, false, ((*val) & 0x0F) == 0, gb->cpu.flags.carry == 1);
 }
 
 void
-gb__Dec(gb_GameBoy *gb, uint8_t* val)
+gb__Dec(gb_GameBoy *gb, uint8_t *val)
 {
 	--(*val);
 	gb__SetFlags(gb, (*val) == 0, true, ((*val) & 0x0F) == 0x0F, gb->cpu.flags.carry == 1);
@@ -1984,7 +1984,7 @@ gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_ind
 	size_t vram_offset = set_offset;
 
 	// A tile uses 16 bytes (2 bytes per line for 8x8 pixels).
-	vram_offset += tile_index << 16;
+	vram_offset += tile_index << 4;
 	vram_offset += line_index << 1;
 	assert(vram_offset < 0x17FF);
 

@@ -440,6 +440,8 @@ struct Rom
 	int size = 0;
 };
 
+// TODO: rename Confg -> Emulator, config -> emu
+// This has become way more than just the config
 struct Config
 {
 	Ini ini;
@@ -481,6 +483,9 @@ struct Config
 		MemoryEditor rom_view;
 		MemoryEditor mem_view;
 		bool views_follow_pc = true;
+		GLuint tile_sets_texture = 0;
+		GLuint tile_map_0_texture = 0;
+		GLuint tile_map_1_texture = 0;
 	} debug;
 
 	struct Handles
@@ -985,7 +990,46 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 
 	{
 		ImGui::Begin(tab_name_righttab2);
-		ImGui::Text("text text text left");
+		ImGui::Text("Tiles:");
+
+		const int width = 16 * 8;
+		const int height = 3 * 8 * 8;
+		uint8_t pixels[height][width];
+
+		for (int y = 0; y < height; ++y)
+		{
+			for (int x = 0; x < width; x += 8)
+			{
+				int tile_idx = (y >> 3u) * 16 + (x >> 3u);
+				uint16_t gb_line;
+				if (y < height / 3 * 2)
+				{
+					gb_line = gb_GetTileLine(gb, 1, tile_idx, y & 7u);
+				}
+				else
+				{
+					tile_idx -= 256;
+					gb_line = gb_GetTileLine(gb, 0, tile_idx, y & 7u);
+				}
+
+				const uint8_t map[] = { 0x00, 0x66, 0xCC, 0xFF };
+
+				pixels[y][x + 0] = map[(gb_line >> 14u) & 3u];
+				pixels[y][x + 1] = map[(gb_line >> 12u) & 3u];
+				pixels[y][x + 2] = map[(gb_line >> 10u) & 3u];
+				pixels[y][x + 3] = map[(gb_line >> 8u) & 3u];
+				pixels[y][x + 4] = map[(gb_line >> 6u) & 3u];
+				pixels[y][x + 5] = map[(gb_line >> 4u) & 3u];
+				pixels[y][x + 6] = map[(gb_line >> 2u) & 3u];
+				pixels[y][x + 7] = map[(gb_line >> 0u) & 3u];
+			}
+		}
+
+		glBindTexture(GL_TEXTURE_2D, config->debug.tile_sets_texture);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, pixels);
+
+		ImGui::Image((void *)(uint64_t)config->debug.tile_sets_texture,
+				ImVec2(7.0f * width, 7.0f * height));
 		ImGui::End();
 	}
 
@@ -1349,6 +1393,8 @@ main(int argc, char *argv[])
 		assert(viewport_pos_loc != -1);
 		assert(gb_fb_tex_loc != -1);
 
+		glEnable(GL_TEXTURE_2D);
+
 		glGenTextures(1, &texture);
 		glBindTexture(GL_TEXTURE_2D, texture);
 		// The texture object itself is lazily (re-)allocated later on when needed.
@@ -1356,7 +1402,35 @@ main(int argc, char *argv[])
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glEnable(GL_TEXTURE_2D);
+		glCheckError();
+
+		glGenTextures(1, &config.debug.tile_sets_texture);
+		glBindTexture(GL_TEXTURE_2D, config.debug.tile_sets_texture);
+		// The texture vertically stackes the 3 half tile sets.
+		// Each tile set is put in a rectangle of 16x8 tiles.
+		glTexImage2D(GL_TEXTURE_2D, 0, 1, 16 * 8, 3 * 8 * 8, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glCheckError();
+
+		glGenTextures(1, &config.debug.tile_map_0_texture);
+		glBindTexture(GL_TEXTURE_2D, config.debug.tile_map_0_texture);
+		glTexImage2D(GL_TEXTURE_2D, 0, 1, 32 * 8, 32 * 8, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glCheckError();
+
+		glGenTextures(1, &config.debug.tile_map_1_texture);
+		glBindTexture(GL_TEXTURE_2D, config.debug.tile_map_1_texture);
+		glTexImage2D(GL_TEXTURE_2D, 0, 1, 32 * 8, 32 * 8, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glCheckError();
 	}
 
@@ -1623,6 +1697,7 @@ main(int argc, char *argv[])
 			}
 
 			const gb_Framebuffer fb = gb_MagFramebuffer(&gb, config.ini.mag_filter, pixels);
+			glBindTexture(GL_TEXTURE_2D, texture);
 			if (config.gui.mag_filter_changed)
 			{
 				// Re-alloc texture when mag filter changed as the size is most likely different.
