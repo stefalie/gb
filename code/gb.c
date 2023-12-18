@@ -424,30 +424,70 @@ typedef struct
 
 static const gb__InstructionInfo gb__instruction_infos[256] = {
 	[0x00] = { "NOP", 0, 1 },
-	[0x01] = { "LD BC", 2, 3 },
-
+	[0x01] = { "LD BC, u16", 2, 3 },
+	[0x02] = { "LD (BC), A", 0, 2 },
+	[0x03] = { "INC BC", 0, 2 },
+	[0x04] = { "INC B", 0, 1 },
+	[0x05] = { "DEC B", 0, 1 },
+	[0x06] = { "LD B, u8", 1, 2 },
 	[0x07] = { "RLCA", 0, 1 },
 
+	[0x0A] = { "LD A, (BC)", 0, 2 },
+	[0x0B] = { "DEC BC", 0, 2 },
+	[0x0C] = { "INC C", 0, 1 },
+	[0x0D] = { "DEC C", 0, 1 },
+	[0x0E] = { "LD C, u8", 1, 2 },
 	[0x0F] = { "RRCA", 0, 1 },
 
-	[0x11] = { "LD DE", 2, 3 },
-
+	[0x10] = { "STOP", 0, 1 },
+	[0x11] = { "LD DE, u16", 2, 3 },
+	[0x12] = { "LD (DE), A", 0, 2 },
+	[0x13] = { "INC DE", 0, 2 },
+	[0x14] = { "INC D", 0, 1 },
+	[0x15] = { "DEC D", 0, 1 },
+	[0x16] = { "LD D, u8", 1, 2 },
 	[0x17] = { "RLA", 0, 1 },
+
 	[0x18] = { "JR n", 1, 3 },
 
+	[0x1A] = { "LD A, (DE)", 0, 2 },
+	[0x1B] = { "DEC DE", 0, 2 },
+	[0x1C] = { "INC E", 0, 1 },
+	[0x1D] = { "DEC E", 0, 1 },
+	[0x1E] = { "LD E, u8", 1, 2 },
 	[0x1F] = { "RRA", 0, 1 },
 
-	[0x20] = { "JR NZ, n", 1, (uint8_t)-1 },
+	[0x20] = { "JR NZ, i8", 1, (uint8_t)-1 },
+	[0x21] = { "LD HL, u16", 2, 3 },
+	[0x22] = { "LD (HL+), A", 0, 2 },
+	[0x23] = { "INC HL", 0, 2 },
+	[0x24] = { "INC H", 0, 1 },
+	[0x25] = { "DEC H", 0, 1 },
+	[0x26] = { "LD H, u8", 1, 2 },
 
-	[0x21] = { "LD HL", 2, 3 },
+	[0x28] = { "JR Z, i8", 1, (uint8_t)-1 },
 
-	[0x28] = { "JR Z, n", 1, (uint8_t)-1 },
+	[0x2A] = { "LD A, (HL+)", 0, 2 },
+	[0x2B] = { "DEC HL", 0, 2 },
+	[0x2C] = { "INC L", 0, 1 },
+	[0x2D] = { "DEC L", 0, 1 },
+	[0x2E] = { "LD L, u8", 1, 2 },
 
-	[0x30] = { "JR NC, n", 1, (uint8_t)-1 },
-	[0x31] = { "LD SP", 2, 3 },
+	[0x30] = { "JR NC, i8", 1, (uint8_t)-1 },
+	[0x31] = { "LD SP, u16", 2, 3 },
 	[0x32] = { "LD (HL-), A", 0, 1 },
+	[0x33] = { "INC SP", 0, 2 },
+	[0x34] = { "INC (HL)", 0, 3 },
+	[0x35] = { "DEC (HL)", 0, 3 },
+	[0x36] = { "LD (HL), u8", 1, 3 },
 
-	[0x38] = { "JR C, n", 1, (uint8_t)-1 },
+	[0x38] = { "JR C, i8", 1, (uint8_t)-1 },
+
+	[0x3A] = { "LD A, (HL-)", 0, 2 },
+	[0x3B] = { "DEC SP", 0, 2 },
+	[0x3C] = { "INC A", 0, 1 },
+	[0x3D] = { "DEC A", 0, 1 },
+	[0x3E] = { "LD A, u8", 1, 2 },
 
 	[0x40] = { "LD B, B", 0, 1 },
 	[0x41] = { "LD B, C", 0, 1 },
@@ -595,8 +635,8 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 
 	[0xCB] = { "PREFIX", 0, 0 },  // Num cycles is 0 here because it's taken from the extended instruction table.
 
-	[0xE6] = { "AND A, n", 1, 2 },
-	[0xEE] = { "XOR A, n", 1, 2 },
+	[0xE6] = { "AND A, 8", 1, 2 },
+	[0xEE] = { "XOR A, 8", 1, 2 },
 };
 
 static const gb__InstructionInfo gb__extended_instruction_infos[256] = {
@@ -635,6 +675,8 @@ static const gb__InstructionInfo gb__extended_instruction_infos[256] = {
 	[0x1D] = { "RR L", 0, 2 },
 	[0x1E] = { "RR (HL)", 0, 4 },
 	[0x1F] = { "RR A", 0, 2 },
+
+	// TODO
 
 	[0x40] = { "BIT 0, B", 0, 2 },
 	[0x41] = { "BIT 0, C", 0, 2 },
@@ -707,6 +749,150 @@ static const gb__InstructionInfo gb__extended_instruction_infos[256] = {
 	[0x7D] = { "BIT 7, L", 0, 2 },
 	[0x7E] = { "BIT 7, (HL)", 0, 3 },
 	[0x7F] = { "BIT 7, A", 0, 2 },
+
+	[0x80] = { "RES 0, B", 0, 2 },
+	[0x81] = { "RES 0, C", 0, 2 },
+	[0x82] = { "RES 0, D", 0, 2 },
+	[0x83] = { "RES 0, E", 0, 2 },
+	[0x84] = { "RES 0, H", 0, 2 },
+	[0x85] = { "RES 0, L", 0, 2 },
+	[0x86] = { "RES 0, (HL)", 0, 4 },
+	[0x87] = { "RES 0, A", 0, 2 },
+
+	[0x88] = { "RES 1, B", 0, 2 },
+	[0x89] = { "RES 1, C", 0, 2 },
+	[0x8A] = { "RES 1, D", 0, 2 },
+	[0x8B] = { "RES 1, E", 0, 2 },
+	[0x8C] = { "RES 1, H", 0, 2 },
+	[0x8D] = { "RES 1, L", 0, 2 },
+	[0x8E] = { "RES 1, (HL)", 0, 4 },
+	[0x8F] = { "RES 1, A", 0, 2 },
+
+	[0x90] = { "RES 2, B", 0, 2 },
+	[0x91] = { "RES 2, C", 0, 2 },
+	[0x92] = { "RES 2, D", 0, 2 },
+	[0x93] = { "RES 2, E", 0, 2 },
+	[0x94] = { "RES 2, H", 0, 2 },
+	[0x95] = { "RES 2, L", 0, 2 },
+	[0x96] = { "RES 2, (HL)", 0, 4 },
+	[0x97] = { "RES 2, A", 0, 2 },
+
+	[0x98] = { "RES 3, B", 0, 2 },
+	[0x99] = { "RES 3, C", 0, 2 },
+	[0x9A] = { "RES 3, D", 0, 2 },
+	[0x9B] = { "RES 3, E", 0, 2 },
+	[0x9C] = { "RES 3, H", 0, 2 },
+	[0x9D] = { "RES 3, L", 0, 2 },
+	[0x9E] = { "RES 3, (HL)", 0, 4 },
+	[0x9F] = { "RES 3, A", 0, 2 },
+
+	[0xA0] = { "RES 4, B", 0, 2 },
+	[0xA1] = { "RES 4, C", 0, 2 },
+	[0xA2] = { "RES 4, D", 0, 2 },
+	[0xA3] = { "RES 4, E", 0, 2 },
+	[0xA4] = { "RES 4, H", 0, 2 },
+	[0xA5] = { "RES 4, L", 0, 2 },
+	[0xA6] = { "RES 4, (HL)", 0, 4 },
+	[0xA7] = { "RES 4, A", 0, 2 },
+
+	[0xA8] = { "RES 5, B", 0, 2 },
+	[0xA9] = { "RES 5, C", 0, 2 },
+	[0xAA] = { "RES 5, D", 0, 2 },
+	[0xAB] = { "RES 5, E", 0, 2 },
+	[0xAC] = { "RES 5, H", 0, 2 },
+	[0xAD] = { "RES 5, L", 0, 2 },
+	[0xAE] = { "RES 5, (HL)", 0, 4 },
+	[0xAF] = { "RES 5, A", 0, 2 },
+
+	[0xB0] = { "SET 6, B", 0, 2 },
+	[0xB1] = { "SET 6, C", 0, 2 },
+	[0xB2] = { "SET 6, D", 0, 2 },
+	[0xB3] = { "SET 6, E", 0, 2 },
+	[0xB4] = { "SET 6, H", 0, 2 },
+	[0xB5] = { "SET 6, L", 0, 2 },
+	[0xB6] = { "SET 6, (HL)", 0, 4 },
+	[0xB7] = { "SET 6, A", 0, 2 },
+
+	[0xB8] = { "SET 7, B", 0, 2 },
+	[0xB9] = { "SET 7, C", 0, 2 },
+	[0xBA] = { "SET 7, D", 0, 2 },
+	[0xBB] = { "SET 7, E", 0, 2 },
+	[0xBC] = { "SET 7, H", 0, 2 },
+	[0xBD] = { "SET 7, L", 0, 2 },
+	[0xBE] = { "SET 7, (HL)", 0, 4 },
+	[0xBF] = { "SET 7, A", 0, 2 },
+
+	[0xC0] = { "SET 0, B", 0, 2 },
+	[0xC1] = { "SET 0, C", 0, 2 },
+	[0xC2] = { "SET 0, D", 0, 2 },
+	[0xC3] = { "SET 0, E", 0, 2 },
+	[0xC4] = { "SET 0, H", 0, 2 },
+	[0xC5] = { "SET 0, L", 0, 2 },
+	[0xC6] = { "SET 0, (HL)", 0, 4 },
+	[0xC7] = { "SET 0, A", 0, 2 },
+
+	[0xC8] = { "SET 1, B", 0, 2 },
+	[0xC9] = { "SET 1, C", 0, 2 },
+	[0xCA] = { "SET 1, D", 0, 2 },
+	[0xCB] = { "SET 1, E", 0, 2 },
+	[0xCC] = { "SET 1, H", 0, 2 },
+	[0xCD] = { "SET 1, L", 0, 2 },
+	[0xCE] = { "SET 1, (HL)", 0, 4 },
+	[0xCF] = { "SET 1, A", 0, 2 },
+
+	[0xD0] = { "SET 2, B", 0, 2 },
+	[0xD1] = { "SET 2, C", 0, 2 },
+	[0xD2] = { "SET 2, D", 0, 2 },
+	[0xD3] = { "SET 2, E", 0, 2 },
+	[0xD4] = { "SET 2, H", 0, 2 },
+	[0xD5] = { "SET 2, L", 0, 2 },
+	[0xD6] = { "SET 2, (HL)", 0, 4 },
+	[0xD7] = { "SET 2, A", 0, 2 },
+
+	[0xD8] = { "SET 3, B", 0, 2 },
+	[0xD9] = { "SET 3, C", 0, 2 },
+	[0xDA] = { "SET 3, D", 0, 2 },
+	[0xDB] = { "SET 3, E", 0, 2 },
+	[0xDC] = { "SET 3, H", 0, 2 },
+	[0xDD] = { "SET 3, L", 0, 2 },
+	[0xDE] = { "SET 3, (HL)", 0, 4 },
+	[0xDF] = { "SET 3, A", 0, 2 },
+
+	[0xE0] = { "SET 4, B", 0, 2 },
+	[0xE1] = { "SET 4, C", 0, 2 },
+	[0xE2] = { "SET 4, D", 0, 2 },
+	[0xE3] = { "SET 4, E", 0, 2 },
+	[0xE4] = { "SET 4, H", 0, 2 },
+	[0xE5] = { "SET 4, L", 0, 2 },
+	[0xE6] = { "SET 4, (HL)", 0, 4 },
+	[0xE7] = { "SET 4, A", 0, 2 },
+
+	[0xE8] = { "SET 5, B", 0, 2 },
+	[0xE9] = { "SET 5, C", 0, 2 },
+	[0xEA] = { "SET 5, D", 0, 2 },
+	[0xEB] = { "SET 5, E", 0, 2 },
+	[0xEC] = { "SET 5, H", 0, 2 },
+	[0xED] = { "SET 5, L", 0, 2 },
+	[0xEE] = { "SET 5, (HL)", 0, 4 },
+	[0xEF] = { "SET 5, A", 0, 2 },
+
+	[0xF0] = { "SET 6, B", 0, 2 },
+	[0xF1] = { "SET 6, C", 0, 2 },
+	[0xF2] = { "SET 6, D", 0, 2 },
+	[0xF3] = { "SET 6, E", 0, 2 },
+	[0xF4] = { "SET 6, H", 0, 2 },
+	[0xF5] = { "SET 6, L", 0, 2 },
+	[0xF6] = { "SET 6, (HL)", 0, 4 },
+	[0xF7] = { "SET 6, A", 0, 2 },
+
+	[0xF8] = { "SET 7, B", 0, 2 },
+	[0xF9] = { "SET 7, C", 0, 2 },
+	[0xFA] = { "SET 7, D", 0, 2 },
+	[0xFB] = { "SET 7, E", 0, 2 },
+	[0xFC] = { "SET 7, H", 0, 2 },
+	[0xFD] = { "SET 7, L", 0, 2 },
+	[0xFE] = { "SET 7, (HL)", 0, 4 },
+	[0xFF] = { "SET 7, A", 0, 2 },
 };
 
 
@@ -891,192 +1077,18 @@ gb__Sub(gb_GameBoy *gb, uint8_t lhs, uint8_t rhs, bool carry_in)
 	return result;
 }
 
-size_t
-gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
+void
+gb__Inc(gb_GameBoy *gb, uint8_t* val)
 {
-	const uint8_t extended_inst_prefix = 0xCB;
-	assert(gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) == extended_inst_prefix);
+	++(*val);
+	gb__SetFlags(gb, (*val) == 0, false, ((*val) & 0x0F) == 0, gb->cpu.flags.carry == 1);
+}
 
-	switch (inst.opcode)
-	{
-	case 0x00:  // RLC B
-	case 0x01:  // RLC C
-	case 0x02:  // RLC D
-	case 0x03:  // RLC E
-	case 0x04:  // RLC H
-	case 0x05:  // RLC L
-	case 0x07:  // RLC A
-	{
-		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
-		*reg = gb__RotateLeftCircular(gb, *reg, false);
-		assert(false);
-		break;
-	}
-	case 0x06:  // RLC (HL)
-	{
-		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
-		val = gb__RotateLeftCircular(gb, val, false);
-		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
-		assert(false);
-		break;
-	}
-	case 0x08:  // RRC B
-	case 0x09:  // RRC C
-	case 0x0A:  // RRC D
-	case 0x0B:  // RRC E
-	case 0x0C:  // RRC H
-	case 0x0D:  // RRC L
-	case 0x0E:  // RRC A
-	{
-		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
-		*reg = gb__RotateRightCircular(gb, *reg, false);
-		assert(false);
-		break;
-	}
-	case 0x0F:  // RRC (HL)
-	{
-		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
-		val = gb__RotateRightCircular(gb, val, false);
-		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
-		assert(false);
-		break;
-	}
-
-	case 0x10:  // RL B
-	case 0x11:  // RL C
-	case 0x12:  // RL D
-	case 0x13:  // RL E
-	case 0x14:  // RL H
-	case 0x15:  // RL L
-	case 0x17:  // RL A
-	{
-		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
-		*reg = gb__RotateLeft(gb, *reg, false);
-		assert(false);
-		break;
-	}
-	case 0x16:  // RL (HL)
-	{
-		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
-		val = gb__RotateLeft(gb, val, false);
-		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
-		assert(false);
-		break;
-	}
-
-	case 0x18:  // RR B
-	case 0x19:  // RR C
-	case 0x1A:  // RR D
-	case 0x1B:  // RR E
-	case 0x1C:  // RR H
-	case 0x1D:  // RR L
-	case 0x1E:  // RR A
-	{
-		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
-		*reg = gb__RotateRight(gb, *reg, false);
-		assert(false);
-		break;
-	}
-	case 0x1F:  // RR (HL)
-	{
-		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
-		val = gb__RotateRight(gb, val, false);
-		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
-		assert(false);
-		break;
-	}
-
-	case 0x40:  // BIT 0, B
-	case 0x41:  // BIT 0, C
-	case 0x42:  // BIT 0, D
-	case 0x43:  // BIT 0, E
-	case 0x44:  // BIT 0, H
-	case 0x45:  // BIT 0, L
-	case 0x47:  // BIT 0, A
-
-	case 0x48:  // BIT 1, B
-	case 0x49:  // BIT 1, C
-	case 0x4A:  // BIT 1, D
-	case 0x4B:  // BIT 1, E
-	case 0x4C:  // BIT 1, H
-	case 0x4D:  // BIT 1, L
-	case 0x4F:  // BIT 1, A
-
-	case 0x50:  // BIT 2, B
-	case 0x51:  // BIT 2, C
-	case 0x52:  // BIT 2, D
-	case 0x53:  // BIT 2, E
-	case 0x54:  // BIT 2, H
-	case 0x55:  // BIT 2, L
-	case 0x57:  // BIT 2, A
-
-	case 0x58:  // BIT 3, B
-	case 0x59:  // BIT 3, C
-	case 0x5A:  // BIT 3, D
-	case 0x5B:  // BIT 3, E
-	case 0x5C:  // BIT 3, H
-	case 0x5D:  // BIT 3, L
-	case 0x5F:  // BIT 3, A
-
-	case 0x60:  // BIT 4, B
-	case 0x61:  // BIT 4, C
-	case 0x62:  // BIT 4, D
-	case 0x63:  // BIT 4, E
-	case 0x64:  // BIT 4, H
-	case 0x65:  // BIT 4, L
-	case 0x67:  // BIT 4, A
-
-	case 0x68:  // BIT 5, B
-	case 0x69:  // BIT 5, C
-	case 0x6A:  // BIT 5, D
-	case 0x6B:  // BIT 5, E
-	case 0x6C:  // BIT 5, H
-	case 0x6D:  // BIT 5, L
-	case 0x6F:  // BIT 5, A
-
-	case 0x70:  // BIT 6, B
-	case 0x71:  // BIT 6, C
-	case 0x72:  // BIT 6, D
-	case 0x73:  // BIT 6, E
-	case 0x74:  // BIT 6, H
-	case 0x75:  // BIT 6, L
-	case 0x77:  // BIT 6, A
-
-	case 0x78:  // BIT 7, B
-	case 0x79:  // BIT 7, C
-	case 0x7A:  // BIT 7, D
-	case 0x7B:  // BIT 7, E
-	case 0x7C:  // BIT 7, H
-	case 0x7D:  // BIT 7, L
-	case 0x7F:  // BIT 7, A
-	{
-		size_t bit_index = (inst.opcode - 0x40) >> 3u;
-		size_t bit = (*gl__MapIndexToReg(gb, inst.opcode) >> bit_index) & 0x01;
-		gb__SetFlags(gb, bit == 0, false, true, gb->cpu.flags.carry == 1);
-		break;
-	}
-
-	case 0x46:  // BIT 0, (HL)
-	case 0x4E:  // BIT 1, (HL)
-	case 0x56:  // BIT 2, (HL)
-	case 0x5E:  // BIT 3, (HL)
-	case 0x66:  // BIT 4, (HL)
-	case 0x6E:  // BIT 5, (HL)
-	case 0x76:  // BIT 6, (HL)
-	case 0x7E:  // BIT 7, (HL)
-	{
-		size_t bit_index = (inst.opcode - 0x40) >> 3u;
-		size_t bit = (gb_MemoryReadByte(gb, gb->cpu.hl) >> bit_index) & 0x01;
-		gb__SetFlags(gb, bit == 0, false, true, gb->cpu.flags.carry == 1);
-		break;
-	}
-
-	default:
-		// See note in the end of gb__ExecuteBasicInstruction.
-		return (size_t)-1;
-	}
-
-	return gb__extended_instruction_infos[inst.opcode].min_num_machine_cycles;
+void
+gb__Dec(gb_GameBoy *gb, uint8_t* val)
+{
+	--(*val);
+	gb__SetFlags(gb, (*val) == 0, true, ((*val) & 0x0F) == 0x0F, gb->cpu.flags.carry == 1);
 }
 
 size_t
@@ -1092,41 +1104,101 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	{
 	case 0x00:  // NOP
 		break;
-
-	case 0x01:  // LD BC, nn
+	case 0x01:  // LD BC, u16
 		gb->cpu.bc = inst.operand_word;
-		assert(false);
 		break;
-
+	case 0x02:  // LD (BC), A
+		gb__MemoryWriteByte(gb, gb->cpu.bc, gb->cpu.a);
+		break;
+	case 0x03:  // INC BC
+		++gb->cpu.bc;
+		break;
+	case 0x04:  // INC B
+		gb__Inc(gb, &gb->cpu.b);
+		break;
+	case 0x05:  // DEC B
+		gb__Dec(gb, &gb->cpu.b);
+		break;
+	case 0x06:  // LD B, u8
+		gb->cpu.b = inst.operand_byte;
+		break;
 	case 0x07:  // RLCA
 		gb->cpu.a = gb__RotateLeftCircular(gb, gb->cpu.a, true);
 		assert(false);
 		break;
 
+	case 0x0A:  // LD A, (BC)
+		gb->cpu.a = gb_MemoryReadByte(gb, gb->cpu.bc);
+		break;
+	case 0x0B:  // DEC BC
+		--gb->cpu.bc;
+		break;
+	case 0x0C:  // INC C
+		gb__Inc(gb, &gb->cpu.c);
+		break;
+	case 0x0D:  // DEC C
+		gb__Dec(gb, &gb->cpu.c);
+		break;
+	case 0x0E:  // LD C, u8
+		gb->cpu.c = inst.operand_byte;
+		break;
 	case 0x0F:  // RRCA
 		gb->cpu.a = gb__RotateRightCircular(gb, gb->cpu.a, true);
 		assert(false);
 		break;
 
-	case 0x11:  // LD DE, nn
-		gb->cpu.de = inst.operand_word;
+	case 0x10:  // STOP
+		gb->cpu.stop = true;
 		assert(false);
 		break;
-
+	case 0x11:  // LD DE, u16
+		gb->cpu.de = inst.operand_word;
+		break;
+	case 0x12:  // LD (DE), A
+		gb__MemoryWriteByte(gb, gb->cpu.de, gb->cpu.a);
+		break;
+	case 0x13:  // INC DE
+		++gb->cpu.de;
+		break;
+	case 0x14:  // INC D
+		gb__Inc(gb, &gb->cpu.d);
+		break;
+	case 0x15:  // DEC D
+		gb__Dec(gb, &gb->cpu.d);
+		break;
+	case 0x16:  // LD D, u8
+		gb->cpu.d = inst.operand_byte;
+		break;
 	case 0x17:  // RLA
 		gb->cpu.a = gb__RotateLeft(gb, gb->cpu.a, true);
 		assert(false);
 		break;
 
-	case 0x1F:  // RRA
-		gb->cpu.a = gb__RotateRight(gb, gb->cpu.a, true);
-		assert(false);
-		break;
 	case 0x18:  // JR n
 		gb->cpu.pc += (int8_t)inst.operand_byte;
 		break;
 
-	case 0x20:  // JR NZ, n
+	case 0x1A:  // LD A, (DE)
+		gb->cpu.a = gb_MemoryReadByte(gb, gb->cpu.de);
+		break;
+	case 0x1B:  // DEC DE
+		--gb->cpu.de;
+		break;
+	case 0x1C:  // INC E
+		gb__Inc(gb, &gb->cpu.e);
+		break;
+	case 0x1D:  // DEC E
+		gb__Dec(gb, &gb->cpu.e);
+		break;
+	case 0x1E:  // LD E, u8
+		gb->cpu.e = inst.operand_byte;
+		break;
+	case 0x1F:  // RRA
+		gb->cpu.a = gb__RotateRight(gb, gb->cpu.a, true);
+		assert(false);
+		break;
+
+	case 0x20:  // JR NZ, i8
 		if (gb->cpu.flags.zero == 0)
 		{
 			gb->cpu.pc += (int8_t)inst.operand_byte;
@@ -1137,11 +1209,27 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 			result = 2;
 		}
 		break;
-	case 0x21:  // LD HL, nn
+	case 0x21:  // LD HL, u16
 		gb->cpu.hl = inst.operand_word;
 		break;
+	case 0x22:  // LD (HL+), A
+		gb__MemoryWriteByte(gb, gb->cpu.hl, gb->cpu.a);
+		++gb->cpu.hl;
+		break;
+	case 0x23:  // INC HL
+		++gb->cpu.hl;
+		break;
+	case 0x24:  // INC H
+		gb__Inc(gb, &gb->cpu.h);
+		break;
+	case 0x25:  // DEC H
+		gb__Dec(gb, &gb->cpu.h);
+		break;
+	case 0x26:  // LD H, u8
+		gb->cpu.h = inst.operand_byte;
+		break;
 
-	case 0x28:  // JR Z, n
+	case 0x28:  // JR Z, i8
 		if (gb->cpu.flags.zero == 1)
 		{
 			gb->cpu.pc += (int8_t)inst.operand_byte;
@@ -1153,7 +1241,24 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		}
 		break;
 
-	case 0x30:  // JR NC, n
+	case 0x2A:  // LD A, (HL+)
+		gb->cpu.a = gb_MemoryReadByte(gb, gb->cpu.de);
+		++gb->cpu.hl;
+		break;
+	case 0x2B:  // DEC HL
+		--gb->cpu.hl;
+		break;
+	case 0x2C:  // INC L
+		gb__Inc(gb, &gb->cpu.l);
+		break;
+	case 0x2D:  // DEC L
+		gb__Dec(gb, &gb->cpu.l);
+		break;
+	case 0x2E:  // LD L, u8
+		gb->cpu.l = inst.operand_byte;
+		break;
+
+	case 0x30:  // JR NC, i8
 		if (gb->cpu.flags.carry == 0)
 		{
 			gb->cpu.pc += (int8_t)inst.operand_byte;
@@ -1164,15 +1269,35 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 			result = 2;
 		}
 		break;
-	case 0x31:  // LD SP, nn
+	case 0x31:  // LD SP, u16
 		gb->cpu.sp = inst.operand_word;
 		break;
 	case 0x32:  // LD (HL-), A
 		gb__MemoryWriteByte(gb, gb->cpu.hl, gb->cpu.a);
 		--gb->cpu.hl;
 		break;
+	case 0x33:  // INC SP
+		++gb->cpu.sp;
+		break;
+	case 0x34:  // INC (HL)
+	{
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		gb__Inc(gb, &val);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		break;
+	}
+	case 0x35:  // DEC (HL)
+	{
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		gb__Dec(gb, &val);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		break;
+	}
+	case 0x36:  // LD (HL), u8
+		gb__MemoryWriteByte(gb, gb->cpu.hl, inst.operand_byte);
+		break;
 
-	case 0x38:  // JR C, n
+	case 0x38:  // JR C, i8
 		if (gb->cpu.flags.carry == 1)
 		{
 			gb->cpu.pc += (int8_t)inst.operand_byte;
@@ -1182,6 +1307,23 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		{
 			result = 2;
 		}
+		break;
+
+	case 0x3A:  // LD A, (HL-)
+		gb->cpu.a = gb_MemoryReadByte(gb, gb->cpu.de);
+		--gb->cpu.hl;
+		break;
+	case 0x3B:  // DEC SP
+		--gb->cpu.sp;
+		break;
+	case 0x3C:  // INC A
+		gb__Inc(gb, &gb->cpu.a);
+		break;
+	case 0x3D:  // DEC A
+		gb__Dec(gb, &gb->cpu.a);
+		break;
+	case 0x3E:  // LD A, u8
+		gb->cpu.a = inst.operand_byte;
 		break;
 
 	case 0x40:  // LD B, B
@@ -1386,13 +1528,13 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		assert(false);
 		break;
 
-	case 0xE6:  // AND A, n
+	case 0xE6:  // AND A, u8
 		gb->cpu.a &= inst.operand_byte;
 		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
 		assert(false);
 		break;
 
-	case 0xEE:  // XOR A, n
+	case 0xEE:  // XOR A, u8
 		gb->cpu.a ^= inst.operand_byte;
 		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
 		assert(false);
@@ -1425,6 +1567,367 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 }
 
 size_t
+gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
+{
+	const uint8_t extended_inst_prefix = 0xCB;
+	assert(gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) == extended_inst_prefix);
+
+	switch (inst.opcode)
+	{
+	case 0x00:  // RLC B
+	case 0x01:  // RLC C
+	case 0x02:  // RLC D
+	case 0x03:  // RLC E
+	case 0x04:  // RLC H
+	case 0x05:  // RLC L
+	case 0x07:  // RLC A
+	{
+		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		*reg = gb__RotateLeftCircular(gb, *reg, false);
+		assert(false);
+		break;
+	}
+	case 0x06:  // RLC (HL)
+	{
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		val = gb__RotateLeftCircular(gb, val, false);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		assert(false);
+		break;
+	}
+	case 0x08:  // RRC B
+	case 0x09:  // RRC C
+	case 0x0A:  // RRC D
+	case 0x0B:  // RRC E
+	case 0x0C:  // RRC H
+	case 0x0D:  // RRC L
+	case 0x0E:  // RRC A
+	{
+		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		*reg = gb__RotateRightCircular(gb, *reg, false);
+		assert(false);
+		break;
+	}
+	case 0x0F:  // RRC (HL)
+	{
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		val = gb__RotateRightCircular(gb, val, false);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		assert(false);
+		break;
+	}
+
+	case 0x10:  // RL B
+	case 0x11:  // RL C
+	case 0x12:  // RL D
+	case 0x13:  // RL E
+	case 0x14:  // RL H
+	case 0x15:  // RL L
+	case 0x17:  // RL A
+	{
+		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		*reg = gb__RotateLeft(gb, *reg, false);
+		assert(false);
+		break;
+	}
+	case 0x16:  // RL (HL)
+	{
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		val = gb__RotateLeft(gb, val, false);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		assert(false);
+		break;
+	}
+
+	case 0x18:  // RR B
+	case 0x19:  // RR C
+	case 0x1A:  // RR D
+	case 0x1B:  // RR E
+	case 0x1C:  // RR H
+	case 0x1D:  // RR L
+	case 0x1E:  // RR A
+	{
+		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		*reg = gb__RotateRight(gb, *reg, false);
+		assert(false);
+		break;
+	}
+	case 0x1F:  // RR (HL)
+	{
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		val = gb__RotateRight(gb, val, false);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		assert(false);
+		break;
+	}
+
+	case 0x40:  // BIT 0, B
+	case 0x41:  // BIT 0, C
+	case 0x42:  // BIT 0, D
+	case 0x43:  // BIT 0, E
+	case 0x44:  // BIT 0, H
+	case 0x45:  // BIT 0, L
+	case 0x47:  // BIT 0, A
+
+	case 0x48:  // BIT 1, B
+	case 0x49:  // BIT 1, C
+	case 0x4A:  // BIT 1, D
+	case 0x4B:  // BIT 1, E
+	case 0x4C:  // BIT 1, H
+	case 0x4D:  // BIT 1, L
+	case 0x4F:  // BIT 1, A
+
+	case 0x50:  // BIT 2, B
+	case 0x51:  // BIT 2, C
+	case 0x52:  // BIT 2, D
+	case 0x53:  // BIT 2, E
+	case 0x54:  // BIT 2, H
+	case 0x55:  // BIT 2, L
+	case 0x57:  // BIT 2, A
+
+	case 0x58:  // BIT 3, B
+	case 0x59:  // BIT 3, C
+	case 0x5A:  // BIT 3, D
+	case 0x5B:  // BIT 3, E
+	case 0x5C:  // BIT 3, H
+	case 0x5D:  // BIT 3, L
+	case 0x5F:  // BIT 3, A
+
+	case 0x60:  // BIT 4, B
+	case 0x61:  // BIT 4, C
+	case 0x62:  // BIT 4, D
+	case 0x63:  // BIT 4, E
+	case 0x64:  // BIT 4, H
+	case 0x65:  // BIT 4, L
+	case 0x67:  // BIT 4, A
+
+	case 0x68:  // BIT 5, B
+	case 0x69:  // BIT 5, C
+	case 0x6A:  // BIT 5, D
+	case 0x6B:  // BIT 5, E
+	case 0x6C:  // BIT 5, H
+	case 0x6D:  // BIT 5, L
+	case 0x6F:  // BIT 5, A
+
+	case 0x70:  // BIT 6, B
+	case 0x71:  // BIT 6, C
+	case 0x72:  // BIT 6, D
+	case 0x73:  // BIT 6, E
+	case 0x74:  // BIT 6, H
+	case 0x75:  // BIT 6, L
+	case 0x77:  // BIT 6, A
+
+	case 0x78:  // BIT 7, B
+	case 0x79:  // BIT 7, C
+	case 0x7A:  // BIT 7, D
+	case 0x7B:  // BIT 7, E
+	case 0x7C:  // BIT 7, H
+	case 0x7D:  // BIT 7, L
+	case 0x7F:  // BIT 7, A
+	{
+		size_t bit_index = (inst.opcode - 0x40) >> 3u;
+		size_t bit = (*gl__MapIndexToReg(gb, inst.opcode) >> bit_index) & 0x01;
+		gb__SetFlags(gb, bit == 0, false, true, gb->cpu.flags.carry == 1);
+		break;
+	}
+
+	case 0x46:  // BIT 0, (HL)
+	case 0x4E:  // BIT 1, (HL)
+	case 0x56:  // BIT 2, (HL)
+	case 0x5E:  // BIT 3, (HL)
+	case 0x66:  // BIT 4, (HL)
+	case 0x6E:  // BIT 5, (HL)
+	case 0x76:  // BIT 6, (HL)
+	case 0x7E:  // BIT 7, (HL)
+	{
+		size_t bit_index = (inst.opcode - 0x40) >> 3u;
+		size_t bit = (gb_MemoryReadByte(gb, gb->cpu.hl) >> bit_index) & 0x01;
+		gb__SetFlags(gb, bit == 0, false, true, gb->cpu.flags.carry == 1);
+		break;
+	}
+
+	case 0x80:  // RES 0, B
+	case 0x81:  // RES 0, C
+	case 0x82:  // RES 0, D
+	case 0x83:  // RES 0, E
+	case 0x84:  // RES 0, H
+	case 0x85:  // RES 0, L
+	case 0x87:  // RES 0, A
+
+	case 0x88:  // RES 1, B
+	case 0x89:  // RES 1, C
+	case 0x8A:  // RES 1, D
+	case 0x8B:  // RES 1, E
+	case 0x8C:  // RES 1, H
+	case 0x8D:  // RES 1, L
+	case 0x8F:  // RES 1, A
+
+	case 0x90:  // RES 2, B
+	case 0x91:  // RES 2, C
+	case 0x92:  // RES 2, D
+	case 0x93:  // RES 2, E
+	case 0x94:  // RES 2, H
+	case 0x95:  // RES 2, L
+	case 0x97:  // RES 2, A
+
+	case 0x98:  // RES 3, B
+	case 0x99:  // RES 3, C
+	case 0x9A:  // RES 3, D
+	case 0x9B:  // RES 3, E
+	case 0x9C:  // RES 3, H
+	case 0x9D:  // RES 3, L
+	case 0x9F:  // RES 3, A
+
+	case 0xA0:  // RES 4, B
+	case 0xA1:  // RES 4, C
+	case 0xA2:  // RES 4, D
+	case 0xA3:  // RES 4, E
+	case 0xA4:  // RES 4, H
+	case 0xA5:  // RES 4, L
+	case 0xA7:  // RES 4, A
+
+	case 0xA8:  // RES 5, B
+	case 0xA9:  // RES 5, C
+	case 0xAA:  // RES 5, D
+	case 0xAB:  // RES 5, E
+	case 0xAC:  // RES 5, H
+	case 0xAD:  // RES 5, L
+	case 0xAF:  // RES 5, A
+
+	case 0xB0:  // RES 6, B
+	case 0xB1:  // RES 6, C
+	case 0xB2:  // RES 6, D
+	case 0xB3:  // RES 6, E
+	case 0xB4:  // RES 6, H
+	case 0xB5:  // RES 6, L
+	case 0xB7:  // RES 6, A
+
+	case 0xB8:  // RES 7, B
+	case 0xB9:  // RES 7, C
+	case 0xBA:  // RES 7, D
+	case 0xBB:  // RES 7, E
+	case 0xBC:  // RES 7, H
+	case 0xBD:  // RES 7, L
+	case 0xBF:  // RES 7, A
+	{
+		const size_t bit_index = (inst.opcode - 0x80) >> 3u;
+		const uint8_t mask = ~(1u << bit_index);
+		*gl__MapIndexToReg(gb, inst.opcode) &= mask;
+		break;
+	}
+
+	case 0x86:  // RES 0, (HL)
+	case 0x8E:  // RES 1, (HL)
+	case 0x96:  // RES 2, (HL)
+	case 0x9E:  // RES 3, (HL)
+	case 0xA6:  // RES 4, (HL)
+	case 0xAE:  // RES 5, (HL)
+	case 0xB6:  // RES 6, (HL)
+	case 0xBE:  // RES 7, (HL)
+	{
+		const size_t bit_index = (inst.opcode - 0x80) >> 3u;
+		const uint8_t mask = ~(1u << bit_index);
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		val &= mask;
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		break;
+	}
+
+	// Wip
+	case 0xC0:  // SET 0, B
+	case 0xC1:  // SET 0, C
+	case 0xC2:  // SET 0, D
+	case 0xC3:  // SET 0, E
+	case 0xC4:  // SET 0, H
+	case 0xC5:  // SET 0, L
+	case 0xC7:  // SET 0, A
+
+	case 0xC8:  // SET 1, B
+	case 0xC9:  // SET 1, C
+	case 0xCA:  // SET 1, D
+	case 0xCB:  // SET 1, E
+	case 0xCC:  // SET 1, H
+	case 0xCD:  // SET 1, L
+	case 0xCF:  // SET 1, A
+
+	case 0xD0:  // SET 2, B
+	case 0xD1:  // SET 2, C
+	case 0xD2:  // SET 2, D
+	case 0xD3:  // SET 2, E
+	case 0xD4:  // SET 2, H
+	case 0xD5:  // SET 2, L
+	case 0xD7:  // SET 2, A
+
+	case 0xD8:  // SET 3, B
+	case 0xD9:  // SET 3, C
+	case 0xDA:  // SET 3, D
+	case 0xDB:  // SET 3, E
+	case 0xDC:  // SET 3, H
+	case 0xDD:  // SET 3, L
+	case 0xDF:  // SET 3, A
+
+	case 0xE0:  // SET 4, B
+	case 0xE1:  // SET 4, C
+	case 0xE2:  // SET 4, D
+	case 0xE3:  // SET 4, E
+	case 0xE4:  // SET 4, H
+	case 0xE5:  // SET 4, L
+	case 0xE7:  // SET 4, A
+
+	case 0xE8:  // SET 5, B
+	case 0xE9:  // SET 5, C
+	case 0xEA:  // SET 5, D
+	case 0xEB:  // SET 5, E
+	case 0xEC:  // SET 5, H
+	case 0xED:  // SET 5, L
+	case 0xEF:  // SET 5, A
+
+	case 0xF0:  // SET 6, B
+	case 0xF1:  // SET 6, C
+	case 0xF2:  // SET 6, D
+	case 0xF3:  // SET 6, E
+	case 0xF4:  // SET 6, H
+	case 0xF5:  // SET 6, L
+	case 0xF7:  // SET 6, A
+
+	case 0xF8:  // SET 7, B
+	case 0xF9:  // SET 7, C
+	case 0xFA:  // SET 7, D
+	case 0xFB:  // SET 7, E
+	case 0xFC:  // SET 7, H
+	case 0xFD:  // SET 7, L
+	case 0xFF:  // SET 7, A
+	{
+		const size_t bit_index = (inst.opcode - 0xC0) >> 3u;
+		*gl__MapIndexToReg(gb, inst.opcode) |= 1u << bit_index;
+		break;
+	}
+
+	case 0xC6:  // SET 0, (HL)
+	case 0xCE:  // SET 1, (HL)
+	case 0xD6:  // SET 2, (HL)
+	case 0xDE:  // SET 3, (HL)
+	case 0xE6:  // SET 4, (HL)
+	case 0xEE:  // SET 5, (HL)
+	case 0xF6:  // SET 6, (HL)
+	case 0xFE:  // SET 7, (HL)
+	{
+		const size_t bit_index = (inst.opcode - 0xC0) >> 3u;
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		val |= 1u << bit_index;
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		break;
+	}
+
+	default:
+		// See note in the end of gb__ExecuteBasicInstruction.
+		return (size_t)-1;
+	}
+
+	return gb__extended_instruction_infos[inst.opcode].min_num_machine_cycles;
+}
+
+size_t
 gb_ExecuteNextInstruction(gb_GameBoy *gb)
 {
 	assert(gb->rom.data);
@@ -1447,6 +1950,57 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		gb->cpu.pc -= gb_InstructionSize(inst);
 	}
 	return num_elapsed_cylces;
+}
+
+// Adapted from: Ericson, 2005, Real-Time Collision Detection, pages 316-317
+uint16_t
+gb__Part1By1(uint16_t n)
+{
+	// n = --------76543210 : Bits initially
+	// n = ----7654----3210 : After (1)
+	// n = --76--54--32--10 : After (2)
+	// n = -7-6-5-4-3-2-1-0 : After (3)
+	n = (n ^ (n << 4)) & 0x0f0f0f0f;  // (1)
+	n = (n ^ (n << 2)) & 0x33333333;  // (2)
+	n = (n ^ (n << 1)) & 0x55555555;  // (3)
+	return n;
+}
+uint16_t
+gb__Morton2(uint16_t line1, uint16_t line2)
+{
+	return (gb__Part1By1(line2) << 1) + gb__Part1By1(line1);
+}
+
+uint16_t
+gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_index)
+{
+	assert(set_index == 0 || set_index == 1);
+	assert(line_index < 8);
+	assert((tile_index >= 0 && tile_index < 256) || set_index == 0);
+	assert((tile_index >= -128 && tile_index < 128) || set_index == 1);
+
+	const size_t set_offset = set_index == 0 ? 0x1000 : 0x0;
+
+	size_t vram_offset = set_offset;
+
+	// A tile uses 16 bytes (2 bytes per line for 8x8 pixels).
+	vram_offset += tile_index << 16;
+	vram_offset += line_index << 1;
+	assert(vram_offset < 0x17FF);
+
+	const uint16_t tile_line = gb__Morton2(gb->memory.vram[vram_offset], gb->memory.vram[vram_offset + 1]);
+	return tile_line;
+}
+
+uint64_t
+gb_GetMapTileLine(gb_GameBoy *gb, size_t map_index, size_t tile_x_index, size_t y_index)
+{
+	assert(map_index == 0 || map_index == 1);
+	assert(tile_x_index < 32);
+	assert(y_index < 8 * 32);
+
+	(void)gb;
+	return 0;
 }
 
 uint32_t

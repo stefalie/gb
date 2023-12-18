@@ -71,6 +71,7 @@ typedef struct gb_GameBoy
 
 		// TODO: init
 		uint8_t interrupts;
+		bool stop;
 		bool halt;
 	} cpu;
 
@@ -173,6 +174,15 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 // it takes to execute that instruction.
 size_t
 gb_ExecuteNextInstruction(gb_GameBoy* gb);
+
+// Returns a line inside one tile, 2 bits per pixel.
+uint16_t
+gb_GetTileLine(gb_GameBoy* gb, size_t set_index, int tile_index, size_t line_index);
+
+// Returns a line inside one tile inside one of the two maps.
+// 8 bits monochrome per pixel.
+uint64_t
+gb_GetMapTileLine(gb_GameBoy* gb, size_t map_index, size_t tile_x_index, size_t y_index);
 
 typedef struct gb_Framebuffer
 {
