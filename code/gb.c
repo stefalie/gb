@@ -676,7 +676,41 @@ static const gb__InstructionInfo gb__extended_instruction_infos[256] = {
 	[0x1E] = { "RR (HL)", 0, 4 },
 	[0x1F] = { "RR A", 0, 2 },
 
-	// TODO
+	[0x20] = { "SLA B", 0, 2 },
+	[0x21] = { "SLA C", 0, 2 },
+	[0x22] = { "SLA D", 0, 2 },
+	[0x23] = { "SLA E", 0, 2 },
+	[0x24] = { "SLA H", 0, 2 },
+	[0x25] = { "SLA L", 0, 2 },
+	[0x26] = { "SLA (HL)", 0, 4 },
+	[0x27] = { "SLA A", 0, 2 },
+
+	[0x28] = { "SRA B", 0, 2 },
+	[0x29] = { "SRA C", 0, 2 },
+	[0x2A] = { "SRA D", 0, 2 },
+	[0x2B] = { "SRA E", 0, 2 },
+	[0x2C] = { "SRA H", 0, 2 },
+	[0x2D] = { "SRA L", 0, 2 },
+	[0x2E] = { "SRA (HL)", 0, 4 },
+	[0x2F] = { "SRA A", 0, 2 },
+
+	[0x30] = { "SWAP B", 0, 2 },
+	[0x31] = { "SWAP C", 0, 2 },
+	[0x32] = { "SWAP D", 0, 2 },
+	[0x33] = { "SWAP E", 0, 2 },
+	[0x34] = { "SWAP H", 0, 2 },
+	[0x35] = { "SWAP L", 0, 2 },
+	[0x36] = { "SWAP (HL)", 0, 4 },
+	[0x37] = { "SWAP A", 0, 2 },
+
+	[0x38] = { "SRL B", 0, 2 },
+	[0x39] = { "SRL C", 0, 2 },
+	[0x3A] = { "SRL D", 0, 2 },
+	[0x3B] = { "SRL E", 0, 2 },
+	[0x3C] = { "SRL H", 0, 2 },
+	[0x3D] = { "SRL L", 0, 2 },
+	[0x3E] = { "SRL (HL)", 0, 4 },
+	[0x3F] = { "SRL A", 0, 2 },
 
 	[0x40] = { "BIT 0, B", 0, 2 },
 	[0x41] = { "BIT 0, C", 0, 2 },
@@ -1584,7 +1618,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	{
 		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
 		*reg = gb__RotateLeftCircular(gb, *reg, false);
-		assert(false);
 		break;
 	}
 	case 0x06:  // RLC (HL)
@@ -1592,7 +1625,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
 		val = gb__RotateLeftCircular(gb, val, false);
 		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
-		assert(false);
 		break;
 	}
 	case 0x08:  // RRC B
@@ -1605,7 +1637,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	{
 		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
 		*reg = gb__RotateRightCircular(gb, *reg, false);
-		assert(false);
 		break;
 	}
 	case 0x0F:  // RRC (HL)
@@ -1613,7 +1644,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
 		val = gb__RotateRightCircular(gb, val, false);
 		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
-		assert(false);
 		break;
 	}
 
@@ -1627,7 +1657,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	{
 		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
 		*reg = gb__RotateLeft(gb, *reg, false);
-		assert(false);
 		break;
 	}
 	case 0x16:  // RL (HL)
@@ -1635,7 +1664,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
 		val = gb__RotateLeft(gb, val, false);
 		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
-		assert(false);
 		break;
 	}
 
@@ -1649,7 +1677,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	{
 		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
 		*reg = gb__RotateRight(gb, *reg, false);
-		assert(false);
 		break;
 	}
 	case 0x1F:  // RR (HL)
@@ -1657,7 +1684,100 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
 		val = gb__RotateRight(gb, val, false);
 		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
-		assert(false);
+		break;
+	}
+
+	case 0x20:  // SLA B
+	case 0x21:  // SLA C
+	case 0x22:  // SLA D
+	case 0x23:  // SLA E
+	case 0x24:  // SLA H
+	case 0x25:  // SLA L
+	case 0x27:  // SLA A
+	{
+		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		const bool co = *reg & 0x80;
+		*reg <<= 1u;
+		gb__SetFlags(gb, *reg == 0, false, false, co);
+		break;
+	}
+	case 0x26:  // SLA (HL)
+	{
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		const bool co = val & 0x80;
+		val <<= 1u;
+		gb__SetFlags(gb, val == 0, false, false, co);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		break;
+	}
+
+	case 0x28:  // SRA B
+	case 0x29:  // SRA C
+	case 0x2A:  // SRA D
+	case 0x2B:  // SRA E
+	case 0x2C:  // SRA H
+	case 0x2D:  // SRA L
+	case 0x2F:  // SRA A
+	{
+		int8_t *reg = (int8_t *)gl__MapIndexToReg(gb, inst.opcode);
+		const bool co = *reg & 0x01;
+		*reg >>= 1u;
+		gb__SetFlags(gb, *reg == 0, false, false, co);
+		break;
+	}
+	case 0x2E:  // SRA (HL)
+	{
+		int8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		const bool co = val & 0x01;
+		val >>= 1u;
+		gb__SetFlags(gb, val == 0, false, false, co);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		break;
+	}
+
+	case 0x30:  // SWAP B
+	case 0x31:  // SWAP C
+	case 0x32:  // SWAP D
+	case 0x33:  // SWAP E
+	case 0x34:  // SWAP H
+	case 0x35:  // SWAP L
+	case 0x37:  // SWAP A
+	{
+		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		*reg = (*reg >> 4u) | (*reg << 4u);
+		gb__SetFlags(gb, *reg == 0, false, false, false);
+		break;
+	}
+	case 0x36:  // SWAP (HL)
+	{
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		val = (val >> 4u) | (val << 4u);
+		gb__SetFlags(gb, val == 0, false, false, false);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
+		break;
+	}
+
+	case 0x38:  // SRL B
+	case 0x39:  // SRL C
+	case 0x3A:  // SRL D
+	case 0x3B:  // SRL E
+	case 0x3C:  // SRL H
+	case 0x3D:  // SRL L
+	case 0x3F:  // SRL A
+	{
+		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		const bool co = *reg & 0x01;
+		*reg >>= 1u;
+		gb__SetFlags(gb, *reg == 0, false, false, co);
+		break;
+	}
+	case 0x3E:  // SRL (HL)
+	{
+		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
+		const bool co = val & 0x01;
+		val >>= 1u;
+		gb__SetFlags(gb, val == 0, false, false, co);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, val);
 		break;
 	}
 
@@ -1987,6 +2107,7 @@ gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_ind
 	vram_offset += tile_index << 4;
 	vram_offset += line_index << 1;
 	assert(vram_offset < 0x17FF);
+	assert((vram_offset & 1u) == 0);
 
 	const uint16_t tile_line = gb__Morton2(gb->memory.vram[vram_offset], gb->memory.vram[vram_offset + 1]);
 	return tile_line;
