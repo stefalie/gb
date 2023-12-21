@@ -63,28 +63,21 @@ static const uint8_t gb__bios[256] = { 0x31, 0xFE, 0xFF, 0xAF, 0x21, 0xFF, 0x9F,
 	0x42, 0x4C, 0x21, 0x04, 0x01, 0x11, 0xA8, 0x00, 0x1A, 0x13, 0xBE, 0x20, 0xFE, 0x23, 0x7D, 0xFE, 0x34, 0x20, 0xF5,
 	0x06, 0x19, 0x78, 0x86, 0x23, 0x05, 0x20, 0xFB, 0x86, 0x20, 0xFE, 0x3E, 0x01, 0xE0, 0x50 };
 
-// TODO: needed? check how many times we use them and inline if not often.
-// Replace with union?
-// union WordOr2Bytes
-//{
-//	uint16_t word;
-//	struct
-//	{
-//		uint8_t byte1;
-//		uint8_t byte2;
-//	};
-//};
+// TODO: consider adding nibble functions? mostly for half carry?
+
 static inline uint8_t
 gb__Hi(uint16_t val)
 {
 	return (val >> 8u) & 0xFF;
 }
+
 static inline uint8_t
 gb__Lo(uint16_t val)
 {
 	return val & 0xFF;
 }
-// TODO: remove if never used
+
+// TODO: Inline if only used once?
 static inline uint16_t
 gb__LoHi(uint8_t lo, uint8_t hi)
 {
@@ -221,32 +214,52 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 		case 0x0E00:
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{
-				return gb->gpu.oam[addr - 0xFEA0];
+				return gb->ppu.oam[addr - 0xFEA0];
 			}
 			else  // Empty
 			{
+				assert(false);
 				return 0;
 			}
 		case 0x0F00:
-			if (addr == 0xFFFF)  // Interrupt enable
+			// else if (addr < 0xFF4C)  // I/O
+			//{
+			//	assert(!"TODO");
+			//	return 0;
+			// }
+			// else if (addr < 0xFF80)  // Empty
+			//{
+			//	return 0;
+			// }
+			if (addr == 0xFF47)
 			{
-				return gb->cpu.interrupts;
+				return gb->ppu.bgp;
 			}
-			else if (addr < 0xFF4C)  // I/O
+			else if (addr == 0xFF48)
 			{
-				// assert(!"TODO");
-				return 0;
+				return gb->ppu.obp0;
 			}
-			else if (addr < 0xFF80)  // Empty
+			else if (addr == 0xFF49)
 			{
-				return 0;
+				return gb->ppu.obp1;
 			}
-			else  // Zero page
+			else if (addr >= 0xFF80 && addr < 0xFFFF)  // Zero page RAM
 			{
 				assert((addr - 0xFF80) < 0x80);
 				// assert(!"TODO");
 				return gb->memory.zero_page_ram[addr & 0x7F];
 			}
+			else if (addr == 0xFFFF)  // Interrupt enable
+			{
+				return gb->cpu.interrupts;
+			}
+			else
+			{
+				// TODO
+				//assert(false);
+				return 0;
+			}
+			break;
 		}
 	default:
 		assert(false);
@@ -292,13 +305,13 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	// Switchable RAM bank
 	case 0xA000:
 	case 0xB000:
-		assert(!"TODO");
+		//assert(!"TODO");
 		gb->memory.external_ram[addr & 0x1FFF] = value;
 		break;
 	// (Internal) working RAM
 	case 0xC000:
 	case 0xD000:
-		assert(!"TODO");
+		//assert(!"TODO");
 		gb->memory.wram[addr & 0x1FFF] = value;
 		break;
 	// Echo of (Internal) working RAM, I/O, zero page
@@ -313,7 +326,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 		case 0x0E00:
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{
-				// return gb->gpu.oam[addr - 0xFEA0];
+				// return gb->ppu.oam[addr - 0xFEA0];
 				assert(!"TODO");
 			}
 			else
@@ -323,24 +336,30 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			}
 			break;
 		case 0x0F00:
-			if (addr == 0xFFFF)  // Interrupt enable
+			if (addr == 0xFF47)
 			{
-				gb->cpu.interrupts = value;
+				gb->ppu.bgp = value;
 			}
-			else if (addr < 0xFF4C)  // I/O
+			else if (addr == 0xFF48)
 			{
-				// TODO I/O
-				// assert(!"TODO");
+				gb->ppu.obp0 = value;
 			}
-			else if (addr < 0xFF80)
+			else if (addr == 0xFF49)
 			{
-				// The empty area is ignored
-				assert(!"TODO");
+				gb->ppu.obp1 = value;
 			}
-			else  // Zero page
+			else if (addr >= 0xFF80 && addr < 0xFFFF)  // Zero page RAM
 			{
 				assert((addr - 0xFF80) < 0x80);
 				gb->memory.zero_page_ram[addr & 0x7F] = value;
+			}
+			else if (addr == 0xFFFF)  // Interrupt enable
+			{
+				gb->cpu.interrupts = value;
+			}
+			else
+			{
+				// assert(false);
 			}
 			break;
 		}
@@ -350,13 +369,34 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 		break;
 	}
 }
-// TODO: needed?
-// static inline void
-// gb__MemoryWriteWord(gb_GameBoy* gb, uint16_t addr, uint16_t value)
-//{
-//	gb__MemoryWriteByte(gb, addr, gb__Lo(value));
-//	gb__MemoryWriteByte(gb, addr + 1, gb__Hi(value));
-// }
+
+static inline void
+gb__MemoryWriteWord(gb_GameBoy *gb, uint16_t addr, uint16_t value)
+{
+	gb__MemoryWriteByte(gb, addr, gb__Lo(value));
+	gb__MemoryWriteByte(gb, addr + 1, gb__Hi(value));
+}
+
+static inline uint16_t
+gb__MemoryReadWord(gb_GameBoy *gb, uint16_t addr)
+{
+	return gb__LoHi(gb_MemoryReadByte(gb, addr), gb_MemoryReadByte(gb, addr + 1));
+}
+
+static inline void
+gb__PushWordToStack(gb_GameBoy *gb, uint16_t value)
+{
+	gb->cpu.sp -= 2;
+	gb__MemoryWriteWord(gb, gb->cpu.sp, value);
+}
+
+static inline uint16_t
+gb__PopWordToStack(gb_GameBoy *gb)
+{
+	uint16_t result = gb__MemoryReadWord(gb, gb->cpu.sp);
+	gb->cpu.sp += 2;
+	return result;
+}
 
 void
 gb_Reset(gb_GameBoy *gb, bool skip_bios)
@@ -422,7 +462,7 @@ typedef struct
 	uint8_t min_num_machine_cycles;  // -1 if depending
 } gb__InstructionInfo;
 
-static const gb__InstructionInfo gb__instruction_infos[256] = {
+static const gb__InstructionInfo gb__basic_instruction_infos[256] = {
 	[0x00] = { "NOP", 0, 1 },
 	[0x01] = { "LD BC, u16", 2, 3 },
 	[0x02] = { "LD (BC), A", 0, 2 },
@@ -432,6 +472,8 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 	[0x06] = { "LD B, u8", 1, 2 },
 	[0x07] = { "RLCA", 0, 1 },
 
+	[0x08] = { "LD (u16), SP", 2, 5 },
+	[0x09] = { "ADD HL, BC", 0, 2 },
 	[0x0A] = { "LD A, (BC)", 0, 2 },
 	[0x0B] = { "DEC BC", 0, 2 },
 	[0x0C] = { "INC C", 0, 1 },
@@ -448,8 +490,8 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 	[0x16] = { "LD D, u8", 1, 2 },
 	[0x17] = { "RLA", 0, 1 },
 
-	[0x18] = { "JR n", 1, 3 },
-
+	[0x18] = { "JR i8", 1, 3 },
+	[0x19] = { "ADD HL, DE", 0, 2 },
 	[0x1A] = { "LD A, (DE)", 0, 2 },
 	[0x1B] = { "DEC DE", 0, 2 },
 	[0x1C] = { "INC E", 0, 1 },
@@ -464,14 +506,16 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 	[0x24] = { "INC H", 0, 1 },
 	[0x25] = { "DEC H", 0, 1 },
 	[0x26] = { "LD H, u8", 1, 2 },
+	[0x27] = { "DAA", 0, 1 },
 
 	[0x28] = { "JR Z, i8", 1, (uint8_t)-1 },
-
+	[0x29] = { "ADD HL, HL", 0, 2 },
 	[0x2A] = { "LD A, (HL+)", 0, 2 },
 	[0x2B] = { "DEC HL", 0, 2 },
 	[0x2C] = { "INC L", 0, 1 },
 	[0x2D] = { "DEC L", 0, 1 },
 	[0x2E] = { "LD L, u8", 1, 2 },
+	[0x2F] = { "CPL", 0, 1 },
 
 	[0x30] = { "JR NC, i8", 1, (uint8_t)-1 },
 	[0x31] = { "LD SP, u16", 2, 3 },
@@ -480,14 +524,16 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 	[0x34] = { "INC (HL)", 0, 3 },
 	[0x35] = { "DEC (HL)", 0, 3 },
 	[0x36] = { "LD (HL), u8", 1, 3 },
+	[0x37] = { "SCF", 0, 1 },
 
 	[0x38] = { "JR C, i8", 1, (uint8_t)-1 },
-
+	[0x39] = { "ADD HL, SP", 0, 2 },
 	[0x3A] = { "LD A, (HL-)", 0, 2 },
 	[0x3B] = { "DEC SP", 0, 2 },
 	[0x3C] = { "INC A", 0, 1 },
 	[0x3D] = { "DEC A", 0, 1 },
 	[0x3E] = { "LD A, u8", 1, 2 },
+	[0x3F] = { "CCF", 0, 1 },
 
 	[0x40] = { "LD B, B", 0, 1 },
 	[0x41] = { "LD B, C", 0, 1 },
@@ -633,10 +679,66 @@ static const gb__InstructionInfo gb__instruction_infos[256] = {
 	[0xBE] = { "CP A, (HL)", 0, 2 },
 	[0xBF] = { "CP A, A", 0, 1 },
 
-	[0xCB] = { "PREFIX", 0, 0 },  // Num cycles is 0 here because it's taken from the extended instruction table.
+	[0xC0] = { "RET NZ", 0, (uint8_t)-1 },
+	[0xC1] = { "POP BC", 0, 3 },
+	[0xC2] = { "JP NZ, u16", 2, (uint8_t)-1 },
+	[0xC3] = { "JP u16", 2, 4 },
+	[0xC4] = { "CALL NZ, u16", 2, (uint8_t)-1 },
+	[0xC5] = { "PUSH BC", 0, 4 },
+	[0xC6] = { "ADD A, u8", 1, 2 },
+	[0xC7] = { "RST 00h", 0, 4 },
 
-	[0xE6] = { "AND A, 8", 1, 2 },
-	[0xEE] = { "XOR A, 8", 1, 2 },
+	[0xC8] = { "RET Z", 0, (uint8_t)-1 },
+	[0xC9] = { "RET", 0, 4 },
+	[0xCA] = { "JP Z, u16", 2, (uint8_t)-1 },
+	[0xCB] = { "PREFIX", 0, 0 },  // Num cycles is 0 here because it's taken from the extended instruction table.
+	[0xCC] = { "CALL Z, u16", 2, (uint8_t)-1 },
+	[0xCD] = { "CALL u16", 2, 6 },
+	[0xCE] = { "ADC A, u8", 1, 2 },
+	[0xCF] = { "RST 08h", 0, 4 },
+
+	[0xD0] = { "RET NC", 0, (uint8_t)-1 },
+	[0xD1] = { "POP DE", 0, 3 },
+	[0xD2] = { "JP NC, u16", 2, (uint8_t)-1 },
+	[0xD4] = { "CALL NC, u16", 2, (uint8_t)-1 },
+	[0xD5] = { "PUSH DE", 0, 4 },
+	[0xD6] = { "SUB A, u8", 1, 2 },
+	[0xD7] = { "RST 10h", 0, 4 },
+
+	[0xD8] = { "RET C", 0, (uint8_t)-1 },
+	[0xD9] = { "RETI", 0, 4 },
+	[0xDA] = { "JP C, u16", 2, (uint8_t)-1 },
+	[0xDC] = { "CALL C, u16", 2, (uint8_t)-1 },
+	[0xDE] = { "SBC A, u8", 1, 2 },
+	[0xDF] = { "RST 18h", 0, 4 },
+
+	[0xE0] = { "LD (FF00+u8), A", 1, 3 },
+	[0xE1] = { "POP HL", 0, 3 },
+	[0xE2] = { "LD (FF00+C), A", 0, 2 },
+	[0xE5] = { "PUSH HL", 0, 4 },
+	[0xE6] = { "AND A, u8", 1, 2 },
+	[0xE7] = { "RST 20h", 0, 4 },
+
+	[0xE8] = { "ADD SP, i8", 1, 4 },
+	[0xE9] = { "JP HL", 0, 1 },
+	[0xEA] = { "LD (u16), A", 2, 4 },
+	[0xEE] = { "XOR A, u8", 1, 2 },
+	[0xEF] = { "RST 28h", 0, 4 },
+
+	[0xF0] = { "LD A, (FF00+u8)", 1, 3 },
+	[0xF1] = { "POP AF", 0, 3 },
+	[0xF2] = { "LD A, (FF00+C)", 0, 2 },
+	[0xF3] = { "DI", 0, 1 },
+	[0xF5] = { "PUSH AF", 0, 4 },
+	[0xF6] = { "OR A, u8", 1, 2 },
+	[0xF7] = { "RST 30h", 0, 4 },
+
+	[0xF8] = { "LD HL, SP+i8", 1, 3 },
+	[0xF9] = { "LD SP, HL", 0, 2 },
+	[0xFA] = { "LD A, (u16)", 2, 4 },
+	[0xFB] = { "EI", 0, 1 },
+	[0xFE] = { "CP A, u8", 1, 2 },
+	[0xFF] = { "RST 38h", 0, 4 },
 };
 
 static const gb__InstructionInfo gb__extended_instruction_infos[256] = {
@@ -951,7 +1053,7 @@ gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
 	else
 	{
 		inst.is_extended = false;
-		info = gb__instruction_infos[inst.opcode];
+		info = gb__basic_instruction_infos[inst.opcode];
 	}
 
 	inst.num_operand_bytes = info.num_operand_bytes;
@@ -980,7 +1082,7 @@ size_t
 gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_len)
 {
 	const gb__InstructionInfo info =
-			inst.is_extended ? gb__extended_instruction_infos[inst.opcode] : gb__instruction_infos[inst.opcode];
+			inst.is_extended ? gb__extended_instruction_infos[inst.opcode] : gb__basic_instruction_infos[inst.opcode];
 	if (!info.name)
 	{
 		snprintf(str_buf, str_buf_len, "OpCode 0x%02X info is missing!", inst.opcode);
@@ -1010,8 +1112,8 @@ gb__SetFlags(gb_GameBoy *gb, bool zero, bool subtract, bool half_carry, bool car
 	gb->cpu.flags.carry = carry ? 1 : 0;
 }
 
-uint8_t *
-gl__MapIndexToReg(gb_GameBoy *gb, uint8_t index)
+static uint8_t *
+gb__MapIndexToReg(gb_GameBoy *gb, uint8_t index)
 {
 	index &= 0x07;
 
@@ -1037,7 +1139,7 @@ gl__MapIndexToReg(gb_GameBoy *gb, uint8_t index)
 	}
 }
 
-uint8_t
+static uint8_t
 gb__RotateLeftCircular(gb_GameBoy *gb, uint8_t val, bool clear_zero)
 {
 	const bool co = val & 0x80;
@@ -1050,7 +1152,7 @@ gb__RotateLeftCircular(gb_GameBoy *gb, uint8_t val, bool clear_zero)
 	return val;
 }
 
-uint8_t
+static uint8_t
 gb__RotateLeft(gb_GameBoy *gb, uint8_t val, bool clear_zero)
 {
 	const bool co = val & 0x80;
@@ -1060,7 +1162,7 @@ gb__RotateLeft(gb_GameBoy *gb, uint8_t val, bool clear_zero)
 	return val;
 }
 
-uint8_t
+static uint8_t
 gb__RotateRightCircular(gb_GameBoy *gb, uint8_t val, bool clear_zero)
 {
 	const bool co = val & 0x01;
@@ -1073,7 +1175,7 @@ gb__RotateRightCircular(gb_GameBoy *gb, uint8_t val, bool clear_zero)
 	return val;
 }
 
-uint8_t
+static uint8_t
 gb__RotateRight(gb_GameBoy *gb, uint8_t val, bool clear_zero)
 {
 	const bool co = val & 0x01;
@@ -1083,56 +1185,91 @@ gb__RotateRight(gb_GameBoy *gb, uint8_t val, bool clear_zero)
 	return val;
 }
 
-uint8_t
-gb__Add(gb_GameBoy *gb, uint8_t lhs, uint8_t rhs, bool carry_in)
+static void
+gb__Add(gb_GameBoy *gb, uint8_t rhs, bool carry_in)
 {
 	uint8_t ci = (carry_in ? gb->cpu.flags.carry : 0);
-	uint16_t sum = lhs + rhs + ci;
-	bool half_carry = (lhs & 0x0F) + (rhs & 0x0F) + ci > 0x0F;
+	uint16_t sum = gb->cpu.a + rhs + ci;
+	bool half_carry = (gb->cpu.a & 0x0F) + (rhs & 0x0F) + ci > 0x0F;
 	bool co = sum > 0xFF;
-	uint8_t result = (uint8_t)sum;
-	gb__SetFlags(gb, result == 0, false, half_carry, co);
-	return result;
+	gb->cpu.a = (uint8_t)sum;
+	gb__SetFlags(gb, gb->cpu.a == 0, false, half_carry, co);
 }
 
 // Could this be implemented by doing gb__Add(lhs, 2's complement of (rhs + carry_if_enable)),
 // and then by flipping the half carry, carry, and negate flags?
 // I think so. See here in MAME where SBC and ADC are essentially identical (besides the +/-):
 // https://github.com/mamedev/mame/blob/1fdf6d10a7907bc92cd9f36eda1eca0484e47aba/src/devices/cpu/lr35902/opc_main.hxx#L4
-uint8_t
-gb__Sub(gb_GameBoy *gb, uint8_t lhs, uint8_t rhs, bool carry_in)
+static void
+gb__Sub(gb_GameBoy *gb, uint8_t rhs, bool carry_in)
 {
 	uint8_t ci = (carry_in ? gb->cpu.flags.carry : 0);
-	uint16_t diff = lhs - rhs - ci;
-	bool half_carry = (lhs & 0x0F) < (rhs & 0x0F) + ci;
+	uint16_t diff = gb->cpu.a - rhs - ci;
+	bool half_carry = (gb->cpu.a & 0x0F) < (rhs & 0x0F) + ci;
 	bool co = diff > 0xFF;
-	uint8_t result = (uint8_t)diff;
-	gb__SetFlags(gb, result == 0, true, half_carry, co);
-	return result;
+	gb->cpu.a = (uint8_t)diff;
+	gb__SetFlags(gb, gb->cpu.a == 0, true, half_carry, co);
 }
 
-void
+static uint16_t
+gb__Add16(gb_GameBoy *gb, uint16_t lhs, uint16_t rhs)
+{
+	uint32_t sum = lhs + rhs;
+	bool half_carry = (lhs & 0x0FFF) + (rhs & 0x0FFF) > 0x0FFF;
+	bool co = sum > 0xFFFF;
+	gb__SetFlags(gb, gb->cpu.flags.zero == 1, false, half_carry, co);
+	return (uint16_t)sum;
+}
+
+static void
+gb__And(gb_GameBoy *gb, uint8_t rhs)
+{
+	gb->cpu.a &= rhs;
+	gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+}
+
+static void
+gb__Xor(gb_GameBoy *gb, uint8_t rhs)
+{
+	gb->cpu.a ^= rhs;
+	gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+}
+
+static void
+gb__Or(gb_GameBoy *gb, uint8_t rhs)
+{
+	gb->cpu.a |= rhs;
+	gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+}
+
+static void
+gb__Cp(gb_GameBoy *gb, uint8_t rhs)
+{
+	gb__SetFlags(gb, gb->cpu.a == rhs, false, (gb->cpu.a & 0x0F) < (rhs & 0x0F), gb->cpu.a < rhs);
+}
+
+static void
 gb__Inc(gb_GameBoy *gb, uint8_t *val)
 {
 	++(*val);
 	gb__SetFlags(gb, (*val) == 0, false, ((*val) & 0x0F) == 0, gb->cpu.flags.carry == 1);
 }
 
-void
+static void
 gb__Dec(gb_GameBoy *gb, uint8_t *val)
 {
 	--(*val);
 	gb__SetFlags(gb, (*val) == 0, true, ((*val) & 0x0F) == 0x0F, gb->cpu.flags.carry == 1);
 }
 
-size_t
+static size_t
 gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 {
 	const uint8_t extended_inst_prefix = 0xCB;
 	assert(gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) != extended_inst_prefix ||
 			gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) - 1 == extended_inst_prefix);
 
-	size_t result = gb__instruction_infos[inst.opcode].min_num_machine_cycles;
+	size_t result = gb__basic_instruction_infos[inst.opcode].min_num_machine_cycles;
 
 	switch (inst.opcode)
 	{
@@ -1158,9 +1295,14 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		break;
 	case 0x07:  // RLCA
 		gb->cpu.a = gb__RotateLeftCircular(gb, gb->cpu.a, true);
-		assert(false);
 		break;
 
+	case 0x08:  // LD (u16), SP
+		gb__MemoryWriteWord(gb, inst.operand_word, gb->cpu.sp);
+		break;
+	case 0x09:  // ADD HL, BC
+		gb->cpu.hl = gb__Add16(gb, gb->cpu.hl, gb->cpu.bc);
+		break;
 	case 0x0A:  // LD A, (BC)
 		gb->cpu.a = gb_MemoryReadByte(gb, gb->cpu.bc);
 		break;
@@ -1205,13 +1347,14 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		break;
 	case 0x17:  // RLA
 		gb->cpu.a = gb__RotateLeft(gb, gb->cpu.a, true);
-		assert(false);
 		break;
 
-	case 0x18:  // JR n
+	case 0x18:  // JR i8
 		gb->cpu.pc += (int8_t)inst.operand_byte;
 		break;
-
+	case 0x19:  // ADD HL, DE
+		gb->cpu.hl = gb__Add16(gb, gb->cpu.hl, gb->cpu.de);
+		break;
 	case 0x1A:  // LD A, (DE)
 		gb->cpu.a = gb_MemoryReadByte(gb, gb->cpu.de);
 		break;
@@ -1262,6 +1405,38 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x26:  // LD H, u8
 		gb->cpu.h = inst.operand_byte;
 		break;
+	case 0x27:  // DAA
+	{
+		// See:
+		// - https://forums.nesdev.org/viewtopic.php?t=15944
+		// - https://ehaskins.com/2018-01-30%20Z80%20DAA
+		bool co = false;
+		if (gb->cpu.flags.subtract == 0)
+		{  // After an addition, adjust if (half-)carry occurred or if result is out of bounds.
+			if (gb->cpu.flags.carry == 1 || gb->cpu.a > 0x99)
+			{
+				gb->cpu.a += 0x60;
+				co = true;
+			}
+			if (gb->cpu.flags.half_carry == 1 || (gb->cpu.a & 0x0F) > 0x09)
+			{
+				gb->cpu.a += 0x60;
+			}
+		}
+		else
+		{  // After a subtraction, only adjust if (half-)carry occurred.
+			if (gb->cpu.flags.carry == 1)
+			{
+				gb->cpu.a -= 0x60;
+			}
+			if (gb->cpu.flags.half_carry == 1)
+			{
+				gb->cpu.a -= 0x6;
+			}
+		}
+		gb__SetFlags(gb, gb->cpu.a == 0, gb->cpu.flags.subtract == 1, false, co);
+		break;
+	}
 
 	case 0x28:  // JR Z, i8
 		if (gb->cpu.flags.zero == 1)
@@ -1274,7 +1449,9 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 			result = 2;
 		}
 		break;
-
+	case 0x29:  // ADD HL, HL
+		gb->cpu.hl = gb__Add16(gb, gb->cpu.hl, gb->cpu.hl);
+		break;
 	case 0x2A:  // LD A, (HL+)
 		gb->cpu.a = gb_MemoryReadByte(gb, gb->cpu.de);
 		++gb->cpu.hl;
@@ -1290,6 +1467,10 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		break;
 	case 0x2E:  // LD L, u8
 		gb->cpu.l = inst.operand_byte;
+		break;
+	case 0x2F:  // CPL
+		gb->cpu.a = ~gb->cpu.a;
+		gb__SetFlags(gb, gb->cpu.flags.zero == 1, true, true, gb->cpu.flags.carry == 1);
 		break;
 
 	case 0x30:  // JR NC, i8
@@ -1330,6 +1511,9 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x36:  // LD (HL), u8
 		gb__MemoryWriteByte(gb, gb->cpu.hl, inst.operand_byte);
 		break;
+	case 0x37:  // SCF
+		gb__SetFlags(gb, gb->cpu.flags.zero == 1, false, false, true);
+		break;
 
 	case 0x38:  // JR C, i8
 		if (gb->cpu.flags.carry == 1)
@@ -1342,7 +1526,9 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 			result = 2;
 		}
 		break;
-
+	case 0x39:  // ADD HL, SP
+		gb->cpu.hl = gb__Add16(gb, gb->cpu.hl, gb->cpu.sp);
+		break;
 	case 0x3A:  // LD A, (HL-)
 		gb->cpu.a = gb_MemoryReadByte(gb, gb->cpu.de);
 		--gb->cpu.hl;
@@ -1358,6 +1544,9 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		break;
 	case 0x3E:  // LD A, u8
 		gb->cpu.a = inst.operand_byte;
+		break;
+	case 0x3F:  // CCF
+		gb__SetFlags(gb, gb->cpu.flags.zero == 1, false, false, gb->cpu.flags.carry == 0);
 		break;
 
 	case 0x40:  // LD B, B
@@ -1409,8 +1598,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x7C:  // LD A, H
 	case 0x7D:  // LD A, L
 	case 0x7F:  // LD A, A
-		*gl__MapIndexToReg(gb, (inst.opcode - 0x40) >> 3u) = *gl__MapIndexToReg(gb, inst.opcode);
-		assert(false);
+		*gb__MapIndexToReg(gb, (inst.opcode - 0x40) >> 3u) = *gb__MapIndexToReg(gb, inst.opcode);
 		break;
 
 	case 0x46:  // LD B, (HL)
@@ -1420,7 +1608,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x66:  // LD H, (HL)
 	case 0x6E:  // LD L, (HL)
 	case 0x7E:  // LD A, (HL)
-		*gl__MapIndexToReg(gb, (inst.opcode - 0x40) >> 3u) = gb_MemoryReadByte(gb, gb->cpu.hl);
+		*gb__MapIndexToReg(gb, (inst.opcode - 0x40) >> 3u) = gb_MemoryReadByte(gb, gb->cpu.hl);
 		break;
 
 	case 0x70:  // LD (HL), B
@@ -1430,8 +1618,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x74:  // LD (HL), H
 	case 0x75:  // LD (HL), L
 	case 0x77:  // LD (HL), A
-		gb__MemoryWriteByte(gb, gb->cpu.hl, *gl__MapIndexToReg(gb, inst.opcode));
-		assert(false);
+		gb__MemoryWriteByte(gb, gb->cpu.hl, *gb__MapIndexToReg(gb, inst.opcode));
 		break;
 
 	case 0x76:  // HALT
@@ -1448,10 +1635,10 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x84:  // ADD A, H
 	case 0x85:  // ADD A, L
 	case 0x87:  // ADD A, A
-		gb->cpu.a = gb__Add(gb, gb->cpu.a, *gl__MapIndexToReg(gb, inst.opcode), false);
+		gb__Add(gb, *gb__MapIndexToReg(gb, inst.opcode), false);
 		break;
 	case 0x86:  // ADD A, (HL)
-		gb->cpu.a = gb__Add(gb, gb->cpu.a, gb_MemoryReadByte(gb, gb->cpu.hl), false);
+		gb__Add(gb, gb_MemoryReadByte(gb, gb->cpu.hl), false);
 		break;
 
 	case 0x88:  // ADC A, B
@@ -1461,10 +1648,10 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x8C:  // ADC A, H
 	case 0x8D:  // ADC A, L
 	case 0x8F:  // ADC A, A
-		gb->cpu.a = gb__Add(gb, gb->cpu.a, *gl__MapIndexToReg(gb, inst.opcode), true);
+		gb__Add(gb, *gb__MapIndexToReg(gb, inst.opcode), true);
 		break;
 	case 0x8E:  // ADC A, (HL)
-		gb->cpu.a = gb__Add(gb, gb->cpu.a, gb_MemoryReadByte(gb, gb->cpu.hl), true);
+		gb__Add(gb, gb_MemoryReadByte(gb, gb->cpu.hl), true);
 		break;
 
 	case 0x90:  // SUB A, B
@@ -1474,10 +1661,10 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x94:  // SUB A, H
 	case 0x95:  // SUB A, L
 	case 0x97:  // SUB A, A
-		gb->cpu.a = gb__Sub(gb, gb->cpu.a, *gl__MapIndexToReg(gb, inst.opcode), false);
+		gb__Sub(gb, *gb__MapIndexToReg(gb, inst.opcode), false);
 		break;
 	case 0x96:  // SUB A, (HL)
-		gb->cpu.a = gb__Sub(gb, gb->cpu.a, gb_MemoryReadByte(gb, gb->cpu.hl), false);
+		gb__Sub(gb, gb_MemoryReadByte(gb, gb->cpu.hl), false);
 		break;
 
 	case 0x98:  // SBC A, B
@@ -1487,10 +1674,10 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x9C:  // SBC A, H
 	case 0x9D:  // SBC A, L
 	case 0x9F:  // SBC A, A
-		gb->cpu.a = gb__Sub(gb, gb->cpu.a, *gl__MapIndexToReg(gb, inst.opcode), true);
+		gb__Sub(gb, *gb__MapIndexToReg(gb, inst.opcode), true);
 		break;
 	case 0x9E:  // SBC A, (HL)
-		gb->cpu.a = gb__Sub(gb, gb->cpu.a, gb_MemoryReadByte(gb, gb->cpu.hl), true);
+		gb__Sub(gb, gb_MemoryReadByte(gb, gb->cpu.hl), true);
 		break;
 
 	case 0xA0:  // AND A, B
@@ -1500,12 +1687,10 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0xA4:  // AND A, H
 	case 0xA5:  // AND A, L
 	case 0xA7:  // AND A, A
-		gb->cpu.a &= *gl__MapIndexToReg(gb, inst.opcode);
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		gb__And(gb, *gb__MapIndexToReg(gb, inst.opcode));
 		break;
 	case 0xA6:  // AND A, (HL)
-		gb->cpu.a &= gb_MemoryReadByte(gb, gb->cpu.hl);
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
+		gb__And(gb, gb_MemoryReadByte(gb, gb->cpu.hl));
 		break;
 
 	case 0xA8:  // XOR A, B
@@ -1515,12 +1700,10 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0xAC:  // XOR A, H
 	case 0xAD:  // XOR A, L
 	case 0xAF:  // XOR A, A
-		gb->cpu.a ^= *gl__MapIndexToReg(gb, inst.opcode);
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		gb__Xor(gb, *gb__MapIndexToReg(gb, inst.opcode));
 		break;
 	case 0xAE:  // XOR A, (HL)
-		gb->cpu.a ^= gb_MemoryReadByte(gb, gb->cpu.hl);
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		gb__Xor(gb, gb_MemoryReadByte(gb, gb->cpu.hl));
 		break;
 
 	case 0xB0:  // OR A, B
@@ -1530,12 +1713,10 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0xB4:  // OR A, H
 	case 0xB5:  // OR A, L
 	case 0xB7:  // OR A, A
-		gb->cpu.a |= *gl__MapIndexToReg(gb, inst.opcode);
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		gb__Or(gb, *gb__MapIndexToReg(gb, inst.opcode));
 		break;
 	case 0xB6:  // OR A, (HL)
-		gb->cpu.a |= gb_MemoryReadByte(gb, gb->cpu.hl);
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
+		gb__Or(gb, gb_MemoryReadByte(gb, gb->cpu.hl));
 		break;
 
 	case 0xB8:  // CP A, B
@@ -1545,33 +1726,308 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0xBC:  // CP A, H
 	case 0xBD:  // CP A, L
 	case 0xBF:  // CP A, A
-	{
-		uint8_t val = *gl__MapIndexToReg(gb, inst.opcode);
-		gb__SetFlags(gb, gb->cpu.a == val, false, (gb->cpu.a & 0x0F) < (val & 0x0F), gb->cpu.a < val);
+		gb__Cp(gb, *gb__MapIndexToReg(gb, inst.opcode));
 		break;
-	}
 	case 0xBE:  // CP A, (HL)
-	{
-		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
-		gb__SetFlags(gb, gb->cpu.a == val, false, (gb->cpu.a & 0x0F) < (val & 0x0F), gb->cpu.a < val);
+		gb__Cp(gb, gb_MemoryReadByte(gb, gb->cpu.hl));
 		break;
-	}
 
+	case 0xC0:  // RET NZ
+		if (gb->cpu.flags.zero == 0)
+		{
+			gb->cpu.pc = gb__PopWordToStack(gb);
+			result = 5;
+		}
+		else
+		{
+			result = 2;
+		}
+		break;
+	case 0xC1:  // POP BC
+		gb->cpu.bc = gb__PopWordToStack(gb);
+		break;
+	case 0xC2:  // JP NZ, u16
+		if (gb->cpu.flags.zero == 0)
+		{
+			gb->cpu.pc = inst.operand_word;
+			result = 4;
+		}
+		else
+		{
+			result = 3;
+		}
+		break;
+	case 0xC3:  // JP u16
+		gb->cpu.pc = inst.operand_word;
+		break;
+	case 0xC4:  // CALL NZ, u16
+		if (gb->cpu.flags.zero == 0)
+		{
+			gb__PushWordToStack(gb, gb->cpu.pc);
+			gb->cpu.pc = inst.operand_word;
+			result = 6;
+		}
+		else
+		{
+			result = 3;
+		}
+		break;
+	case 0xC5:  // PUSH BC
+		gb__PushWordToStack(gb, gb->cpu.bc);
+		break;
+	case 0xC6:  // ADD A, u8
+		gb__Add(gb, inst.operand_byte, false);
+		break;
+	case 0xC7:  // RST 00h
+		gb__PushWordToStack(gb, gb->cpu.pc);
+		gb->cpu.pc = 0x00;
+		break;
+
+	case 0xC8:  // RET Z
+		if (gb->cpu.flags.zero == 1)
+		{
+			gb->cpu.pc = gb__PopWordToStack(gb);
+			result = 5;
+		}
+		else
+		{
+			result = 2;
+		}
+		break;
+	case 0xC9:  // RET
+		gb->cpu.pc = gb__PopWordToStack(gb);
+		break;
+	case 0xCA:  // JP Z, u16
+		if (gb->cpu.flags.zero == 1)
+		{
+			gb->cpu.pc = inst.operand_word;
+			result = 4;
+		}
+		else
+		{
+			result = 3;
+		}
+		break;
 	case 0xCB:  // PREFIX
 		// Handled seperatly above.
 		assert(false);
 		break;
-
-	case 0xE6:  // AND A, u8
-		gb->cpu.a &= inst.operand_byte;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, true, false);
-		assert(false);
+	case 0xCC:  // CALL Z, u16
+		if (gb->cpu.flags.zero == 1)
+		{
+			gb__PushWordToStack(gb, gb->cpu.pc);
+			gb->cpu.pc = inst.operand_word;
+			result = 6;
+		}
+		else
+		{
+			result = 3;
+		}
+		break;
+	case 0xCD:  // CALL u16
+	{
+		gb__PushWordToStack(gb, gb->cpu.pc);
+		gb->cpu.pc = inst.operand_word;
+		break;
+	}
+	case 0xCE:  // ADC A, u8
+		gb__Add(gb, inst.operand_byte, true);
+		break;
+	case 0xCF:  // RST 08h
+		gb__PushWordToStack(gb, gb->cpu.pc);
+		gb->cpu.pc = 0x08;
 		break;
 
+	case 0xD0:  // RET NC
+		if (gb->cpu.flags.carry == 0)
+		{
+			gb->cpu.pc = gb__PopWordToStack(gb);
+			result = 5;
+		}
+		else
+		{
+			result = 2;
+		}
+		break;
+	case 0xD1:  // POP DE
+		gb->cpu.de = gb__PopWordToStack(gb);
+		break;
+	case 0xD2:  // JP NC, u16
+		if (gb->cpu.flags.carry == 0)
+		{
+			gb->cpu.pc = inst.operand_word;
+			result = 4;
+		}
+		else
+		{
+			result = 3;
+		}
+		break;
+	case 0xD4:  // CALL NC, u16
+		if (gb->cpu.flags.half_carry == 0)
+		{
+			gb__PushWordToStack(gb, gb->cpu.pc);
+			gb->cpu.pc = inst.operand_word;
+			result = 6;
+		}
+		else
+		{
+			result = 3;
+		}
+		break;
+	case 0xD5:  // PUSH DE
+		gb__PushWordToStack(gb, gb->cpu.de);
+		break;
+	case 0xD6:  // SUB A, u8
+		gb__Sub(gb, inst.operand_byte, false);
+		break;
+	case 0xD7:  // RST 10h
+		gb__PushWordToStack(gb, gb->cpu.pc);
+		gb->cpu.pc = 0x10;
+		break;
+
+	case 0xD8:  // RET C
+		if (gb->cpu.flags.carry == 1)
+		{
+			gb->cpu.pc = gb__PopWordToStack(gb);
+			result = 5;
+		}
+		else
+		{
+			result = 2;
+		}
+		break;
+	case 0xD9:  // RETI
+		gb->cpu.pc = gb__PopWordToStack(gb);
+		gb->cpu.interrupt_enable = true;
+		break;
+	case 0xDA:  // JP C, u16
+		if (gb->cpu.flags.carry == 1)
+		{
+			gb->cpu.pc = inst.operand_word;
+			result = 4;
+		}
+		else
+		{
+			result = 3;
+		}
+		break;
+	case 0xDC:  // CALL C, u16
+		if (gb->cpu.flags.half_carry == 1)
+		{
+			gb__PushWordToStack(gb, gb->cpu.pc);
+			gb->cpu.pc = inst.operand_word;
+			result = 6;
+		}
+		else
+		{
+			result = 3;
+		}
+		break;
+	case 0xDE:  // SBC A, u8
+		gb__Sub(gb, inst.operand_byte, true);
+		break;
+	case 0xDF:  // RST 18h
+		gb__PushWordToStack(gb, gb->cpu.pc);
+		gb->cpu.pc = 0x18;
+		break;
+
+	case 0xE0:  // LD (FF00+u8), A
+		gb__MemoryWriteByte(gb, 0xFF00 + inst.operand_byte, gb->cpu.a);
+		break;
+	case 0xE1:  // POP HL
+		gb->cpu.hl = gb__PopWordToStack(gb);
+		break;
+	case 0xE2:  // LD (FF00+C), A
+		gb__MemoryWriteByte(gb, 0xFF00 + gb->cpu.c, gb->cpu.a);
+		break;
+	case 0xE5:  // PUSH HL
+		gb__PushWordToStack(gb, gb->cpu.hl);
+		break;
+	case 0xE6:  // AND A, u8
+		gb__And(gb, inst.operand_byte);
+		break;
+	case 0xE7:  // RST 20h
+		gb__PushWordToStack(gb, gb->cpu.pc);
+		gb->cpu.pc = 0x20;
+		break;
+
+	case 0xE8:  // ADD SP, i8
+	{
+		// See: https://stackoverflow.com/a/57981912
+		uint32_t sum = gb->cpu.sp + (int8_t)inst.operand_byte;
+		bool half_carry = (gb->cpu.sp & 0x0F) + ((int8_t)inst.operand_byte & 0x0F) > 0x0F;
+		bool co = sum > 0xFF;
+		gb->cpu.sp = (uint16_t)sum;
+		gb__SetFlags(gb, false, false, half_carry, co);
+		break;
+	}
+	case 0xE9:  // JP HL
+		gb->cpu.pc = gb->cpu.hl;
+		break;
+	case 0xEA:  // LD (u16), A
+		gb__MemoryWriteByte(gb, inst.operand_word, gb->cpu.a);
+		break;
 	case 0xEE:  // XOR A, u8
-		gb->cpu.a ^= inst.operand_byte;
-		gb__SetFlags(gb, gb->cpu.a == 0, false, false, false);
-		assert(false);
+		gb__Xor(gb, inst.operand_byte);
+		break;
+	case 0xEF:  // RST 28h
+		gb__PushWordToStack(gb, gb->cpu.pc);
+		gb->cpu.pc = 0x28;
+		break;
+
+	case 0xF0:  // LD A, (FF00+u8)
+		gb->cpu.a = gb_MemoryReadByte(gb, 0xFF00 + inst.operand_byte);
+		break;
+	case 0xF1:  // POP AF
+		gb->cpu.af = gb__PopWordToStack(gb);
+		// Unclear if necessary. Those bits are initialized to 0 and should never be written anyway.
+		gb->cpu.flags._ = 0;
+		break;
+	case 0xF2:  // LD A, (FF00+C)
+		gb->cpu.a = gb_MemoryReadByte(gb, 0xFF00 + gb->cpu.c);
+		break;
+	case 0xF3:  // DI
+		gb->cpu.interrupt_enable = false;
+		assert(!"TODO");
+		break;
+	case 0xF5:  // PUSH AF
+		gb__PushWordToStack(gb, gb->cpu.af);
+		break;
+	case 0xF6:  // OR A, u8
+		gb__Or(gb, inst.operand_byte);
+		break;
+	case 0xF7:  // RST 30h
+		gb__PushWordToStack(gb, gb->cpu.pc);
+		gb->cpu.pc = 0x30;
+		break;
+
+	case 0xF8:  // LD HL, SP+i8
+	{
+		// See: https://stackoverflow.com/a/57981912
+		uint32_t sum = gb->cpu.sp + (int8_t)inst.operand_byte;
+		bool half_carry = (gb->cpu.sp & 0x0F) + ((int8_t)inst.operand_byte & 0x0F) > 0x0F;
+		bool co = sum > 0xFF;
+		gb->cpu.hl = (uint16_t)sum;
+		gb__SetFlags(gb, false, false, half_carry, co);
+		break;
+	}
+	case 0xF9:  // LD SP, HL
+		gb->cpu.sp = gb->cpu.hl;
+		break;
+	case 0xFA:  // LD A, (u16)
+		gb->cpu.a = gb_MemoryReadByte(gb, inst.operand_word);
+		break;
+	case 0xFB:  // EI
+		gb->cpu.interrupt_enable = true;
+		assert(!"TODO");
+		break;
+	case 0xFE:  // CP A, u8
+		gb__Cp(gb, inst.operand_byte);
+		break;
+	case 0xFF:  // RST 38h
+		gb__PushWordToStack(gb, gb->cpu.pc);
+		gb->cpu.pc = 0x38;
 		break;
 
 	case 0xD3:
@@ -1600,12 +2056,13 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	return result;
 }
 
-size_t
+static size_t
 gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 {
 	const uint8_t extended_inst_prefix = 0xCB;
 	assert(gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) == extended_inst_prefix);
 
+	// TODO: Consider using if/else if branches. It will be more compact than using a switch.
 	switch (inst.opcode)
 	{
 	case 0x00:  // RLC B
@@ -1616,7 +2073,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x05:  // RLC L
 	case 0x07:  // RLC A
 	{
-		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		uint8_t *reg = gb__MapIndexToReg(gb, inst.opcode);
 		*reg = gb__RotateLeftCircular(gb, *reg, false);
 		break;
 	}
@@ -1635,7 +2092,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x0D:  // RRC L
 	case 0x0E:  // RRC A
 	{
-		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		uint8_t *reg = gb__MapIndexToReg(gb, inst.opcode);
 		*reg = gb__RotateRightCircular(gb, *reg, false);
 		break;
 	}
@@ -1655,7 +2112,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x15:  // RL L
 	case 0x17:  // RL A
 	{
-		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		uint8_t *reg = gb__MapIndexToReg(gb, inst.opcode);
 		*reg = gb__RotateLeft(gb, *reg, false);
 		break;
 	}
@@ -1675,7 +2132,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x1D:  // RR L
 	case 0x1E:  // RR A
 	{
-		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		uint8_t *reg = gb__MapIndexToReg(gb, inst.opcode);
 		*reg = gb__RotateRight(gb, *reg, false);
 		break;
 	}
@@ -1695,7 +2152,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x25:  // SLA L
 	case 0x27:  // SLA A
 	{
-		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		uint8_t *reg = gb__MapIndexToReg(gb, inst.opcode);
 		const bool co = *reg & 0x80;
 		*reg <<= 1u;
 		gb__SetFlags(gb, *reg == 0, false, false, co);
@@ -1719,7 +2176,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x2D:  // SRA L
 	case 0x2F:  // SRA A
 	{
-		int8_t *reg = (int8_t *)gl__MapIndexToReg(gb, inst.opcode);
+		int8_t *reg = (int8_t *)gb__MapIndexToReg(gb, inst.opcode);
 		const bool co = *reg & 0x01;
 		*reg >>= 1u;
 		gb__SetFlags(gb, *reg == 0, false, false, co);
@@ -1743,7 +2200,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x35:  // SWAP L
 	case 0x37:  // SWAP A
 	{
-		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		uint8_t *reg = gb__MapIndexToReg(gb, inst.opcode);
 		*reg = (*reg >> 4u) | (*reg << 4u);
 		gb__SetFlags(gb, *reg == 0, false, false, false);
 		break;
@@ -1765,7 +2222,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x3D:  // SRL L
 	case 0x3F:  // SRL A
 	{
-		uint8_t *reg = gl__MapIndexToReg(gb, inst.opcode);
+		uint8_t *reg = gb__MapIndexToReg(gb, inst.opcode);
 		const bool co = *reg & 0x01;
 		*reg >>= 1u;
 		gb__SetFlags(gb, *reg == 0, false, false, co);
@@ -1846,7 +2303,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x7F:  // BIT 7, A
 	{
 		size_t bit_index = (inst.opcode - 0x40) >> 3u;
-		size_t bit = (*gl__MapIndexToReg(gb, inst.opcode) >> bit_index) & 0x01;
+		size_t bit = (*gb__MapIndexToReg(gb, inst.opcode) >> bit_index) & 0x01;
 		gb__SetFlags(gb, bit == 0, false, true, gb->cpu.flags.carry == 1);
 		break;
 	}
@@ -1932,7 +2389,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	{
 		const size_t bit_index = (inst.opcode - 0x80) >> 3u;
 		const uint8_t mask = ~(1u << bit_index);
-		*gl__MapIndexToReg(gb, inst.opcode) &= mask;
+		*gb__MapIndexToReg(gb, inst.opcode) &= mask;
 		break;
 	}
 
@@ -1953,7 +2410,6 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		break;
 	}
 
-	// Wip
 	case 0xC0:  // SET 0, B
 	case 0xC1:  // SET 0, C
 	case 0xC2:  // SET 0, D
@@ -2019,7 +2475,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0xFF:  // SET 7, A
 	{
 		const size_t bit_index = (inst.opcode - 0xC0) >> 3u;
-		*gl__MapIndexToReg(gb, inst.opcode) |= 1u << bit_index;
+		*gb__MapIndexToReg(gb, inst.opcode) |= 1u << bit_index;
 		break;
 	}
 
@@ -2073,7 +2529,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 }
 
 // Adapted from: Ericson, 2005, Real-Time Collision Detection, pages 316-317
-uint16_t
+static uint16_t
 gb__Part1By1(uint16_t n)
 {
 	// n = --------76543210 : Bits initially
@@ -2085,7 +2541,8 @@ gb__Part1By1(uint16_t n)
 	n = (n ^ (n << 1)) & 0x55555555;  // (3)
 	return n;
 }
-uint16_t
+
+static uint16_t
 gb__Morton2(uint16_t line1, uint16_t line2)
 {
 	return (gb__Part1By1(line2) << 1) + gb__Part1By1(line1);
