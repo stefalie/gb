@@ -1989,7 +1989,6 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		break;
 	case 0xF3:  // DI
 		gb->cpu.interrupt_enable = false;
-		assert(!"TODO");
 		break;
 	case 0xF5:  // PUSH AF
 		gb__PushWordToStack(gb, gb->cpu.af);
@@ -2020,7 +2019,6 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		break;
 	case 0xFB:  // EI
 		gb->cpu.interrupt_enable = true;
-		assert(!"TODO");
 		break;
 	case 0xFE:  // CP A, u8
 		gb__Cp(gb, inst.operand_byte);
