@@ -261,7 +261,14 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			const uint8_t num_rom_banks = 2u << rom_size;
 			const uint8_t mask = num_rom_banks - 1;
 			bank &= mask;
-			assert(bank <= num_rom_banks);
+			assert(bank < num_rom_banks);
+		}
+		else if (gb->memory.mbc_type == GB_MBC_TYPE_2)
+		{
+			bank = MAX(gb->memory.mbc2.rom_bank, 1);
+			assert(bank < 16);
+			assert(gb__GetHeader(gb)->rom_size <= 3);
+			assert(bank < (2u << gb__GetHeader(gb)->rom_size));
 		}
 
 		const uint16_t bank_size = 0x4000;
@@ -276,7 +283,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	case 0xB000:
 		// TODO: What happens if one reads from a non-existing area in external RAM?
 		// Undefined behavior I assume? Then the asserts can be removed and the code is OK.
-		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
+		if (gb->memory.mbc_type == GB_MBC_TYPE_ROM_ONLY)
 		{
 			return gb->memory.external_ram[addr & 0x1FFF];
 		}
@@ -297,7 +304,13 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				return 0xFF;
 			}
 		}
-		break;
+		else if (gb->memory.mbc_type == GB_MBC_TYPE_2)
+		{
+			if (gb->memory.external_ram_enable)
+			{
+				return gb->memory.external_ram[addr & 0x01FF] & 0x0F;  // Higher nibble undefined.
+			}
+		}
 	// (Internal) working RAM
 	case 0xC000:
 	case 0xD000:
@@ -408,28 +421,40 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 {
 	switch (addr & 0xF000)
 	{
-	// ROM bank 0 or BIOS
+	// ROM bank selection
 	case 0x0000:
 	case 0x1000:
-		assert(!gb->memory.bios_mapped);
-		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
-		{
-			gb->memory.mbc1 = (value & 0x0F) == 0xA;
-		}
-		break;
-	// ROM bank selection
 	case 0x2000:
 	case 0x3000:
-		assert(!gb->memory.mbc_type == GB_MBC_TYPE_ROM_ONLY);
+		assert(!gb->memory.bios_mapped);
+		assert(!gb->memory.mbc_type == GB_MBC_TYPE_ROM_ONLY);  // TODO: probably wrong
 		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
 		{
-			gb->memory.mbc1.rom_bank = value;
+			if (addr < 0x2000)
+			{
+				gb->memory.external_ram_enable = (value & 0x0F) == 0xA;
+			}
+			else
+			{
+				gb->memory.mbc1.rom_bank = value;
+			}
+		}
+		else if (gb->memory.mbc_type == GB_MBC_TYPE_2)
+		{
+			if (addr & 0x0100)
+			{
+				gb->memory.mbc2.rom_bank = value;
+			}
+			else
+			{
+				gb->memory.external_ram_enable = (value & 0x0F) == 0xA;
+			}
 		}
 		break;
 	// RAM bank selection
 	case 0x4000:
 	case 0x5000:
-		assert(!gb->memory.mbc_type == GB_MBC_TYPE_ROM_ONLY);
+		assert(!gb->memory.mbc_type == GB_MBC_TYPE_ROM_ONLY);  // TODO: probably wrong
 		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
 		{
 			gb->memory.mbc1.ram_bank = value;
@@ -454,7 +479,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	case 0xB000:
 		// TODO: What happens if one writes to a non-existing area in external RAM?
 		// Undefined behavior I assume? Then the asserts can be removed and the code is OK.
-		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
+		if (gb->memory.mbc_type == GB_MBC_TYPE_ROM_ONLY)
 		{
 			gb->memory.external_ram[addr & 0x1FFF] = value;
 		}
@@ -467,6 +492,13 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
 				assert(gb->memory.mbc1.ram_bank == 1 || ram_size == 3);
 				gb->memory.external_ram[addr & 0x1FFF + (gb->memory.mbc1.ram_bank << 13u)] = value;
+			}
+		}
+		else if (gb->memory.mbc_type == GB_MBC_TYPE_2)
+		{
+			if (gb->memory.external_ram_enable)
+			{
+				gb->memory.external_ram[addr & 0x01FF] = value & 0x0F;
 			}
 		}
 		break;
@@ -617,10 +649,18 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 
 	// TODO: Are these correctly initialized like this? Or can they stay uninitialized?
 	// I think the probably can be uninitialized.
-	gb->memory.external_ram_enable = false;
-	gb->memory.bank_mod = 0;
-	gb->memory.rom_bank = 1;
-	gb->memory.ram_bank = 0;
+	if (gb->memory.mbc_type == GB_MBC_TYPE_1)
+	{
+		gb->memory.external_ram_enable = false;
+		gb->memory.mbc1.rom_bank = 1;
+		gb->memory.mbc1.ram_bank = 0;
+		gb->memory.mbc1.bank_mode = 0;
+	}
+	else if (gb->memory.mbc_type == GB_MBC_TYPE_2)
+	{
+		gb->memory.external_ram_enable = false;
+		gb->memory.mbc2.rom_bank = 1;
+	}
 
 	// (see page 18 of the GameBoy CPU Manual)
 	gb->cpu.a = 0x01;

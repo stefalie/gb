@@ -152,15 +152,26 @@ typedef struct gb_GameBoy
 		uint8_t zero_page_ram[128];
 
 		gb_MbcType mbc_type;
-		union MemoryController
+		bool external_ram_enable;
+		// TODO: get rid of union maybe after MBC3
+		// writing to the bitfields then need to be masked when writing instead
+		union MemoryBankController
 		{
 			struct Mbc1
 			{
-				bool external_ram_enable;
 				uint8_t rom_bank : 5;
 				uint8_t ram_bank : 2;  // Or high 2 bits of RAM bank.
 				uint8_t bank_mode : 1;
 			} mbc1;
+			struct Mbc2
+			{
+				uint8_t rom_bank : 4;
+			} mbc2;
+			struct Mbc3
+			{
+				// TODO
+				//uint8_t rom_bank : 4;
+			} mbc3;
 		};
 	} memory;
 
