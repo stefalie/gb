@@ -632,9 +632,12 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 			{
 				gb_Reset(gb, config->gui.skip_bios);
 			}
+			// TODO
 			ImGui::MenuItem("Pause", "Space", false, config->gui.has_active_rom);
 			ImGui::Separator();
+			// TODO
 			ImGui::MenuItem("Save", "F5", false, config->gui.has_active_rom);
+			// TODO
 			ImGui::MenuItem("Load", "F7", false, config->gui.has_active_rom);
 			if (ImGui::BeginMenu("Save Slot"))
 			{
@@ -992,44 +995,32 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 		ImGui::Begin(tab_name_righttab2);
 		ImGui::Text("Tiles:");
 
-		const int width = 16 * 8;
+		const int num_tiles_per_row = 16;
+		const int width = num_tiles_per_row * 8;
 		const int height = 3 * 8 * 8;
-		uint8_t pixels[height][width];
+		gb_TileLine img[height][num_tiles_per_row];
 
 		for (int y = 0; y < height; ++y)
 		{
-			for (int x = 0; x < width; x += 8)
+			for (int tile_x = 0; tile_x < num_tiles_per_row; ++tile_x)
 			{
-				int tile_idx = (y >> 3u) * 16 + (x >> 3u);
-				uint16_t gb_line;
+				int tile_idx = (y >> 3u) * num_tiles_per_row + tile_x;
 				if (y < height / 3 * 2)
 				{
-					gb_line = gb_GetTileLine(gb, 1, tile_idx, y & 7u);
+					img[y][tile_x] = gb_GetTileLine(gb, 1, tile_idx, y & 7u, gb_DefaultPalette());
 				}
 				else
 				{
 					tile_idx -= 256;
-					gb_line = gb_GetTileLine(gb, 0, tile_idx, y & 7u);
+					img[y][tile_x] = gb_GetTileLine(gb, 0, tile_idx, y & 7u, gb_DefaultPalette());
 				}
-
-				const uint8_t map[] = { 0x00, 0x66, 0xCC, 0xFF };
-
-				pixels[y][x + 0] = map[(gb_line >> 14u) & 3u];
-				pixels[y][x + 1] = map[(gb_line >> 12u) & 3u];
-				pixels[y][x + 2] = map[(gb_line >> 10u) & 3u];
-				pixels[y][x + 3] = map[(gb_line >> 8u) & 3u];
-				pixels[y][x + 4] = map[(gb_line >> 6u) & 3u];
-				pixels[y][x + 5] = map[(gb_line >> 4u) & 3u];
-				pixels[y][x + 6] = map[(gb_line >> 2u) & 3u];
-				pixels[y][x + 7] = map[(gb_line >> 0u) & 3u];
 			}
 		}
 
 		glBindTexture(GL_TEXTURE_2D, config->debug.tile_sets_texture);
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, pixels);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, img);
 
-		ImGui::Image((void *)(uint64_t)config->debug.tile_sets_texture,
-				ImVec2(7.0f * width, 7.0f * height));
+		ImGui::Image((void *)(uint64_t)config->debug.tile_sets_texture, ImVec2(7.0f * width, 7.0f * height));
 		ImGui::End();
 	}
 

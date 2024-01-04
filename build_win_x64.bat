@@ -70,7 +70,7 @@ rem /EHa- Disable all exceptions
 rem /wd4201 Disable warning about anonymous structs/unions, it's allowed in C11
 rem See note under 'Clang' about duplicate include dirs.
 set MsvcCompilerFlags=/Zi /FC /Fe%ExeName% /I%SdlDir% /I../external /I%SdlDir%/SDL2 /I../external/imgui /std:c11 /WX /W4 /WL /GR- /EHa- /wd4201
-set MsvcLinkerFlags=/link /INCREMENTAL:NO /SUBSYSTEM:windows /NOLOGO %SdlLibs% Shell32.lib OpenGL32.lib Comdlg32.lib
+set MsvcLinkerFlags=/link /INCREMENTAL:NO /SUBSYSTEM:console /NOLOGO %SdlLibs% Shell32.lib OpenGL32.lib Comdlg32.lib
 rem /Zo Generates enhanced debugging information for optimized code.
 rem /Oi Generates intrinsic functions.
 rem /GL Whole program optimization

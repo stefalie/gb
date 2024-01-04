@@ -16,10 +16,23 @@
 // Converted with: https://www.digole.com/tools/PicturetoC_Hex_converter.php
 #include "tetris.h"
 
+#define BLARGG_TEST_ENABLE 1
+
+gb_Palette
+gb_DefaultPalette(void)
+{
+	return (gb_Palette){
+		.dot_data_00 = 0xFF,
+		.dot_data_01 = 0xCC,
+		.dot_data_10 = 0x66,
+		.dot_data_11 = 0x00,
+	};
+}
+
 void
 gb_Init(gb_GameBoy *gb)
 {
-	*gb = (gb_GameBoy){ 0 };
+	*gb = (gb_GameBoy){ 0 };  // TODO: mve to load?
 	memcpy(gb->framebuffer.pixels, gb_tetris_splash_screen, sizeof(gb->framebuffer.pixels));
 }
 
@@ -84,13 +97,19 @@ gb__LoHi(uint8_t lo, uint8_t hi)
 	return lo + (hi << 8u);
 }
 
+const gb__RomHeader *
+gb__GetHeader(const gb_GameBoy *gb)
+{
+	return (gb__RomHeader *)&(gb->rom.data[ROM_HEADER_START_ADDRESS])
+}
+
 bool
 gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
 {
 	gb->rom.data = rom;
 	gb->rom.num_bytes = num_bytes;
 
-	const gb__RomHeader *header = (gb__RomHeader *)&(gb->rom.data[ROM_HEADER_START_ADDRESS]);
+	const gb__RomHeader *header = gb__GetHeader(gb);
 
 	const uint8_t nintendo_logo[] = { 0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00,
 		0x0C, 0x00, 0x0D, 0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9,
@@ -105,11 +124,13 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
 		return true;
 	}
 
+#if !BLARGG_TEST_ENABLE
 	// 0x80 is Color GameBoy
 	if (header->gbc == 0x80)
 	{
 		return true;
 	}
+#endif
 
 	// 0x00 is GameBoy, 0x03 is Super GameBoy
 	if (header->sgb != 0x00)
@@ -119,6 +140,47 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
 
 	gb->rom.name[15] = '\0';
 	memcpy(gb->rom.name, header->rom_name, sizeof(header->rom_name));
+
+	switch (header->cartridge_type)
+	{
+	case 0x00:
+	case 0x08:
+	case 0x09:
+		gb->memory.mbc_type = GB_MBC_TYPE_ROM_ONLY;
+		break;
+	case 0x01:
+	case 0x02:
+	case 0x03:
+		gb->memory.mbc_type = GB_MBC_TYPE_1;
+		break;
+	case 0x05:
+	case 0x06:
+		gb->memory.mbc_type = GB_MBC_TYPE_2;
+		break;
+	case 0x0F:
+	case 0x10:
+	case 0x11:
+	case 0x12:
+	case 0x13:
+		gb->memory.mbc_type = GB_MBC_TYPE_3;
+		break;
+	case 0x19:
+	case 0x1A:
+	case 0x1B:
+	case 0x1C:
+	case 0x1D:
+	case 0x1E:
+		gb->memory.mbc_type = GB_MBC_TYPE_5;
+		break;
+	default:
+		// TODO: Filter out other types of cartridge flags such as RAM and BATTERY?
+		// That would allow us to assert that the RAM flag is set when RAM is accessed.
+		// Or what's easier is to simply that nobody ever uses RAM when the corresponding
+		// flag is not set.
+		// NOTE: External RAM only needs to be written to a save state if the BATTERY flag
+		// is set.
+		return true;
+	};
 
 	// Checksum test
 	uint16_t checksum = 0;
@@ -183,11 +245,24 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	case 0x4000:
 	case 0x5000:
 	case 0x6000:
-	case 0x7000:
-		// assert(!"TODO");
-		const size_t rom_bank = 1;  // TODO
-		const uint16_t rom_bank_0_end = 0x4000;
-		return gb->rom.data[(rom_bank - 1) * rom_bank_0_end + addr];
+	case 0x7000: {
+		const gb__RomHeader *header = gb__GetHeader(gb);
+		assert(header->rom_size <= 6);
+
+		uint8_t bank = gb->memory.rom_bank;
+		if (bank == 0)
+		{
+			bank = 1;
+		}
+
+		const uint8_t num_rom_banks = 2u << header->rom_size;
+		const uint8_t mask = num_rom_banks - 1;
+		bank &= mask;
+		assert(bank <= num_rom_banks);
+
+		const uint16_t bank_size = 0x4000;
+		return gb->rom.data[bank * bank_size + (addr - bank_size)];
+	}
 	// VRAM
 	case 0x8000:
 	case 0x9000:
@@ -195,8 +270,16 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	// Switchable RAM bank
 	case 0xA000:
 	case 0xB000:
-		// assert(!"TODO");
-		return gb->memory.external_ram[addr & 0x1FFF];
+		if (gb->memory.external_ram_enable)
+		{
+			return gb->memory.external_ram[addr & 0x1FFF];
+		}
+		else
+		{
+			// Basically undefined, but often 0xFF in MBC1.
+			// See: https://gbdev.io/pandocs/MBC1.html
+			return 0xFF;
+		}
 	// (Internal) working RAM
 	case 0xC000:
 	case 0xD000:
@@ -222,16 +305,39 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				return 0;
 			}
 		case 0x0F00:
-			// else if (addr < 0xFF4C)  // I/O
-			//{
-			//	assert(!"TODO");
-			//	return 0;
-			// }
-			// else if (addr < 0xFF80)  // Empty
-			//{
-			//	return 0;
-			// }
-			if (addr == 0xFF47)
+			if (addr == 0xFF40)
+			{
+				return gb->ppu.lcdc;
+			}
+			else if (addr == 0xFF41)
+			{
+				assert(!"TODO");
+				// return 0;
+				return gb->ppu.stat;
+			}
+			else if (addr == 0xFF42)
+			{
+				return gb->ppu.scy;
+			}
+			else if (addr == 0xFF43)
+			{
+				return gb->ppu.scx;
+			}
+			else if (addr == 0xFF44)
+			{
+				return gb->ppu.ly;
+			}
+			else if (addr == 0xFF45)
+			{
+				return gb->ppu.lyc;
+			}
+			else if (addr == 0xFF46)
+			{
+				// DMA
+				assert(false);
+				return 0;
+			}
+			else if (addr == 0xFF47)
 			{
 				return gb->ppu.bgp;
 			}
@@ -242,6 +348,14 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			else if (addr == 0xFF49)
 			{
 				return gb->ppu.obp1;
+			}
+			else if (addr == 0xFF4A)
+			{
+				return gb->ppu.wy;
+			}
+			else if (addr == 0xFF4B)
+			{
+				return gb->ppu.wx;
 			}
 			else if (addr >= 0xFF80 && addr < 0xFFFF)  // Zero page RAM
 			{
@@ -256,7 +370,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			else
 			{
 				// TODO
-				//assert(false);
+				// assert(false);
 				return 0;
 			}
 			break;
@@ -276,25 +390,56 @@ gb_MemoryReadWord(const gb_GameBoy *gb, uint16_t addr)
 static void
 gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 {
+
 	switch (addr & 0xF000)
 	{
 	// ROM bank 0 or BIOS
 	case 0x0000:
 	case 0x1000:
+		assert(!gb->memory.bios_mapped);
+		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
+		{
+			gb->memory.mbc1 = (bvalue & 0x0F) == 0xA;
+		}
+		break;
+	// ROM bank selection
 	case 0x2000:
 	case 0x3000:
-		if (gb->memory.bios_mapped && addr < 0x100)
+		assert(!gb->memory.mbc_type == GB_MBC_TYPE_ROM_ONLY);
+		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
 		{
-			assert(false);
+			gb->memory.mbc1.rom_bank = value;
+			//gb->memory.rom_bank = (gb->memory.rom_bank & 0xE) | (value & 0x1F);
+			//assert(gb->memory.rom_bank <= 127);
 		}
-		assert(!"TODO");
 		break;
-	// Switchable ROM bank
+	// RAM bank selection
 	case 0x4000:
 	case 0x5000:
+		assert(!gb->memory.mbc_type == GB_MBC_TYPE_ROM_ONLY);
+		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
+		{
+			gb->memory.mbc1.ram_bank = value;
+			//assert(gb->memory.bank_mode == 0 || gb->memory.bank_mode == 1);
+			//if (gb->memory.bank_mode == GB_BANK_MODE_ROM)
+			//{
+			//	gb->memory.rom_bank = (gb->memory.rom_bank & 0x1F) | ((value & 0x03) << 5u);
+			//	assert(gb->memory.rom_bank <= 127);
+			//}
+			//else
+			//{
+			//	gb->memory.ram_bank = value & 0x03;
+			//}
+		}
+		break;
+	// ROM banking mode selection
 	case 0x6000:
 	case 0x7000:
-		assert(!"TODO");
+		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
+		{
+			//gb->memory.bank_mode = value & 0x01;
+			gb->memory.mbc1.bank_mode = value;
+		}
 		break;
 	// VRAM
 	case 0x8000:
@@ -305,13 +450,16 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	// Switchable RAM bank
 	case 0xA000:
 	case 0xB000:
-		//assert(!"TODO");
-		gb->memory.external_ram[addr & 0x1FFF] = value;
+		if(gb->memory.external_ram_enable)
+		{
+			/// TODO
+			gb->memory.external_ram[addr & 0x1FFF] = value;
+		}
 		break;
 	// (Internal) working RAM
 	case 0xC000:
 	case 0xD000:
-		//assert(!"TODO");
+		// assert(!"TODO");
 		gb->memory.wram[addr & 0x1FFF] = value;
 		break;
 	// Echo of (Internal) working RAM, I/O, zero page
@@ -336,7 +484,38 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			}
 			break;
 		case 0x0F00:
-			if (addr == 0xFF47)
+			if (addr == 0xFF40)
+			{
+				gb->ppu.lcdc = value;
+			}
+			else if (addr == 0xFF41)
+			{
+				assert(!"TODO");
+				gb->ppu.stat = value;
+			}
+			else if (addr == 0xFF42)
+			{
+				gb->ppu.scy = value;
+			}
+			else if (addr == 0xFF43)
+			{
+				gb->ppu.scx = value;
+			}
+			else if (addr == 0xFF44)
+			{
+				// TODO: Is this correct?
+				gb->ppu.ly = 0;
+			}
+			else if (addr == 0xFF45)
+			{
+				gb->ppu.lyc = value;
+			}
+			else if (addr == 0xFF46)
+			{
+				assert(!"TODO");
+				// TODO DMA
+			}
+			else if (addr == 0xFF47)
 			{
 				gb->ppu.bgp = value;
 			}
@@ -348,6 +527,14 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			{
 				gb->ppu.obp1 = value;
 			}
+			else if (addr == 0xFF4A)
+			{
+				gb->ppu.wy = value;
+			}
+			else if (addr == 0xFF4B)
+			{
+				gb->ppu.wx = value;
+			}
 			else if (addr >= 0xFF80 && addr < 0xFFFF)  // Zero page RAM
 			{
 				assert((addr - 0xFF80) < 0x80);
@@ -357,6 +544,18 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			{
 				gb->cpu.interrupts = value;
 			}
+#if BLARGG_TEST_ENABLE
+			// NOTE: For the printf to work and print to the console, the bulid script needs
+			// to be modified to use SUBSYSTEM:console.
+			else if (addr == 0xFF01)  // Interrupt enable
+			{
+				gb->serial.sb = value;
+			}
+			else if (addr == 0xFF02)  // Interrupt enable
+			{
+				gb->serial.sc = value;
+			}
+#endif
 			else
 			{
 				// assert(false);
@@ -402,6 +601,13 @@ void
 gb_Reset(gb_GameBoy *gb, bool skip_bios)
 {
 	gb->memory.bios_mapped = true;
+
+	// TODO: Are these correctly initialized like this? Or can they stay uninitialized?
+	// I think the probably can be uninitialized.
+	gb->memory.external_ram_enable = false;
+	gb->memory.bank_mod = 0;
+	gb->memory.rom_bank = 1;
+	gb->memory.ram_bank = 0;
 
 	// (see page 18 of the GameBoy CPU Manual)
 	gb->cpu.a = 0x01;
@@ -2501,6 +2707,12 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	return gb__extended_instruction_infos[inst.opcode].min_num_machine_cycles;
 }
 
+void
+gb__AdvancePpu(gb_GameBoy *gb)
+{
+	(void)gb;
+}
+
 size_t
 gb_ExecuteNextInstruction(gb_GameBoy *gb)
 {
@@ -2512,17 +2724,35 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		gb->memory.bios_mapped = false;
 	}
 
+	// TODO: handle interrupts
+	// TODO: skip when halted
+
 	const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
 	gb->cpu.pc += gb_InstructionSize(inst);
 
 	const size_t num_elapsed_cylces =
 			inst.is_extended ? gb__ExecuteExtendedInstruction(gb, inst) : gb__ExecuteBasicInstruction(gb, inst);
 
-	if (num_elapsed_cylces == -1)
+
+	if (num_elapsed_cylces == (size_t)-1)
 	{
 		// Revert PC so that the debugger still displays the missing instruction.
 		gb->cpu.pc -= gb_InstructionSize(inst);
 	}
+
+	// TODO: Timers?
+	// advance ppu
+	gb__AdvancePpu(gb);
+
+#if BLARGG_TEST_ENABLE
+	if (gb->serial.sc == 0x81)
+	{
+		char c = gb->serial.sb;
+		printf("%c", c);
+		gb->serial.sc = 0;
+	}
+#endif
+
 	return num_elapsed_cylces;
 }
 
@@ -2546,8 +2776,8 @@ gb__Morton2(uint16_t line1, uint16_t line2)
 	return (gb__Part1By1(line2) << 1) + gb__Part1By1(line1);
 }
 
-uint16_t
-gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_index)
+gb_TileLine
+gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_index, gb_Palette palette)
 {
 	assert(set_index == 0 || set_index == 1);
 	assert(line_index < 8);
@@ -2565,18 +2795,31 @@ gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_ind
 	assert((vram_offset & 1u) == 0);
 
 	const uint16_t tile_line = gb__Morton2(gb->memory.vram[vram_offset], gb->memory.vram[vram_offset + 1]);
-	return tile_line;
+
+	// TODO: There must be some SIMD/SWAR way to do this.
+	const uint8_t *map = (const uint8_t *)&palette;
+	gb_TileLine result;
+	result.pixels[0] = map[(tile_line >> 14u) & 3u];
+	result.pixels[1] = map[(tile_line >> 12u) & 3u];
+	result.pixels[2] = map[(tile_line >> 10u) & 3u];
+	result.pixels[3] = map[(tile_line >> 8u) & 3u];
+	result.pixels[4] = map[(tile_line >> 6u) & 3u];
+	result.pixels[5] = map[(tile_line >> 4u) & 3u];
+	result.pixels[6] = map[(tile_line >> 2u) & 3u];
+	result.pixels[7] = map[(tile_line >> 0u) & 3u];
+	return result;
 }
 
-uint64_t
-gb_GetMapTileLine(gb_GameBoy *gb, size_t map_index, size_t tile_x_index, size_t y_index)
+gb_TileLine
+gb_GetMapTileLine(gb_GameBoy *gb, size_t map_index, size_t tile_x_index, size_t y_index, gb_Palette palette)
 {
 	assert(map_index == 0 || map_index == 1);
 	assert(tile_x_index < 32);
 	assert(y_index < 8 * 32);
 
 	(void)gb;
-	return 0;
+	(void)palette;
+	return (gb_TileLine){ 0 };
 }
 
 uint32_t
