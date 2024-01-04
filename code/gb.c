@@ -164,14 +164,6 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
 	case 0x13:
 		gb->memory.mbc_type = GB_MBC_TYPE_3;
 		break;
-	case 0x19:
-	case 0x1A:
-	case 0x1B:
-	case 0x1C:
-	case 0x1D:
-	case 0x1E:
-		gb->memory.mbc_type = GB_MBC_TYPE_5;
-		break;
 	default:
 		// TODO: Filter out other types of cartridge flags such as RAM and BATTERY?
 		// That would allow us to assert that the RAM flag is set when RAM is accessed.
@@ -179,6 +171,8 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
 		// flag is not set.
 		// NOTE: External RAM only needs to be written to a save state if the BATTERY flag
 		// is set.
+		// TODO: Add support for MBC5? I think that implies that we should also support.
+		// I'm not sure there are any games with MBC5 for DMG.
 		return true;
 	};
 
@@ -239,26 +233,36 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 		}
 		else
 		{
-			return gb->rom.data[addr];
+			size_t offset = 0;
+			if (gb->memory.mbc_type == GB_MBC_TYPE_1 && gb->memory.bank_mode == 1)
+			{
+				offset = gb->memory.ram_bank << 19u;
+			}
+			return gb->rom.data[addr + offset];
 		}
 	// Switchable ROM bank
 	case 0x4000:
 	case 0x5000:
 	case 0x6000:
 	case 0x7000: {
-		const gb__RomHeader *header = gb__GetHeader(gb);
-		assert(header->rom_size <= 6);
-
-		uint8_t bank = gb->memory.rom_bank;
-		if (bank == 0)
+		uint8_t bank = 0;
+		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
 		{
-			bank = 1;
-		}
+			// 0 -> 1 transition
+			uint8_t lower_bits = gb->memory.mbc1.rom_bank;
+			if (lower_bits == 0)
+			{
+				lower_bits = 1;
+			}
+			bank = lower_bits + (gb->memory.mbc1.ram_bank << 5u);
 
-		const uint8_t num_rom_banks = 2u << header->rom_size;
-		const uint8_t mask = num_rom_banks - 1;
-		bank &= mask;
-		assert(bank <= num_rom_banks);
+			// Mask away unused bits.
+			const uint8_t rom_size = MIN(gb__GetHeader(gb)->rom_size, 6);
+			const uint8_t num_rom_banks = 2u << rom_size;
+			const uint8_t mask = num_rom_banks - 1;
+			bank &= mask;
+			assert(bank <= num_rom_banks);
+		}
 
 		const uint16_t bank_size = 0x4000;
 		return gb->rom.data[bank * bank_size + (addr - bank_size)];
@@ -270,29 +274,41 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	// Switchable RAM bank
 	case 0xA000:
 	case 0xB000:
-		if (gb->memory.external_ram_enable)
+		// TODO: What happens if one reads from a non-existing area in external RAM?
+		// Undefined behavior I assume? Then the asserts can be removed and the code is OK.
+		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
 		{
 			return gb->memory.external_ram[addr & 0x1FFF];
 		}
-		else
+		else if (gb->memory.mbc_type == GB_MBC_TYPE_1)
 		{
-			// Basically undefined, but often 0xFF in MBC1.
-			// See: https://gbdev.io/pandocs/MBC1.html
-			return 0xFF;
+			if (gb->memory.external_ram_enable)
+			{
+				const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
+				assert(ram_size > 0 && ram_size < 4);
+				assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
+				assert(gb->memory.mbc1.ram_bank == 1 || ram_size == 3);
+				return gb->memory.external_ram[addr & 0x1FFF + (gb->memory.mbc1.ram_bank << 13u)];
+			}
+			else
+			{
+				// Basically undefined, but often 0xFF in MBC1.
+				// See: https://gbdev.io/pandocs/MBC1.html
+				return 0xFF;
+			}
 		}
+		break;
 	// (Internal) working RAM
 	case 0xC000:
 	case 0xD000:
-		// assert(!"TODO");
+	case 0xE000:
 		return gb->memory.wram[addr & 0x1FFF];
 	// Echo of (Internal) working RAM, I/O, zero page
-	case 0xE000:
 	case 0xF000:
 		switch (addr & 0x0F00)
 		{
-		// Echo of (Internal) working RAM
-		default:  // [0xE000, 0xFE00)
-			assert((addr - 0xE000) < 0x1E00);
+		default: // Echo of (Internal) working RAM, [0xF000, 0xFE00)
+			assert((addr - 0xF000) < 0x0E00);
 			return gb->memory.wram[addr & 0x1FFF];
 		case 0x0E00:
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
@@ -390,7 +406,6 @@ gb_MemoryReadWord(const gb_GameBoy *gb, uint16_t addr)
 static void
 gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 {
-
 	switch (addr & 0xF000)
 	{
 	// ROM bank 0 or BIOS
@@ -399,7 +414,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 		assert(!gb->memory.bios_mapped);
 		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
 		{
-			gb->memory.mbc1 = (bvalue & 0x0F) == 0xA;
+			gb->memory.mbc1 = (value & 0x0F) == 0xA;
 		}
 		break;
 	// ROM bank selection
@@ -409,8 +424,6 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
 		{
 			gb->memory.mbc1.rom_bank = value;
-			//gb->memory.rom_bank = (gb->memory.rom_bank & 0xE) | (value & 0x1F);
-			//assert(gb->memory.rom_bank <= 127);
 		}
 		break;
 	// RAM bank selection
@@ -420,16 +433,6 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
 		{
 			gb->memory.mbc1.ram_bank = value;
-			//assert(gb->memory.bank_mode == 0 || gb->memory.bank_mode == 1);
-			//if (gb->memory.bank_mode == GB_BANK_MODE_ROM)
-			//{
-			//	gb->memory.rom_bank = (gb->memory.rom_bank & 0x1F) | ((value & 0x03) << 5u);
-			//	assert(gb->memory.rom_bank <= 127);
-			//}
-			//else
-			//{
-			//	gb->memory.ram_bank = value & 0x03;
-			//}
 		}
 		break;
 	// ROM banking mode selection
@@ -437,7 +440,6 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	case 0x7000:
 		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
 		{
-			//gb->memory.bank_mode = value & 0x01;
 			gb->memory.mbc1.bank_mode = value;
 		}
 		break;
@@ -445,32 +447,43 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	case 0x8000:
 	case 0x9000:
 		gb->memory.vram[addr & 0x1FFF] = value;
-		// TODO: Update tile?
+		// TODO: Update cached tile? But we currently don't cache tiles.
 		break;
 	// Switchable RAM bank
 	case 0xA000:
 	case 0xB000:
-		if(gb->memory.external_ram_enable)
+		// TODO: What happens if one writes to a non-existing area in external RAM?
+		// Undefined behavior I assume? Then the asserts can be removed and the code is OK.
+		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
 		{
-			/// TODO
 			gb->memory.external_ram[addr & 0x1FFF] = value;
+		}
+		else if (gb->memory.mbc_type == GB_MBC_TYPE_1)
+		{
+			if (gb->memory.external_ram_enable)
+			{
+				const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
+				assert(ram_size > 0 && ram_size < 4);
+				assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
+				assert(gb->memory.mbc1.ram_bank == 1 || ram_size == 3);
+				gb->memory.external_ram[addr & 0x1FFF + (gb->memory.mbc1.ram_bank << 13u)] = value;
+			}
 		}
 		break;
 	// (Internal) working RAM
 	case 0xC000:
 	case 0xD000:
-		// assert(!"TODO");
+	case 0xE000:
 		gb->memory.wram[addr & 0x1FFF] = value;
 		break;
 	// Echo of (Internal) working RAM, I/O, zero page
-	case 0xE000:
 	case 0xF000:
 		switch (addr & 0x0F00)
 		{
-		// Echo of (Internal) working RAM
-		default:  // [0xE000, 0xFE00)
-			assert((addr - 0xE000) < 0x1E00);
+		default: // Echo of (Internal) working RAM, [0xF000, 0xFE00)
+			assert((addr - 0xF000) < 0x0E00);
 			gb->memory.wram[addr & 0x1FFF] = value;
+			break;
 		case 0x0E00:
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{

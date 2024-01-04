@@ -50,14 +50,13 @@ typedef enum gb_MbcType
 	GB_MBC_TYPE_1,
 	GB_MBC_TYPE_2,
 	GB_MBC_TYPE_3,
-	GB_MBC_TYPE_5,
 } gb_MbcType;
 
-//typedef enum gb_BankMode
+// typedef enum gb_BankMode
 //{
 //	GB_BANK_MODE_ROM,
 //	GB_BANK_MODE_RAM,
-//} gb_BankMode;
+// } gb_BankMode;
 //
 typedef struct gb_GameBoy
 {
@@ -153,16 +152,16 @@ typedef struct gb_GameBoy
 		uint8_t zero_page_ram[128];
 
 		gb_MbcType mbc_type;
-		struct Mbc1
+		union MemoryController
 		{
-			bool external_ram_enable;
-			uint8_t rom_bank : 5;
-			uint8_t ram_bank : 2;  // Or high 2 bits of RAM bank.
-			uint8_t bank_mode : 1;
-		} mbc1;
-		//gb_BankMode bank_mode;
-		//uint8_t ram_bank;
-		//uint8_t rom_bank;
+			struct Mbc1
+			{
+				bool external_ram_enable;
+				uint8_t rom_bank : 5;
+				uint8_t ram_bank : 2;  // Or high 2 bits of RAM bank.
+				uint8_t bank_mode : 1;
+			} mbc1;
+		};
 	} memory;
 
 	struct Timer
