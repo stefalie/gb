@@ -33,7 +33,7 @@ void
 gb_Init(gb_GameBoy *gb)
 {
 	*gb = (gb_GameBoy){ 0 };  // TODO: mve to load?
-	memcpy(gb->framebuffer.pixels, gb_tetris_splash_screen, sizeof(gb->framebuffer.pixels));
+	memcpy(gb->display.pixels, gb_tetris_splash_screen, sizeof(gb->display.pixels));
 }
 
 // TODO:
@@ -97,10 +97,10 @@ gb__LoHi(uint8_t lo, uint8_t hi)
 	return lo + (hi << 8u);
 }
 
-const gb__RomHeader *
+static inline const gb__RomHeader *
 gb__GetHeader(const gb_GameBoy *gb)
 {
-	return (gb__RomHeader *)&(gb->rom.data[ROM_HEADER_START_ADDRESS])
+	return (gb__RomHeader *)&(gb->rom.data[ROM_HEADER_START_ADDRESS]);
 }
 
 bool
@@ -159,6 +159,8 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
 		break;
 	case 0x0F:
 	case 0x10:
+		// MBC3 but RTC not supported.
+		return true;
 	case 0x11:
 	case 0x12:
 	case 0x13:
@@ -220,6 +222,8 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
 uint8_t
 gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 {
+	const struct gb_Memory *mem = &gb->memory;
+
 	switch (addr & 0xF000)
 	{
 	// ROM bank 0 or BIOS
@@ -227,16 +231,16 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	case 0x1000:
 	case 0x2000:
 	case 0x3000:
-		if (gb->memory.bios_mapped && addr < 0x100)
+		if (mem->bios_mapped && addr < 0x100)
 		{
 			return gb__bios[addr];
 		}
 		else
 		{
 			size_t offset = 0;
-			if (gb->memory.mbc_type == GB_MBC_TYPE_1 && gb->memory.bank_mode == 1)
+			if (mem->mbc_type == GB_MBC_TYPE_1 && mem->mbc1.bank_mode == 1)
 			{
-				offset = gb->memory.ram_bank << 19u;
+				offset = mem->mbc1.ram_bank << 19u;
 			}
 			return gb->rom.data[addr + offset];
 		}
@@ -245,31 +249,36 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	case 0x5000:
 	case 0x6000:
 	case 0x7000: {
+		const uint8_t rom_size = MIN(gb__GetHeader(gb)->rom_size, 6);
+		const uint8_t num_rom_banks = 2u << rom_size;
+		assert(num_rom_banks < 128);
+
 		uint8_t bank = 0;
-		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
+		if (mem->mbc_type == GB_MBC_TYPE_1)
 		{
 			// 0 -> 1 transition
-			uint8_t lower_bits = gb->memory.mbc1.rom_bank;
+			uint8_t lower_bits = mem->mbc1.rom_bank;
 			if (lower_bits == 0)
 			{
 				lower_bits = 1;
 			}
-			bank = lower_bits + (gb->memory.mbc1.ram_bank << 5u);
+			bank = lower_bits + (mem->mbc1.ram_bank << 5u);
 
 			// Mask away unused bits.
-			const uint8_t rom_size = MIN(gb__GetHeader(gb)->rom_size, 6);
-			const uint8_t num_rom_banks = 2u << rom_size;
 			const uint8_t mask = num_rom_banks - 1;
 			bank &= mask;
-			assert(bank < num_rom_banks);
 		}
-		else if (gb->memory.mbc_type == GB_MBC_TYPE_2)
+		else if (mem->mbc_type == GB_MBC_TYPE_2)
 		{
-			bank = MAX(gb->memory.mbc2.rom_bank, 1);
+			bank = MAX(mem->mbc2.rom_bank, 1);
 			assert(bank < 16);
-			assert(gb__GetHeader(gb)->rom_size <= 3);
-			assert(bank < (2u << gb__GetHeader(gb)->rom_size));
+			assert(rom_size <= 3);
 		}
+		else if (mem->mbc_type == GB_MBC_TYPE_3)
+		{
+			bank = MAX(mem->mbc3.rom_bank, 1);
+		}
+		assert(bank < num_rom_banks);
 
 		const uint16_t bank_size = 0x4000;
 		return gb->rom.data[bank * bank_size + (addr - bank_size)];
@@ -277,25 +286,27 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	// VRAM
 	case 0x8000:
 	case 0x9000:
-		return gb->memory.vram[addr & 0x1FFF];
+		return mem->vram[addr & 0x1FFF];
 	// Switchable RAM bank
 	case 0xA000:
 	case 0xB000:
-		// TODO: What happens if one reads from a non-existing area in external RAM?
+		// TODO: What happens if one reads from a non-existing area in external RAM in MBC1/3?
 		// Undefined behavior I assume? Then the asserts can be removed and the code is OK.
-		if (gb->memory.mbc_type == GB_MBC_TYPE_ROM_ONLY)
+		// Nicer is probably to do nothing in that case (meaning you have to replace
+		// the asserts if/else).
+		if (mem->mbc_type == GB_MBC_TYPE_ROM_ONLY)
 		{
-			return gb->memory.external_ram[addr & 0x1FFF];
+			return mem->external_ram[addr & 0x1FFF];
 		}
-		else if (gb->memory.mbc_type == GB_MBC_TYPE_1)
+		else if (mem->mbc_type == GB_MBC_TYPE_1)
 		{
-			if (gb->memory.external_ram_enable)
+			if (mem->mbc_external_ram_enable)
 			{
 				const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
 				assert(ram_size > 0 && ram_size < 4);
 				assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
-				assert(gb->memory.mbc1.ram_bank == 1 || ram_size == 3);
-				return gb->memory.external_ram[addr & 0x1FFF + (gb->memory.mbc1.ram_bank << 13u)];
+				assert(mem->mbc1.ram_bank == 1 || ram_size == 3);
+				return mem->external_ram[addr & 0x1FFF + (mem->mbc1.ram_bank << 13u)];
 			}
 			else
 			{
@@ -304,25 +315,49 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				return 0xFF;
 			}
 		}
-		else if (gb->memory.mbc_type == GB_MBC_TYPE_2)
+		else if (mem->mbc_type == GB_MBC_TYPE_2)
 		{
-			if (gb->memory.external_ram_enable)
+			if (mem->mbc_external_ram_enable)
 			{
-				return gb->memory.external_ram[addr & 0x01FF] & 0x0F;  // Higher nibble undefined.
+				// Higher nibble undefined.
+				// Therefore the masking by 0x0F is not really needed (espeically also because
+				// it is also masked when writing). Better be safe though.
+				return mem->external_ram[addr & 0x01FF] & 0x0F;
+			}
+		}
+		else if (mem->mbc_type == GB_MBC_TYPE_3)
+		{
+			if (mem->mbc_external_ram_enable)
+			{
+				if (mem->mbc3.rtc_mode_or_idx == 0)
+				{
+					const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
+					assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
+					assert(ram_size > 0);
+					assert(ram_size != 1 || mem->mbc3.ram_bank == 1);
+					assert(ram_size != 2 || mem->mbc3.ram_bank == 1);
+					assert(ram_size != 3 || mem->mbc3.ram_bank < 4);
+					assert(ram_size != 4 || mem->mbc3.ram_bank < 16);
+					return mem->external_ram[addr & 0x1FFF + (mem->mbc3.ram_bank << 13u)];
+				}
+				else
+				{
+					return mem->mbc3.rtc_regs[mem->mbc3.rtc_mode_or_idx - 0x08];
+				}
 			}
 		}
 	// (Internal) working RAM
 	case 0xC000:
 	case 0xD000:
 	case 0xE000:
-		return gb->memory.wram[addr & 0x1FFF];
+		return mem->wram[addr & 0x1FFF];
 	// Echo of (Internal) working RAM, I/O, zero page
 	case 0xF000:
 		switch (addr & 0x0F00)
 		{
-		default: // Echo of (Internal) working RAM, [0xF000, 0xFE00)
+		default:  // Echo of (Internal) working RAM, [0xF000, 0xFE00)
 			assert((addr - 0xF000) < 0x0E00);
-			return gb->memory.wram[addr & 0x1FFF];
+			return mem->wram[addr & 0x1FFF];
 		case 0x0E00:
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{
@@ -390,7 +425,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			{
 				assert((addr - 0xFF80) < 0x80);
 				// assert(!"TODO");
-				return gb->memory.zero_page_ram[addr & 0x7F];
+				return mem->zero_page_ram[addr & 0x7F];
 			}
 			else if (addr == 0xFFFF)  // Interrupt enable
 			{
@@ -419,6 +454,8 @@ gb_MemoryReadWord(const gb_GameBoy *gb, uint16_t addr)
 static void
 gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 {
+	struct gb_Memory *mem = &gb->memory;
+
 	switch (addr & 0xF000)
 	{
 	// ROM bank selection
@@ -426,79 +463,134 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	case 0x1000:
 	case 0x2000:
 	case 0x3000:
-		assert(!gb->memory.bios_mapped);
-		assert(!gb->memory.mbc_type == GB_MBC_TYPE_ROM_ONLY);  // TODO: probably wrong
-		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
+		assert(!mem->bios_mapped);
+		assert(!mem->mbc_type == GB_MBC_TYPE_ROM_ONLY);  // TODO: probably wrong
+		if (mem->mbc_type == GB_MBC_TYPE_1)
 		{
 			if (addr < 0x2000)
 			{
-				gb->memory.external_ram_enable = (value & 0x0F) == 0xA;
+				mem->mbc_external_ram_enable = (value & 0x0F) == 0xA;
 			}
 			else
 			{
-				gb->memory.mbc1.rom_bank = value;
+				mem->mbc1.rom_bank = value;
 			}
 		}
-		else if (gb->memory.mbc_type == GB_MBC_TYPE_2)
+		else if (mem->mbc_type == GB_MBC_TYPE_2)
 		{
 			if (addr & 0x0100)
 			{
-				gb->memory.mbc2.rom_bank = value;
+				mem->mbc2.rom_bank = value;
 			}
 			else
 			{
-				gb->memory.external_ram_enable = (value & 0x0F) == 0xA;
+				mem->mbc_external_ram_enable = (value & 0x0F) == 0xA;
+			}
+		}
+		if (mem->mbc_type == GB_MBC_TYPE_3)
+		{
+			if (addr < 0x2000)
+			{
+				mem->mbc_external_ram_enable = (value & 0x0F) == 0xA;
+			}
+			else
+			{
+				mem->mbc3.rom_bank = value;
 			}
 		}
 		break;
 	// RAM bank selection
 	case 0x4000:
 	case 0x5000:
-		assert(!gb->memory.mbc_type == GB_MBC_TYPE_ROM_ONLY);  // TODO: probably wrong
-		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
+		assert(!mem->mbc_type == GB_MBC_TYPE_ROM_ONLY);  // TODO: probably wrong
+		if (mem->mbc_type == GB_MBC_TYPE_1)
 		{
-			gb->memory.mbc1.ram_bank = value;
+			mem->mbc1.ram_bank = value;
+		}
+		else if (mem->mbc_type == GB_MBC_TYPE_3)
+		{
+			if (value <= 0x03)
+			{
+				mem->mbc3.ram_bank = value;
+				mem->mbc3.rtc_mode_or_idx = 0;
+			}
+			else if (value >= 0x08 && value <= 0x0C)
+			{
+				mem->mbc3.rtc_mode_or_idx = value;
+			}
+			else
+			{
+				// TODO: probably not needed.
+				assert(false);
+			}
 		}
 		break;
 	// ROM banking mode selection
 	case 0x6000:
 	case 0x7000:
-		if (gb->memory.mbc_type == GB_MBC_TYPE_1)
+		if (mem->mbc_type == GB_MBC_TYPE_1)
 		{
-			gb->memory.mbc1.bank_mode = value;
+			mem->mbc1.bank_mode = value;
+		}
+		else if (mem->mbc_type == GB_MBC_TYPE_3)
+		{
+			assert(!"TODO Latch");
 		}
 		break;
 	// VRAM
 	case 0x8000:
 	case 0x9000:
-		gb->memory.vram[addr & 0x1FFF] = value;
+		mem->vram[addr & 0x1FFF] = value;
 		// TODO: Update cached tile? But we currently don't cache tiles.
 		break;
 	// Switchable RAM bank
 	case 0xA000:
 	case 0xB000:
-		// TODO: What happens if one writes to a non-existing area in external RAM?
+		// TODO: What happens if one writes to a non-existing area in external RAM in MBC1/3?
 		// Undefined behavior I assume? Then the asserts can be removed and the code is OK.
-		if (gb->memory.mbc_type == GB_MBC_TYPE_ROM_ONLY)
+		// Nicer is probably to do nothing in that case (meaning you have to replace
+		// the asserts if/else).
+		if (mem->mbc_type == GB_MBC_TYPE_ROM_ONLY)
 		{
-			gb->memory.external_ram[addr & 0x1FFF] = value;
+			mem->external_ram[addr & 0x1FFF] = value;
 		}
-		else if (gb->memory.mbc_type == GB_MBC_TYPE_1)
+		else if (mem->mbc_type == GB_MBC_TYPE_1)
 		{
-			if (gb->memory.external_ram_enable)
+			if (mem->mbc_external_ram_enable)
 			{
 				const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
 				assert(ram_size > 0 && ram_size < 4);
 				assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
-				assert(gb->memory.mbc1.ram_bank == 1 || ram_size == 3);
-				gb->memory.external_ram[addr & 0x1FFF + (gb->memory.mbc1.ram_bank << 13u)] = value;
+				assert(mem->mbc1.ram_bank == 1 || ram_size == 3);
+				mem->external_ram[addr & 0x1FFF + (mem->mbc1.ram_bank << 13u)] = value;
 			}
 		}
-		else if (gb->memory.mbc_type == GB_MBC_TYPE_2)
+		else if (mem->mbc_type == GB_MBC_TYPE_2)
 		{
-			if (gb->memory.external_ram_enable)
+			if (mem->mbc_external_ram_enable)
 			{
-				gb->memory.external_ram[addr & 0x01FF] = value & 0x0F;
+				mem->external_ram[addr & 0x01FF] = value & 0x0F;
+			}
+		}
+		else if (mem->mbc_type == GB_MBC_TYPE_3)
+		{
+			if (mem->mbc_external_ram_enable)
+			{
+				if (mem->mbc3.rtc_mode_or_idx == 0)
+				{
+					const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
+					assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
+					assert(ram_size > 0);
+					assert(ram_size != 1 || mem->mbc3.ram_bank == 1);
+					assert(ram_size != 2 || mem->mbc3.ram_bank == 1);
+					assert(ram_size != 3 || mem->mbc3.ram_bank < 4);
+					assert(ram_size != 4 || mem->mbc3.ram_bank < 16);
+					mem->external_ram[addr & 0x1FFF + (mem->mbc3.ram_bank << 13u)] = value;
+				}
+				else
+				{
+					mem->mbc3.rtc_regs[mem->mbc3.rtc_mode_or_idx - 0x08] = value;
+				}
 			}
 		}
 		break;
@@ -506,15 +598,15 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	case 0xC000:
 	case 0xD000:
 	case 0xE000:
-		gb->memory.wram[addr & 0x1FFF] = value;
+		mem->wram[addr & 0x1FFF] = value;
 		break;
 	// Echo of (Internal) working RAM, I/O, zero page
 	case 0xF000:
 		switch (addr & 0x0F00)
 		{
-		default: // Echo of (Internal) working RAM, [0xF000, 0xFE00)
+		default:  // Echo of (Internal) working RAM, [0xF000, 0xFE00)
 			assert((addr - 0xF000) < 0x0E00);
-			gb->memory.wram[addr & 0x1FFF] = value;
+			mem->wram[addr & 0x1FFF] = value;
 			break;
 		case 0x0E00:
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
@@ -583,7 +675,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			else if (addr >= 0xFF80 && addr < 0xFFFF)  // Zero page RAM
 			{
 				assert((addr - 0xFF80) < 0x80);
-				gb->memory.zero_page_ram[addr & 0x7F] = value;
+				mem->zero_page_ram[addr & 0x7F] = value;
 			}
 			else if (addr == 0xFFFF)  // Interrupt enable
 			{
@@ -645,21 +737,29 @@ gb__PopWordToStack(gb_GameBoy *gb)
 void
 gb_Reset(gb_GameBoy *gb, bool skip_bios)
 {
-	gb->memory.bios_mapped = true;
+	struct gb_Memory *mem = &gb->memory;
+	mem->bios_mapped = true;
 
-	// TODO: Are these correctly initialized like this? Or can they stay uninitialized?
-	// I think the probably can be uninitialized.
-	if (gb->memory.mbc_type == GB_MBC_TYPE_1)
+	if (mem->mbc_type == GB_MBC_TYPE_1)
 	{
-		gb->memory.external_ram_enable = false;
-		gb->memory.mbc1.rom_bank = 1;
-		gb->memory.mbc1.ram_bank = 0;
-		gb->memory.mbc1.bank_mode = 0;
+		mem->mbc_external_ram_enable = false;
+		mem->mbc1.rom_bank = 0;
+		mem->mbc1.ram_bank = 0;
+		mem->mbc1.bank_mode = 0;
 	}
-	else if (gb->memory.mbc_type == GB_MBC_TYPE_2)
+	else if (mem->mbc_type == GB_MBC_TYPE_2)
 	{
-		gb->memory.external_ram_enable = false;
-		gb->memory.mbc2.rom_bank = 1;
+		mem->mbc_external_ram_enable = false;
+		mem->mbc2.rom_bank = 1;
+	}
+	else if (mem->mbc_type == GB_MBC_TYPE_3)
+	{
+		// TODO: Are these correctly initialized like this? Or can they stay uninitialized?
+		// gbdev.io doesn't give default values for these.
+		mem->mbc_external_ram_enable = false;
+		mem->mbc3.rom_bank = 0;
+		mem->mbc3.rtc_mode_or_idx = 0;
+		// TODO: Init RTC.
 	}
 
 	// (see page 18 of the GameBoy CPU Manual)
@@ -1289,7 +1389,6 @@ static const gb__InstructionInfo gb__extended_instruction_infos[256] = {
 	[0xFE] = { "SET 7, (HL)", 0, 4 },
 	[0xFF] = { "SET 7, A", 0, 2 },
 };
-
 
 gb_Instruction
 gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
@@ -2760,7 +2859,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	return gb__extended_instruction_infos[inst.opcode].min_num_machine_cycles;
 }
 
-void
+static void
 gb__AdvancePpu(gb_GameBoy *gb)
 {
 	(void)gb;
@@ -3259,7 +3358,7 @@ gb_MagFramebuffer(const gb_GameBoy *gb, gb_MagFilter mag_filter, uint8_t *pixels
 	const gb_Framebuffer input = {
 		.width = GB_FRAMEBUFFER_WIDTH,
 		.height = GB_FRAMEBUFFER_HEIGHT,
-		.pixels = gb->framebuffer.pixels,
+		.pixels = gb->display.pixels,
 	};
 
 	switch (mag_filter)

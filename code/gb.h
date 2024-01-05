@@ -62,7 +62,7 @@ typedef struct gb_GameBoy
 {
 	// The CPU conains only the registers.
 	// Note that the GameBoy uses little-endian.
-	struct Cpu
+	struct gb_Cpu
 	{
 		union
 		{
@@ -114,13 +114,13 @@ typedef struct gb_GameBoy
 		bool halt;
 	} cpu;
 
-	struct SerialTransfer
+	struct gb_SerialTransfer
 	{
 		uint8_t sb;
 		uint8_t sc;
 	} serial;
 
-	struct Ppu
+	struct gb_Ppu
 	{
 		union
 		{
@@ -142,7 +142,7 @@ typedef struct gb_GameBoy
 		uint8_t oam[160];  // Sprite attribute memory
 	} ppu;
 
-	struct Memory
+	struct gb_Memory
 	{
 		bool bios_mapped;
 		uint8_t wram[8192];  // 8 KiB
@@ -151,11 +151,10 @@ typedef struct gb_GameBoy
 		uint8_t external_ram[8192 * 4];  // Up to 4 banks of 8 KiB each
 		uint8_t zero_page_ram[128];
 
+		// Memory Bank Controller
 		gb_MbcType mbc_type;
-		bool external_ram_enable;
-		// TODO: get rid of union maybe after MBC3
-		// writing to the bitfields then need to be masked when writing instead
-		union MemoryBankController
+		bool mbc_external_ram_enable;
+		union
 		{
 			struct Mbc1
 			{
@@ -169,13 +168,17 @@ typedef struct gb_GameBoy
 			} mbc2;
 			struct Mbc3
 			{
-				// TODO
-				//uint8_t rom_bank : 4;
+				uint8_t rom_bank : 7;
+				uint8_t ram_bank : 4;
+				uint8_t rtc_mode_or_idx;
+				// TODO: implement Real Time Clock (RTC).
+				// Currenlty, loading an RTC ROM fails.
+				uint8_t rtc_regs[5];
 			} mbc3;
 		};
 	} memory;
 
-	struct Timer
+	struct gb_Timer
 	{
 		uint8_t div;
 		uint8_t tima;
@@ -183,15 +186,15 @@ typedef struct gb_GameBoy
 		uint8_t tac;
 	} timer;
 
-	struct Framebuffer
+	struct gb_Display
 	{
 		// One gray-scale 1-byte value per pixels. This is unlike the original GameBoy
 		// with only 2 bits per pixel. Using a full byte per pixel makes it easier to
 		// directly map the framebuffer onto a texture.
 		uint8_t pixels[GB_FRAMEBUFFER_WIDTH * GB_FRAMEBUFFER_HEIGHT];
-	} framebuffer;
+	} display;
 
-	struct Rom
+	struct gb_Rom
 	{
 		char name[16];
 		const uint8_t *data;
@@ -318,4 +321,3 @@ gb_MaxMagFramebufferSizeInBytes(void);
 // provided buffer.
 gb_Framebuffer
 gb_MagFramebuffer(const gb_GameBoy *gb, gb_MagFilter mag_filter, uint8_t *pixels);
-
