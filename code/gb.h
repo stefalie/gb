@@ -156,17 +156,17 @@ typedef struct gb_GameBoy
 		bool mbc_external_ram_enable;
 		union
 		{
-			struct Mbc1
+			struct
 			{
 				uint8_t rom_bank : 5;
 				uint8_t ram_bank : 2;  // Or high 2 bits of RAM bank.
 				uint8_t bank_mode : 1;
 			} mbc1;
-			struct Mbc2
+			struct
 			{
 				uint8_t rom_bank : 4;
 			} mbc2;
-			struct Mbc3
+			struct
 			{
 				uint8_t rom_bank : 7;
 				uint8_t ram_bank : 4;

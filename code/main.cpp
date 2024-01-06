@@ -472,7 +472,7 @@ struct Config
 		bool mag_filter_changed = true;
 		int speed_frame_multiplier = 1;
 
-		bool skip_bios = false;
+		bool skip_bios = true; // TODO false;
 		bool single_step_mode = false;
 		bool exec_next_step = false;
 	} gui;
@@ -539,20 +539,20 @@ LoadRomFromFile(Config *config, gb_GameBoy *gb, const char *file_path)
 			config->gui.exec_next_step = false;
 			gb_Reset(gb, config->gui.skip_bios);
 
-			// TODO: print cleanup
-			SDL_Log("Loaded ROM: %s\n", gb->rom.name);
+			//// TODO: print cleanup
+			//SDL_Log("Loaded ROM: %s\n", gb->rom.name);
 
-			SDL_Log("Bios instructions:\n");
-			char str_buf[32];
-			uint16_t addr = 0u;
-			while (addr < 256)
-			{
-				const gb_Instruction inst = gb_FetchInstruction(gb, addr);
-				gb_DisassembleInstruction(inst, str_buf, sizeof(str_buf));
-				SDL_Log("0x%04X: (0x%02X) %s\n", addr, inst.opcode, str_buf);
-				addr += gb_InstructionSize(inst);
-			}
-			SDL_Log("Start execution:\n");
+			//SDL_Log("Bios instructions:\n");
+			//char str_buf[32];
+			//uint16_t addr = 0u;
+			//while (addr < 256)
+			//{
+			//	const gb_Instruction inst = gb_FetchInstruction(gb, addr);
+			//	gb_DisassembleInstruction(inst, str_buf, sizeof(str_buf));
+			//	SDL_Log("0x%04X: (0x%02X) %s\n", addr, inst.opcode, str_buf);
+			//	addr += gb_InstructionSize(inst);
+			//}
+			//SDL_Log("Start execution:\n");
 		}
 	}
 	else

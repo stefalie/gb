@@ -365,7 +365,6 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			}
 			else  // Empty
 			{
-				assert(false);
 				return 0;
 			}
 		case 0x0F00:
@@ -464,7 +463,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	case 0x2000:
 	case 0x3000:
 		assert(!mem->bios_mapped);
-		assert(!mem->mbc_type == GB_MBC_TYPE_ROM_ONLY);  // TODO: probably wrong
+		assert(mem->mbc_type != GB_MBC_TYPE_ROM_ONLY);  // TODO: probably wrong
 		if (mem->mbc_type == GB_MBC_TYPE_1)
 		{
 			if (addr < 0x2000)
@@ -502,7 +501,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	// RAM bank selection
 	case 0x4000:
 	case 0x5000:
-		assert(!mem->mbc_type == GB_MBC_TYPE_ROM_ONLY);  // TODO: probably wrong
+		assert(mem->mbc_type != GB_MBC_TYPE_ROM_ONLY);  // TODO: probably wrong
 		if (mem->mbc_type == GB_MBC_TYPE_1)
 		{
 			mem->mbc1.ram_bank = value;
@@ -684,11 +683,11 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 #if BLARGG_TEST_ENABLE
 			// NOTE: For the printf to work and print to the console, the bulid script needs
 			// to be modified to use SUBSYSTEM:console.
-			else if (addr == 0xFF01)  // Interrupt enable
+			else if (addr == 0xFF01)
 			{
 				gb->serial.sb = value;
 			}
-			else if (addr == 0xFF02)  // Interrupt enable
+			else if (addr == 0xFF02)
 			{
 				gb->serial.sc = value;
 			}
@@ -1299,23 +1298,23 @@ static const gb__InstructionInfo gb__extended_instruction_infos[256] = {
 	[0xAE] = { "RES 5, (HL)", 0, 4 },
 	[0xAF] = { "RES 5, A", 0, 2 },
 
-	[0xB0] = { "SET 6, B", 0, 2 },
-	[0xB1] = { "SET 6, C", 0, 2 },
-	[0xB2] = { "SET 6, D", 0, 2 },
-	[0xB3] = { "SET 6, E", 0, 2 },
-	[0xB4] = { "SET 6, H", 0, 2 },
-	[0xB5] = { "SET 6, L", 0, 2 },
-	[0xB6] = { "SET 6, (HL)", 0, 4 },
-	[0xB7] = { "SET 6, A", 0, 2 },
+	[0xB0] = { "RES 6, B", 0, 2 },
+	[0xB1] = { "RES 6, C", 0, 2 },
+	[0xB2] = { "RES 6, D", 0, 2 },
+	[0xB3] = { "RES 6, E", 0, 2 },
+	[0xB4] = { "RES 6, H", 0, 2 },
+	[0xB5] = { "RES 6, L", 0, 2 },
+	[0xB6] = { "RES 6, (HL)", 0, 4 },
+	[0xB7] = { "RES 6, A", 0, 2 },
 
-	[0xB8] = { "SET 7, B", 0, 2 },
-	[0xB9] = { "SET 7, C", 0, 2 },
-	[0xBA] = { "SET 7, D", 0, 2 },
-	[0xBB] = { "SET 7, E", 0, 2 },
-	[0xBC] = { "SET 7, H", 0, 2 },
-	[0xBD] = { "SET 7, L", 0, 2 },
-	[0xBE] = { "SET 7, (HL)", 0, 4 },
-	[0xBF] = { "SET 7, A", 0, 2 },
+	[0xB8] = { "RES 7, B", 0, 2 },
+	[0xB9] = { "RES 7, C", 0, 2 },
+	[0xBA] = { "RES 7, D", 0, 2 },
+	[0xBB] = { "RES 7, E", 0, 2 },
+	[0xBC] = { "RES 7, H", 0, 2 },
+	[0xBD] = { "RES 7, L", 0, 2 },
+	[0xBE] = { "RES 7, (HL)", 0, 4 },
+	[0xBF] = { "RES 7, A", 0, 2 },
 
 	[0xC0] = { "SET 0, B", 0, 2 },
 	[0xC1] = { "SET 0, C", 0, 2 },
@@ -1527,7 +1526,7 @@ gb__RotateRightCircular(gb_GameBoy *gb, uint8_t val, bool clear_zero)
 	val >>= 1u;
 	if (co)
 	{
-		val |= 0x08;
+		val |= 0x80;
 	}
 	gb__SetFlags(gb, clear_zero ? false : val == 0, false, false, co);
 	return val;
@@ -1603,7 +1602,7 @@ gb__Or(gb_GameBoy *gb, uint8_t rhs)
 static void
 gb__Cp(gb_GameBoy *gb, uint8_t rhs)
 {
-	gb__SetFlags(gb, gb->cpu.a == rhs, false, (gb->cpu.a & 0x0F) < (rhs & 0x0F), gb->cpu.a < rhs);
+	gb__SetFlags(gb, gb->cpu.a == rhs, true, (gb->cpu.a & 0x0F) < (rhs & 0x0F), gb->cpu.a < rhs);
 }
 
 static void
@@ -1678,7 +1677,6 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		break;
 	case 0x0F:  // RRCA
 		gb->cpu.a = gb__RotateRightCircular(gb, gb->cpu.a, true);
-		assert(false);
 		break;
 
 	case 0x10:  // STOP
@@ -1730,7 +1728,6 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		break;
 	case 0x1F:  // RRA
 		gb->cpu.a = gb__RotateRight(gb, gb->cpu.a, true);
-		assert(false);
 		break;
 
 	case 0x20:  // JR NZ, i8
@@ -1768,7 +1765,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		// See:
 		// - https://forums.nesdev.org/viewtopic.php?t=15944
 		// - https://ehaskins.com/2018-01-30%20Z80%20DAA
-		bool co = false;
+		bool co = gb->cpu.flags.carry == 1;
 		if (gb->cpu.flags.subtract == 0)
 		{  // After an addition, adjust if (half-)carry occurred or if result is out of bounds.
 			if (gb->cpu.flags.carry == 1 || gb->cpu.a > 0x99)
@@ -1778,7 +1775,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 			}
 			if (gb->cpu.flags.half_carry == 1 || (gb->cpu.a & 0x0F) > 0x09)
 			{
-				gb->cpu.a += 0x60;
+				gb->cpu.a += 0x6;
 			}
 		}
 		else
@@ -1811,7 +1808,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		gb->cpu.hl = gb__Add16(gb, gb->cpu.hl, gb->cpu.hl);
 		break;
 	case 0x2A:  // LD A, (HL+)
-		gb->cpu.a = gb_MemoryReadByte(gb, gb->cpu.de);
+		gb->cpu.a = gb_MemoryReadByte(gb, gb->cpu.hl);
 		++gb->cpu.hl;
 		break;
 	case 0x2B:  // DEC HL
@@ -1888,7 +1885,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		gb->cpu.hl = gb__Add16(gb, gb->cpu.hl, gb->cpu.sp);
 		break;
 	case 0x3A:  // LD A, (HL-)
-		gb->cpu.a = gb_MemoryReadByte(gb, gb->cpu.de);
+		gb->cpu.a = gb_MemoryReadByte(gb, gb->cpu.hl);
 		--gb->cpu.hl;
 		break;
 	case 0x3B:  // DEC SP
@@ -2446,13 +2443,13 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x0B:  // RRC E
 	case 0x0C:  // RRC H
 	case 0x0D:  // RRC L
-	case 0x0E:  // RRC A
+	case 0x0F:  // RRC A
 	{
 		uint8_t *reg = gb__MapIndexToReg(gb, inst.opcode);
 		*reg = gb__RotateRightCircular(gb, *reg, false);
 		break;
 	}
-	case 0x0F:  // RRC (HL)
+	case 0x0E:  // RRC (HL)
 	{
 		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
 		val = gb__RotateRightCircular(gb, val, false);
@@ -2486,13 +2483,13 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x1B:  // RR E
 	case 0x1C:  // RR H
 	case 0x1D:  // RR L
-	case 0x1E:  // RR A
+	case 0x1F:  // RR A
 	{
 		uint8_t *reg = gb__MapIndexToReg(gb, inst.opcode);
 		*reg = gb__RotateRight(gb, *reg, false);
 		break;
 	}
-	case 0x1F:  // RR (HL)
+	case 0x1E:  // RR (HL)
 	{
 		uint8_t val = gb_MemoryReadByte(gb, gb->cpu.hl);
 		val = gb__RotateRight(gb, val, false);
@@ -2879,7 +2876,11 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	// TODO: handle interrupts
 	// TODO: skip when halted
 
+	// printf("pc: 0x%04X - ", gb->cpu.pc);
 	const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
+	char str_buf[32];
+	gb_DisassembleInstruction(inst, str_buf, sizeof(str_buf));
+	// printf("%s\n", str_buf);
 	gb->cpu.pc += gb_InstructionSize(inst);
 
 	const size_t num_elapsed_cylces =
