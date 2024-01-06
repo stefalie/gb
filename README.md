@@ -47,11 +47,17 @@ The build script can be called with these options: `build_win_x64.bat (Clang|Msv
 
 For debugging call `devenv build\gb.exe` in the project directory (make sure `msvc_shell.bat` has been called first), or simply use the VSCode project by calling `code .` in the project directory (this also requires prior setup of the environment via `shell_msvc.bat`).
 
+When running any of the [Blargg test ROMs](https://github.com/retrio/gb-test-roms/tree/master), set the `BLARGG_TEST_ENABLE` macro to `1` (otherwise, loading the ROM fails because it CGB ROM type).
+If you want to see the output written to the serial port of the GameBoy, the build script needs to be modified to use `SUBSYSTEM:console` (otherwise, the printf output won't show).
+
 ## Resources
 
 TODO: cleanup or remove
 
-https://eli.thegreenplace.net/2012/07/12/computed-goto-for-efficient-dispatch-tables
-https://twitter.com/mknejp/status/1185310491545128961?s=09, also see Eli Bendersky's example
+GameBoy CPU Manual
+GameBoy Programming Manual
+https://izik1.github.io/gbops/
+blargg
+cinoop
 https://github.com/ThomasRinsma/dromaius
 consider switching to clang-cl instead of clang (then you can just use the same compile params as for msvc)

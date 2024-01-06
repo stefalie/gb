@@ -179,6 +179,7 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
 	};
 
 	// Checksum test
+#if !BLARGG_TEST_ENABLE
 	uint16_t checksum = 0;
 	for (size_t i = 0; i < num_bytes; ++i)
 	{
@@ -201,6 +202,7 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
 	{
 		return true;
 	}
+#endif
 
 	return false;
 }
@@ -681,8 +683,6 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				gb->cpu.interrupts = value;
 			}
 #if BLARGG_TEST_ENABLE
-			// NOTE: For the printf to work and print to the console, the bulid script needs
-			// to be modified to use SUBSYSTEM:console.
 			else if (addr == 0xFF01)
 			{
 				gb->serial.sb = value;
@@ -2219,7 +2219,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		}
 		break;
 	case 0xD4:  // CALL NC, u16
-		if (gb->cpu.flags.half_carry == 0)
+		if (gb->cpu.flags.carry == 0)
 		{
 			gb__PushWordToStack(gb, gb->cpu.pc);
 			gb->cpu.pc = inst.operand_word;
@@ -2268,7 +2268,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		}
 		break;
 	case 0xDC:  // CALL C, u16
-		if (gb->cpu.flags.half_carry == 1)
+		if (gb->cpu.flags.carry == 1)
 		{
 			gb__PushWordToStack(gb, gb->cpu.pc);
 			gb->cpu.pc = inst.operand_word;
@@ -2310,10 +2310,11 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0xE8:  // ADD SP, i8
 	{
 		// See: https://stackoverflow.com/a/57981912
-		uint32_t sum = gb->cpu.sp + (int8_t)inst.operand_byte;
-		bool half_carry = (gb->cpu.sp & 0x0F) + ((int8_t)inst.operand_byte & 0x0F) > 0x0F;
-		bool co = sum > 0xFF;
-		gb->cpu.sp = (uint16_t)sum;
+		int8_t operand = (int8_t)inst.operand_byte;
+		uint16_t sum = gb->cpu.sp + operand;
+		bool half_carry = (sum & 0x0F) < (gb->cpu.sp & 0x0F);
+		bool co = (sum & 0xFF) < (gb->cpu.sp & 0xFF);
+		gb->cpu.sp = sum;
 		gb__SetFlags(gb, false, false, half_carry, co);
 		break;
 	}
@@ -2359,10 +2360,11 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0xF8:  // LD HL, SP+i8
 	{
 		// See: https://stackoverflow.com/a/57981912
-		uint32_t sum = gb->cpu.sp + (int8_t)inst.operand_byte;
-		bool half_carry = (gb->cpu.sp & 0x0F) + ((int8_t)inst.operand_byte & 0x0F) > 0x0F;
-		bool co = sum > 0xFF;
-		gb->cpu.hl = (uint16_t)sum;
+		int8_t operand = (int8_t)inst.operand_byte;
+		uint16_t sum = gb->cpu.sp + operand;
+		bool half_carry = (sum & 0x0F) < (gb->cpu.sp & 0x0F);
+		bool co = (sum & 0xFF) < (gb->cpu.sp & 0xFF);
+		gb->cpu.hl = sum;
 		gb__SetFlags(gb, false, false, half_carry, co);
 		break;
 	}
