@@ -52,12 +52,20 @@ typedef enum gb_MbcType
 	GB_MBC_TYPE_3,
 } gb_MbcType;
 
-// typedef enum gb_BankMode
-//{
-//	GB_BANK_MODE_ROM,
-//	GB_BANK_MODE_RAM,
-// } gb_BankMode;
-//
+typedef union gb_InterruptBits
+{
+	struct
+	{
+		uint8_t vblank : 1;
+		uint8_t lcd_stat : 1;
+		uint8_t timer : 1;
+		uint8_t serial : 1;
+		uint8_t joypad : 1;
+		uint8_t _ : 3;
+	};
+	uint8_t reg;
+} gb_InterruptBits;
+
 typedef struct gb_GameBoy
 {
 	// The CPU conains only the registers.
@@ -108,8 +116,13 @@ typedef struct gb_GameBoy
 		uint16_t sp;  // Stack pointer
 
 		// TODO: init
-		bool interrupt_enable;
-		uint8_t interrupts;
+		struct gb_Interrupt
+		{
+			bool ime;  // Interrupt master enable flag
+			bool ime_after_next_inst;
+			gb_InterruptBits ie_flags;  // Interrupt enable flags
+			gb_InterruptBits if_flags;  // Interrupt requested flags
+		} interrupt;
 		bool stop;
 		bool halt;
 	} cpu;
@@ -180,10 +193,23 @@ typedef struct gb_GameBoy
 
 	struct gb_Timer
 	{
+		uint64_t remaining_m_cycles;
+		uint16_t t_clock;
+		bool reset;  // Resets remaining_m_cycles upon timer activation.
+
 		uint8_t div;
 		uint8_t tima;
 		uint8_t tma;
-		uint8_t tac;
+		union
+		{
+			struct
+			{
+				uint8_t clock_select : 2;
+				uint8_t enable : 1;
+				int8_t _ : 5;
+			};
+			uint8_t reg;
+		} tac;
 	} timer;
 
 	struct gb_Display
@@ -254,6 +280,12 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 // it takes to execute that instruction.
 size_t
 gb_ExecuteNextInstruction(gb_GameBoy *gb);
+
+// Advances the GameBoy by as many instruction as possible so that at most
+// 'machine_cyles' many cycles elapse.
+// Returns the exact number of cycles that elapsed (which is <= 'machine_cycles').
+size_t
+gb_Advance(gb_GameBoy *gb, size_t machine_cycles);
 
 typedef struct gb_TileLine
 {

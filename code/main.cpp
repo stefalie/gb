@@ -1436,7 +1436,7 @@ main(int argc, char *argv[])
 	const uint64_t counter_freq = SDL_GetPerformanceFrequency();
 	uint64_t prev_time = SDL_GetPerformanceCounter();
 
-	uint32_t machine_cycle_acc = 0;
+	int32_t machine_cycle_acc = 0;
 
 	// Main Loop
 	while (!config.quit)
@@ -1593,6 +1593,7 @@ main(int argc, char *argv[])
 		}
 		ImGui::SetCurrentContext(config.handles.imgui);  // Reset (if changed)
 
+		// TODO: https://github.com/TylerGlaiel/FrameTimingControl/blob/master/frame_timer.cpp
 		const uint64_t curr_time = SDL_GetPerformanceCounter();
 		const double dt_in_s = (double)(curr_time - prev_time) / counter_freq;
 		const uint32_t elapsed_machine_cycles = (uint32_t)(dt_in_s * GB_MACHINE_FREQ);
@@ -1615,8 +1616,6 @@ main(int argc, char *argv[])
 				config.debug.show = true;
 				config.gui.single_step_mode = true;
 			}
-
-			machine_cycle_acc = 0;
 		}
 		else if (is_running_normal_mode)
 		{
@@ -1639,6 +1638,11 @@ main(int argc, char *argv[])
 				machine_cycle_acc -= frame_acc;
 			}
 		exit:;
+		}
+
+		if (is_running_normal_mode)
+		{
+			machine_cycle_acc = 0;
 		}
 		config.gui.exec_next_step = false;
 

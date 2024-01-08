@@ -207,20 +207,6 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
 	return false;
 }
 
-// TODO: Can gb_MemoryReadByte and gb__MemoryWriteByte be merged?
-// Maybe a combined MemoryMap function that just returns a pointer.
-// gb__MemoryWriteByte does some checks or redirections when accessing control registers, timers, roms. Otherwise it
-// uses the map function. The map function asserts for all empty areas and stuff that doesn't have an address. the
-// timers maybe (but even that has an address in our case).
-//
-// If this is possible depends on how many virtual addresses there are that
-// behave different when reading from or writing to it.
-// We will know more towards the end fo the project.
-// static uint8_t*
-// gb__MemoryMap(gb_GameBoy* gb, uint16_t addr)
-//{
-//}
-
 uint8_t
 gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 {
@@ -370,7 +356,31 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				return 0;
 			}
 		case 0x0F00:
-			if (addr == 0xFF40)
+			if (addr == 0xFF00)
+			{
+				// TODO
+			}
+			else if (addr == 0xFF04)
+			{
+				return gb->timer.div;
+			}
+			else if (addr == 0xFF05)
+			{
+				return gb->timer.tima;
+			}
+			else if (addr == 0xFF06)
+			{
+				return gb->timer.tma;
+			}
+			else if (addr == 0xFF07)
+			{
+				return gb->timer.tac.reg;
+			}
+			else if (addr == 0xFF0F)
+			{
+				return gb->cpu.interrupt.if_flags.reg;
+			}
+			else if (addr == 0xFF40)
 			{
 				return gb->ppu.lcdc;
 			}
@@ -428,9 +438,9 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				// assert(!"TODO");
 				return mem->zero_page_ram[addr & 0x7F];
 			}
-			else if (addr == 0xFFFF)  // Interrupt enable
+			else if (addr == 0xFFFF)
 			{
-				return gb->cpu.interrupts;
+				return gb->cpu.interrupt.ie_flags.reg;
 			}
 			else
 			{
@@ -622,7 +632,48 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			}
 			break;
 		case 0x0F00:
-			if (addr == 0xFF40)
+			if (addr == 0xFF00)
+			{
+				// TODO
+			}
+			else if (addr == 0xFF01)
+			{
+				// TODO: BLARGG?
+				gb->serial.sb = value;
+			}
+			else if (addr == 0xFF02)
+			{
+				// TODO: BLARGG?
+				gb->serial.sc = value;
+			}
+			else if (addr == 0xFF04)
+			{
+				// Writing any value resets this.
+				gb->timer.div = 0x00;
+			}
+			else if (addr == 0xFF05)
+			{
+				gb->timer.tima = value;
+			}
+			else if (addr == 0xFF06)
+			{
+				gb->timer.tma = value;
+			}
+			else if (addr == 0xFF07)
+			{
+				const bool timer_prev_active = gb->timer.tac.enable == 1;
+				// Masking is probably not needed.
+				gb->timer.tac.reg = value & 0x07;
+				if (!timer_prev_active && (gb->timer.tac.enable == 1))
+				{
+					gb->timer.reset = true;
+				}
+			}
+			else if (addr == 0xFF0F)
+			{
+				gb->cpu.if_flags.reg = value & 0x1F;
+			}
+			else if (addr == 0xFF40)
 			{
 				gb->ppu.lcdc = value;
 			}
@@ -678,20 +729,10 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				assert((addr - 0xFF80) < 0x80);
 				mem->zero_page_ram[addr & 0x7F] = value;
 			}
-			else if (addr == 0xFFFF)  // Interrupt enable
+			else if (addr == 0xFFFF)
 			{
-				gb->cpu.interrupts = value;
+				gb->cpu.ie_flags.reg = value & 0x1F;
 			}
-#if BLARGG_TEST_ENABLE
-			else if (addr == 0xFF01)
-			{
-				gb->serial.sb = value;
-			}
-			else if (addr == 0xFF02)
-			{
-				gb->serial.sc = value;
-			}
-#endif
 			else
 			{
 				// assert(false);
@@ -778,7 +819,14 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 	}
 	// TODO: Do we automatically end up at 0x0100 if we run from 0x0?
 
+	gb->cpu.interrupt.ime = false;
+	gb->cpu.interrupt.ime_after_next_inst = false;
+	gb->cpu.interrupt.ie_flags.reg = 0;
+	gb->cpu.interrupt.if_flags.reg = 0;
+
 	gb->cpu.halt = false;
+
+	gb->timer = (struct gb_Timer){ 0 };
 
 	gb__MemoryWriteByte(gb, 0xFF05, 0x00);
 	gb__MemoryWriteByte(gb, 0xFF06, 0x00);
@@ -1680,8 +1728,9 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		break;
 
 	case 0x10:  // STOP
+		gb->timer.div = 0;
 		gb->cpu.stop = true;
-		assert(false);
+		// TODO: not implemented. Supposedly no licensed DMG game ever used it.
 		break;
 	case 0x11:  // LD DE, u16
 		gb->cpu.de = inst.operand_word;
@@ -1977,12 +2026,33 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		break;
 
 	case 0x76:  // HALT
-		gb->cpu.halt = true;
-		// TODO: handle interrupts, etc.
-		// Read page 19+ in the CPU manual
-		assert(false);
+		const struct gb_InterruptBits intr_pending = {
+			.all = gb->cpu.interrupt->ie_flags.reg & gb->cpu.interrupt->if_flags.reg,
+		};
+		if (!gb->cpu.interrupt.ime && intr_pending.all)
+		{
+			// TODO: HALT bug
+			// This causes to skip the increase of PC after the next time that PC is read.
+			// If the next instruction is a single byte, it will simply duplicate that instruction.
+			// If the next instruction has multiple bytes, it will be messed up completely.
+			// To implement this here, we would change the following:
+			// - Add a 'halt_bug' Boolean flag that is set to 'true'.
+			// - In 'gb_FetchInstruction', inside the branch that reads the first operand byte
+			//   if 'halt_bug == true' don't increase 'addr' and set 'halt_bug = false'.
+			// - After the call to  'gb_FetchInstruction', skip the increase of PC if 'halt_bug == true'
+			//   (and assert that it was a single byte instruction in that case).
+			//
+			// I think, we can still set 'halt = true' here. Interrupt handling will unset it again.
+			//
+			// There are two exceptions to that which behave differently.
+			// See: https://gbdev.io/pandocs/halt.html#halt-bug
+			assert(!"The HALT bug is not implemented.");
+		}
+		else
+		{
+			gb->cpu.halt = true;
+		}
 		break;
-
 	case 0x80:  // ADD A, B
 	case 0x81:  // ADD A, C
 	case 0x82:  // ADD A, D
@@ -2254,7 +2324,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		break;
 	case 0xD9:  // RETI
 		gb->cpu.pc = gb__PopWordToStack(gb);
-		gb->cpu.interrupt_enable = true;
+		gb->cpu.interrupt.ime = true;
 		break;
 	case 0xDA:  // JP C, u16
 		if (gb->cpu.flags.carry == 1)
@@ -2344,7 +2414,8 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		gb->cpu.a = gb_MemoryReadByte(gb, 0xFF00 + gb->cpu.c);
 		break;
 	case 0xF3:  // DI
-		gb->cpu.interrupt_enable = false;
+		gb->cpu.interrupt.ime = false;
+		gb->cpu.interrupt.ime_after_next_inst = false;
 		break;
 	case 0xF5:  // PUSH AF
 		gb__PushWordToStack(gb, gb->cpu.af);
@@ -2375,7 +2446,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		gb->cpu.a = gb_MemoryReadByte(gb, inst.operand_word);
 		break;
 	case 0xFB:  // EI
-		gb->cpu.interrupt_enable = true;
+		gb->cpu.interrupt.ime_after_next_inst = true;
 		break;
 	case 0xFE:  // CP A, u8
 		gb__Cp(gb, inst.operand_byte);
@@ -2858,6 +2929,131 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	return gb__extended_instruction_infos[inst.opcode].min_num_machine_cycles;
 }
 
+static size_t
+gb__HandleInterrupts(gb_GameBoy *gb)
+{
+	size_t num_m_cyles = 0;
+
+	struct gb_Interrupt *intr = &gb->cpu.interrupt;
+
+	const struct gb_InterruptBits intr_pending = {
+		.all = intr->ie_flags.reg & inter->if_flags.reg,
+	};
+
+	if (intr->ime && intr_pending.all)
+	{
+		intr->ime = false;
+		gb__PushWordToStack(gb, gb->cpu.pc);
+
+		num_cycles = 5;
+		if (gb->cpu.halt)
+		{
+			gb->cpu.halt = false;
+
+			// Another 1 m clock is needed if the CPU is halted.
+			// See Sec. 4.9 of The Cycle-Accurate Game Boy Docs
+			num_cycles += 1;
+		}
+
+		if (intr_pending.vblank)
+		{
+			intr_pending.vblank = 0;
+			gb->cpu.pc = 0x40;
+		}
+		else if (intr_pending.lcd_stat)
+		{
+			intr_pending.lcd_stat = 0;
+			gb->cpu.pc = 0x48;
+		}
+		else if (intr_pending.timer)
+		{
+			intr_pending.timer = 0;
+			gb->cpu.pc = 0x50;
+		}
+		else if (intr_pending.serial)
+		{
+			intr_pending.serial = 0;
+			gb->cpu.pc = 0x58;
+		}
+		else if (intr_pending.joypad)
+		{
+			intr_pending.joypad = 0;
+			gb->cpu.pc = 0x60;
+		}
+	}
+	else if (!intr->ime && intr_pending.all)
+	{
+		intr->halt = false;
+		num_cycles = 1;
+	}
+
+	return num_cycles;
+}
+
+static void
+gb__UpdateClockAndTimer(gb_GameBoy *gb, size_t num_elapsed_cylces)
+{
+	// Only advance if CPU is not stopped.
+	// See: https://gbdev.io/pandocs/Timer_and_Divider_Registers.html#ff04--div-divider-register
+	// TODO: Is this correct? Or does only DIV not advance but the clock keeps running?
+	if (!gb->cpu.stop)
+	{
+		gb->timery.t_clock += 4 * num_elapsed_cylces;
+
+		// The DIV timer is the higher byte of the 16 bit internal t-clock.
+		gb->timer.div = (gb->timery.t_clock >> 8u) & 0xFF;
+
+		if (gb->timer.tac.enable)
+		{
+			if (gb->timer.reset)
+			{
+				// If the timer was just activated right now during the current instruction,
+				// we assume that it will first have to go through a full period again before
+				// increasing the counter.
+				gb->timer.remaining_m_cycles = 0;
+			}
+			else
+			{
+				gb->timer.remaining_m_cycles += num_elapsed_cylces;
+			}
+
+			// The clock of the timer runs at a quarter of the m-clock.
+			uint8_t period_in_m_cyles = 0;
+			switch (gb->timer.tac.clock_select)
+			{
+			case 0:
+				period_in_m_cyles = 64 * 4;  // 4 kHz
+				break;
+			case 1:
+				period_in_m_cyles = 1 * 4;  // 256 kHz
+				break;
+			case 2:
+				period_in_m_cyles = 4 * 4;  // 64 kHz
+				break;
+			case 3:
+				period_in_m_cyles = 16 * 4;  // 16 kHz
+				break;
+			}
+			assert(timer_period >= 0);
+
+			while (gb->timer.remaining_m_cycles >= period_in_m_cyles)
+			{
+				gb->timer.remaining_m_cycles -= period_in_m_cyles;
+
+				if (gb->timer.tima == 255u)
+				{
+					gb->timer.tima = gb->timer.tma;
+					gb->interrupt.if_flags.timer = 1;
+				}
+				else
+				{
+					++gb->timer.tima;
+				}
+			}
+		}
+	}
+}
+
 static void
 gb__AdvancePpu(gb_GameBoy *gb)
 {
@@ -2870,45 +3066,72 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	assert(gb->rom.data);
 	assert(gb->rom.num_bytes);
 
-	if (gb->cpu.pc == 256)
+	if (gb->cpu.pc == 0x0100)
 	{
 		gb->memory.bios_mapped = false;
+		// See Sec. 5.1 of The Cycle-Accurate Game Boy Docs
+		// The timer will be bogus will running the BIOS.
+		gb->timery.t_clock = 0xABCC;
 	}
 
-	// TODO: handle interrupts
-	// TODO: skip when halted
-
-	// printf("pc: 0x%04X - ", gb->cpu.pc);
-	const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
-	char str_buf[32];
-	gb_DisassembleInstruction(inst, str_buf, sizeof(str_buf));
-	// printf("%s\n", str_buf);
-	gb->cpu.pc += gb_InstructionSize(inst);
-
-	const size_t num_elapsed_cylces =
-			inst.is_extended ? gb__ExecuteExtendedInstruction(gb, inst) : gb__ExecuteBasicInstruction(gb, inst);
-
-
-	if (num_elapsed_cylces == (size_t)-1)
+	const size_t num_interrupt_cycles = gb__HandleInterrupts(gb);
+	if (num_interrupt_cycles)
 	{
-		// Revert PC so that the debugger still displays the missing instruction.
-		gb->cpu.pc -= gb_InstructionSize(inst);
+		gb__UpdateClockAndTimer(gb, num_interrupt_cycles);
+		// TODO: Do we also have to advance the PPU here?
+		// Theoretically I think so, yes!
 	}
 
-	// TODO: Timers?
-	// advance ppu
-	gb__AdvancePpu(gb);
+	size_t num_inst_cycles = 0;
+	if (!gb->cpu.halted)
+	{
+		const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
+		gb->cpu.pc += gb_InstructionSize(inst);
+
+		num_inst_cycles =
+				inst.is_extended ? gb__ExecuteExtendedInstruction(gb, inst) : gb__ExecuteBasicInstruction(gb, inst);
+
+		if (gb->cpu.interrupt.ime_after_next_inst)
+		{
+			gb->cpu.interrupt.ime = true;
+		}
+
+		if (num_inst_cycles == (size_t)-1)
+		{
+			// Revert PC so that the debugger still displays the missing instruction.
+			gb->cpu.pc -= gb_InstructionSize(inst);
+		}
+
+		gb__UpdateClockAndTimer(gb, num_inst_cycles);
+
+		gb__AdvancePpu(gb);
 
 #if BLARGG_TEST_ENABLE
-	if (gb->serial.sc == 0x81)
-	{
-		char c = gb->serial.sb;
-		printf("%c", c);
-		gb->serial.sc = 0;
-	}
+		if (gb->serial.sc == 0x81)
+		{
+			char c = gb->serial.sb;
+			printf("%c", c);
+			gb->serial.sc = 0;
+		}
 #endif
+	}
 
-	return num_elapsed_cylces;
+	return num_interrupt_cycles + num_inst_cycles;
+}
+
+size_t
+gb_Advance(gb_GameBoy *gb, size_t machine_cycles)
+{
+	// Distinguish
+	//
+	// Loop as long as the next inst fits into the time budget and while
+	// CPU is neither stopped nor halted
+	//
+	// const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
+	// inst.machine_cycles
+	//
+	// If the CPU is halted/stopped, use the remaining cylces to increase
+	// the clock
 }
 
 // Adapted from: Ericson, 2005, Real-Time Collision Detection, pages 316-317
