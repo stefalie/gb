@@ -50,7 +50,13 @@ For debugging call `devenv build\gb.exe` in the project directory (make sure `ms
 When running any of the [Blargg test ROMs](https://github.com/retrio/gb-test-roms/tree/master), set the `BLARGG_TEST_ENABLE` macro to `1` (otherwise, loading the ROM fails because it CGB ROM type).
 If you want to see the output written to the serial port of the GameBoy, the build script needs to be modified to use `SUBSYSTEM:console` (otherwise, the printf output won't show).
 
-## Resources
+## Resources, Known Issues, TODO
+
+Blargg's memory timing tests fail. This is because the emulator is instruction-stepped and not cycle-stepped. The tests look at the scenario where the timer is updated in the middle of an instruction and reading the register that contains the timer. Now the result depends on the exact cycles when the read/write and the timer update happen. This is currently not supported. See these sources here for a better explanation.
+
+- https://www.reddit.com/r/EmuDev/comments/j4xn0s/gb_how_to_get_correct_memory_timings
+- https://www.reddit.com/r/EmuDev/comments/pnruwk/gbgbc_passing_all_cputiming_tests
+- https://github.com/retrio/gb-test-roms/blob/master/mem_timing/readme.txt (read the "Internal Operation" section)
 
 TODO: cleanup or remove
 
