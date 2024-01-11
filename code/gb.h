@@ -9,7 +9,8 @@
 #define GB_FRAMEBUFFER_HEIGHT 144
 
 #define GB_MACHINE_FREQ 1048576
-#define GB_MACHINE_CYCLES_PER_FRAME (70224 / 4)
+// TODO: needed?
+//#define GB_MACHINE_CYCLES_PER_FRAME (70224 / 4)
 
 typedef struct gb_CpuFlags
 {
@@ -281,9 +282,11 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 size_t
 gb_ExecuteNextInstruction(gb_GameBoy *gb);
 
-// Advances the GameBoy by as many instruction as possible so that at most
-// 'machine_cyles' many cycles elapse.
-// Returns the exact number of cycles that elapsed (which is <= 'machine_cycles').
+// Advances the GameBoy until at least the given number of machine cycles have
+// elapsed. The goal of 'machine_cyles' will never be overshot by more than the
+// number of cycles necessary to handle interrupts and execute the longest instruction
+// minus 1.
+// Returns the exact number of cycles that the GameBoy processed (which is >= 'machine_cycles').
 size_t
 gb_Advance(gb_GameBoy *gb, size_t machine_cycles);
 

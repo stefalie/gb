@@ -472,7 +472,7 @@ struct Config
 		bool mag_filter_changed = true;
 		int speed_frame_multiplier = 1;
 
-		bool skip_bios = true; // TODO false;
+		bool skip_bios = true;  // TODO false;
 		bool single_step_mode = false;
 		bool exec_next_step = false;
 	} gui;
@@ -540,19 +540,19 @@ LoadRomFromFile(Config *config, gb_GameBoy *gb, const char *file_path)
 			gb_Reset(gb, config->gui.skip_bios);
 
 			//// TODO: print cleanup
-			//SDL_Log("Loaded ROM: %s\n", gb->rom.name);
+			// SDL_Log("Loaded ROM: %s\n", gb->rom.name);
 
-			//SDL_Log("Bios instructions:\n");
-			//char str_buf[32];
-			//uint16_t addr = 0u;
-			//while (addr < 256)
+			// SDL_Log("Bios instructions:\n");
+			// char str_buf[32];
+			// uint16_t addr = 0u;
+			// while (addr < 256)
 			//{
 			//	const gb_Instruction inst = gb_FetchInstruction(gb, addr);
 			//	gb_DisassembleInstruction(inst, str_buf, sizeof(str_buf));
 			//	SDL_Log("0x%04X: (0x%02X) %s\n", addr, inst.opcode, str_buf);
 			//	addr += gb_InstructionSize(inst);
-			//}
-			//SDL_Log("Start execution:\n");
+			// }
+			// SDL_Log("Start execution:\n");
 		}
 	}
 	else
@@ -1436,7 +1436,7 @@ main(int argc, char *argv[])
 	const uint64_t counter_freq = SDL_GetPerformanceFrequency();
 	uint64_t prev_time = SDL_GetPerformanceCounter();
 
-	int32_t machine_cycle_acc = 0;
+	int64_t m_cycle_acc = 0;
 
 	// Main Loop
 	while (!config.quit)
@@ -1596,8 +1596,7 @@ main(int argc, char *argv[])
 		// TODO: https://github.com/TylerGlaiel/FrameTimingControl/blob/master/frame_timer.cpp
 		const uint64_t curr_time = SDL_GetPerformanceCounter();
 		const double dt_in_s = (double)(curr_time - prev_time) / counter_freq;
-		const uint32_t elapsed_machine_cycles = (uint32_t)(dt_in_s * GB_MACHINE_FREQ);
-		machine_cycle_acc += config.gui.speed_frame_multiplier * elapsed_machine_cycles;
+		const uint32_t elapsed_m_cycles = (uint32_t)(dt_in_s * GB_MACHINE_FREQ);
 		prev_time = curr_time;
 
 		// Run emulator
@@ -1607,42 +1606,25 @@ main(int argc, char *argv[])
 
 		if (is_running_debug_mode)
 		{
-			const size_t inst_machine_cycles = gb_ExecuteNextInstruction(&gb);
-			// Break and open the debugger if -1 was returned from the execution
-			// of the instruction. This was used for the step by step implementation
-			// of instructions when missing ones would return -1.
-			if (inst_machine_cycles == (size_t)-1)
-			{
-				config.debug.show = true;
-				config.gui.single_step_mode = true;
-			}
+			gb_ExecuteNextInstruction(&gb);
+			// gb_Advance(&gb, 1);
 		}
 		else if (is_running_normal_mode)
 		{
-			while (machine_cycle_acc >= GB_MACHINE_CYCLES_PER_FRAME)
+			m_cycle_acc += config.gui.speed_frame_multiplier * elapsed_m_cycles;
+
+			// if (m_cycle_acc > 0)
+			//{
+			//	const size_t emulated_m_cycles = gb_Advance(&gb, m_cycle_acc);
+			//	m_cycle_acc -= emulated_m_cycles;
+			// }
+
+			while (m_cycle_acc > 0)
 			{
-				uint32_t frame_acc = 0;
-				while (frame_acc < GB_MACHINE_CYCLES_PER_FRAME)
-				{
-					const size_t inst_machine_cycles = gb_ExecuteNextInstruction(&gb);
-					frame_acc += (uint32_t)inst_machine_cycles;
-
-					// See reasoning above for debug mode.
-					if (inst_machine_cycles == (size_t)-1)
-					{
-						config.debug.show = true;
-						config.gui.single_step_mode = true;
-						goto exit;
-					}
-				}
-				machine_cycle_acc -= frame_acc;
+				const size_t emulated_m_cycles = gb_ExecuteNextInstruction(&gb);
+				assert(emulated_m_cycles > 0);
+				m_cycle_acc -= emulated_m_cycles;
 			}
-		exit:;
-		}
-
-		if (is_running_normal_mode)
-		{
-			machine_cycle_acc = 0;
 		}
 		config.gui.exec_next_step = false;
 
@@ -1659,11 +1641,9 @@ main(int argc, char *argv[])
 			int w = fb_width;
 			int h = fb_height;
 
-			const int default_width = 160;  // TODO get from elsewhere
-			const int default_height = 144;  // TODO get from elsewhere
 			if (config.ini.stretch == STRETCH_ASPECT_CORRECT)
 			{
-				const float default_aspect_ratio = (float)default_width / default_height;  // TODO get from elsewhere
+				const float default_aspect_ratio = (float)GB_FRAMEBUFFER_WIDTH / GB_FRAMEBUFFER_HEIGHT;
 				const float aspect_ratio = (float)fb_width / fb_height;
 				const float scale_x = default_aspect_ratio / aspect_ratio;
 				if (scale_x <= 1.0)
@@ -1681,11 +1661,11 @@ main(int argc, char *argv[])
 			else if (config.ini.stretch == STRETCH_INTEGRAL_SCALE)
 			{
 				// We could filter with GL_NEAREST for this, but meh.
-				const int scale_x = fb_width / default_width;
-				const int scale_y = fb_height / default_height;
-				const int scale = scale_x < scale_y ? scale_x : scale_y;  // No imin in C
-				w = default_width * scale;
-				h = default_height * scale;
+				const int scale_x = fb_width / GB_FRAMEBUFFER_WIDTH;
+				const int scale_y = fb_height / GB_FRAMEBUFFER_HEIGHT;
+				const int scale = scale_x < scale_y ? scale_x : scale_y;
+				w = GB_FRAMEBUFFER_WIDTH * scale;
+				h = GB_FRAMEBUFFER_HEIGHT * scale;
 				x = (fb_width - w) / 2;
 				y = (fb_height - h) / 2;
 				glViewport(x, y, w, h);
