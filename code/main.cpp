@@ -1607,17 +1607,10 @@ main(int argc, char *argv[])
 		if (is_running_debug_mode)
 		{
 			gb_ExecuteNextInstruction(&gb);
-			// gb_Advance(&gb, 1);
 		}
 		else if (is_running_normal_mode)
 		{
 			m_cycle_acc += config.gui.speed_frame_multiplier * elapsed_m_cycles;
-
-			// if (m_cycle_acc > 0)
-			//{
-			//	const size_t emulated_m_cycles = gb_Advance(&gb, m_cycle_acc);
-			//	m_cycle_acc -= emulated_m_cycles;
-			// }
 
 			while (m_cycle_acc > 0)
 			{

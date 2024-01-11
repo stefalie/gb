@@ -334,6 +334,9 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				}
 			}
 		}
+		// When writing to the bus but nothing is connected it's undefined afaik.
+		// Let's return 0 in that case.
+		return 0x0;
 	// (Internal) working RAM
 	case 0xC000:
 	case 0xD000:
@@ -359,6 +362,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			if (addr == 0xFF00)
 			{
 				// TODO
+				return 0;
 			}
 			// Timer
 			else if (addr == 0xFF04)
@@ -937,7 +941,7 @@ static const gb__InstructionInfo gb__basic_instruction_infos[256] = {
 
 	[0x30] = { "JR NC, i8", 1, (uint8_t)-1 },
 	[0x31] = { "LD SP, u16", 2, 3 },
-	[0x32] = { "LD (HL-), A", 0, 1 },
+	[0x32] = { "LD (HL-), A", 0, 2 },
 	[0x33] = { "INC SP", 0, 2 },
 	[0x34] = { "INC (HL)", 0, 3 },
 	[0x35] = { "DEC (HL)", 0, 3 },
@@ -3139,34 +3143,6 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	gb__AdvancePpu(gb, num_cycles);
 
 	return num_interrupt_cycles + num_cycles;
-}
-
-// TODO; How should this behave when the CPU is in STOP mode?
-size_t
-gb_Advance(gb_GameBoy *gb, size_t machine_cycles)
-{
-	size_t cycle_acc = 0;
-
-	// Loop and execute instructions for as long as we still have time in the budget.
-	// while (cycle_acc < machine_cycles && !gb->cpu.halt)
-	while (cycle_acc < machine_cycles)
-	{
-		const size_t m_cycles = gb_ExecuteNextInstruction(gb);
-		// assert(inst_m_cycles > 0 || gb->cpu.halt);
-		assert(m_cycles > 0);
-
-		cycle_acc += m_cycles;
-	}
-
-	//// If the CPU is halted, gb_ExecuteNextInstruction won't "use" any cycles.
-	//// In that case we'll fast forward the clock/timer and the PPU.
-	// if (gb->cpu.halt)
-	//{
-	//	gb__UpdateClockAndTimer(gb, reamining_machine_cycles);
-	//	gb__AdvancePpu(gb, reamining_machine_cycles);
-	// }
-
-	return cycle_acc;
 }
 
 // Adapted from: Ericson, 2005, Real-Time Collision Detection, pages 316-317

@@ -282,14 +282,6 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 size_t
 gb_ExecuteNextInstruction(gb_GameBoy *gb);
 
-// Advances the GameBoy until at least the given number of machine cycles have
-// elapsed. The goal of 'machine_cyles' will never be overshot by more than the
-// number of cycles necessary to handle interrupts and execute the longest instruction
-// minus 1.
-// Returns the exact number of cycles that the GameBoy processed (which is >= 'machine_cycles').
-size_t
-gb_Advance(gb_GameBoy *gb, size_t machine_cycles);
-
 typedef struct gb_TileLine
 {
 	uint8_t pixels[8];
