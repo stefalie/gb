@@ -578,10 +578,12 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 		{
 			if (mem->mbc_external_ram_enable)
 			{
+#if BLARGG_TEST_ENABLE == 0
 				const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
 				assert(ram_size > 0 && ram_size < 4);
 				assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
 				assert(mem->mbc1.ram_bank == 1 || ram_size == 3);
+#endif
 				mem->external_ram[addr & 0x1FFF + (mem->mbc1.ram_bank << 13u)] = value;
 			}
 		}
@@ -3116,12 +3118,6 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		num_cycles =
 				inst.is_extended ? gb__ExecuteExtendedInstruction(gb, inst) : gb__ExecuteBasicInstruction(gb, inst);
 
-		if (gb->cpu.interrupt.ime_after_next_inst)
-		{
-			gb->cpu.interrupt.ime = true;
-			gb->cpu.interrupt.ime_after_next_inst = false;
-		}
-
 #if BLARGG_TEST_ENABLE
 		if (gb->serial.sc == 0x81)
 		{
@@ -3137,6 +3133,12 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		// timer progresses.
 		// TODO: Take bigger steps when just advancing the timer? 4 m cycles instead?
 		num_cycles = 1;
+	}
+
+	if (gb->cpu.interrupt.ime_after_next_inst)
+	{
+		gb->cpu.interrupt.ime = true;
+		gb->cpu.interrupt.ime_after_next_inst = false;
 	}
 
 	gb__UpdateClockAndTimer(gb, num_cycles);

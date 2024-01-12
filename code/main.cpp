@@ -203,6 +203,13 @@ static const struct
 };
 static const size_t num_speed_options = sizeof(speed_options) / sizeof(speed_options[0]);
 
+static const size_t num_breakpoints = 4;
+static struct
+{
+	uint16_t address = 0x0000;
+	bool enable = false;
+} breakpoints[num_breakpoints];
+
 float
 DpiScale()
 {
@@ -538,21 +545,6 @@ LoadRomFromFile(Config *config, gb_GameBoy *gb, const char *file_path)
 			config->gui.has_active_rom = true;
 			config->gui.exec_next_step = false;
 			gb_Reset(gb, config->gui.skip_bios);
-
-			//// TODO: print cleanup
-			// SDL_Log("Loaded ROM: %s\n", gb->rom.name);
-
-			// SDL_Log("Bios instructions:\n");
-			// char str_buf[32];
-			// uint16_t addr = 0u;
-			// while (addr < 256)
-			//{
-			//	const gb_Instruction inst = gb_FetchInstruction(gb, addr);
-			//	gb_DisassembleInstruction(inst, str_buf, sizeof(str_buf));
-			//	SDL_Log("0x%04X: (0x%02X) %s\n", addr, inst.opcode, str_buf);
-			//	addr += gb_InstructionSize(inst);
-			// }
-			// SDL_Log("Start execution:\n");
 		}
 	}
 	else
@@ -934,11 +926,13 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 
 	const char *tab_name_rom_view = "ROM View";
 	const char *tab_name_mem_view = "Memory View";
+	const char *tab_name_tiles = "Tiles";
+	const char *tab_name_sprites = "Sprites";
 	const char *tab_name_options = "Options and Info";
 	const char *tab_name_disassembly = "Disassembly at PC";
 	const char *tab_name_cpu = "CPU State";
-	const char *tab_name_sprites = "Sprites";
-	const char *tab_name_righttab2 = "Right Tab 2";  // TODO: rem
+	const char *tab_name_int_timer = "INT & Timer";
+	const char *tab_name_break = "Breakpoints";
 
 	{  // Dock
 		// Unfortunately we can't use DockSpaceOverViewport(...) here because
@@ -961,68 +955,56 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 		ImGui::Begin("dockspace window", NULL, flags);
 		ImGui::PopStyleVar(3);
 
-		ImGuiID dockspace_id = ImGui::GetID("dockspace");
+		ImGuiID dock = ImGui::GetID("dockspace");
 
-		if (!ImGui::DockBuilderGetNode(dockspace_id) || reset_dock)
+		if (!ImGui::DockBuilderGetNode(dock) || reset_dock)
 		{
-			ImGui::DockBuilderRemoveNode(dockspace_id);
-			ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
-			ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
+			ImGui::DockBuilderRemoveNode(dock);
+			ImGui::DockBuilderAddNode(dock, ImGuiDockNodeFlags_DockSpace);
+			ImGui::DockBuilderSetNodeSize(dock, viewport->WorkSize);
 
-			ImGuiID dock_tmp_id = dockspace_id;
-			ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Left, 0.55f, NULL, &dock_tmp_id);
-			ImGuiID dock_id_right_bottom =
-					ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Down, 0.45f, NULL, &dock_tmp_id);
-			ImGuiID dock_id_right_middle =
-					ImGui::DockBuilderSplitNode(dock_tmp_id, ImGuiDir_Down, 0.5f, NULL, &dock_tmp_id);
-			ImGuiID dock_id_right_top = dock_tmp_id;
+			ImGuiID dock_r;
+			ImGuiID dock_l = ImGui::DockBuilderSplitNode(dock, ImGuiDir_Left, 0.55f, NULL, &dock_r);
 
-			ImGui::DockBuilderDockWindow(tab_name_rom_view, dock_id_left);
-			ImGui::DockBuilderDockWindow(tab_name_mem_view, dock_id_left);
-			ImGui::DockBuilderDockWindow(tab_name_options, dock_id_right_top);
-			ImGui::DockBuilderDockWindow(tab_name_disassembly, dock_id_right_middle);
-			ImGui::DockBuilderDockWindow(tab_name_cpu, dock_id_right_bottom);
-			ImGui::DockBuilderDockWindow(tab_name_sprites, dock_id_right_bottom);
-			ImGui::DockBuilderDockWindow(tab_name_righttab2, dock_id_right_bottom);
-			ImGui::DockBuilderFinish(dockspace_id);
+			ImGuiID dock_tl;
+			ImGuiID dock_bl = ImGui::DockBuilderSplitNode(dock_l, ImGuiDir_Down, 0.4f, NULL, &dock_tl);
+			ImGuiID dock_bl_r;
+			ImGuiID dock_bl_l = ImGui::DockBuilderSplitNode(dock_bl, ImGuiDir_Left, 0.5f, NULL, &dock_bl_r);
+
+			ImGuiID dock_tr;
+			ImGuiID dock_br = ImGui::DockBuilderSplitNode(dock_r, ImGuiDir_Down, 0.65f, NULL, &dock_tr);
+			ImGuiID dock_tr_t;
+			ImGuiID dock_tr_b = ImGui::DockBuilderSplitNode(dock_tr, ImGuiDir_Down, 0.55f, NULL, &dock_tr_t);
+			ImGuiID dock_br_t;
+			ImGuiID dock_br_b = ImGui::DockBuilderSplitNode(dock_br, ImGuiDir_Down, 0.5f, NULL, &dock_br_t);
+
+			ImGui::DockBuilderDockWindow(tab_name_rom_view, dock_tl);
+			ImGui::DockBuilderDockWindow(tab_name_mem_view, dock_tl);
+			ImGui::DockBuilderDockWindow(tab_name_tiles, dock_bl_l);
+			ImGui::DockBuilderDockWindow(tab_name_sprites, dock_bl_r);
+			ImGui::DockBuilderDockWindow(tab_name_options, dock_tr_t);
+			ImGui::DockBuilderDockWindow(tab_name_disassembly, dock_tr_b);
+			ImGui::DockBuilderDockWindow(tab_name_break, dock_tr_b);
+			ImGui::DockBuilderDockWindow(tab_name_cpu, dock_br_t);
+			ImGui::DockBuilderDockWindow(tab_name_int_timer, dock_br_b);
+			ImGui::DockBuilderFinish(dock);
 		}
 
-		ImGui::DockSpace(dockspace_id);
+		ImGui::DockSpace(dock);
 		ImGui::End();
 	}
 
+	ImGui::Begin(tab_name_break);
+	for (int i = 0; i < num_breakpoints; ++i)
 	{
-		ImGui::Begin(tab_name_righttab2);
-		ImGui::Text("Tiles:");
-
-		const int num_tiles_per_row = 16;
-		const int width = num_tiles_per_row * 8;
-		const int height = 3 * 8 * 8;
-		gb_TileLine img[height][num_tiles_per_row];
-
-		for (int y = 0; y < height; ++y)
-		{
-			for (int tile_x = 0; tile_x < num_tiles_per_row; ++tile_x)
-			{
-				int tile_idx = (y >> 3u) * num_tiles_per_row + tile_x;
-				if (y < height / 3 * 2)
-				{
-					img[y][tile_x] = gb_GetTileLine(gb, 1, tile_idx, y & 7u, gb_DefaultPalette());
-				}
-				else
-				{
-					tile_idx -= 256;
-					img[y][tile_x] = gb_GetTileLine(gb, 0, tile_idx, y & 7u, gb_DefaultPalette());
-				}
-			}
-		}
-
-		glBindTexture(GL_TEXTURE_2D, config->debug.tile_sets_texture);
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, img);
-
-		ImGui::Image((void *)(uint64_t)config->debug.tile_sets_texture, ImVec2(7.0f * width, 7.0f * height));
-		ImGui::End();
+		ImGui::PushID(i);
+		ImGui::InputScalar("Address", ImGuiDataType_U16, &breakpoints[i].address, NULL, NULL, "%04X",
+				ImGuiInputTextFlags_CharsHexadecimal);
+		ImGui::SameLine();
+		ImGui::Checkbox("Enable", &breakpoints[i].enable);
+		ImGui::PopID();
 	}
+	ImGui::End();
 
 	if (config->gui.has_active_rom)
 	{
@@ -1055,6 +1037,45 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 		ImGui::End();
 
 		{
+			ImGui::Begin(tab_name_tiles);
+			ImGui::Text("Tiles:");
+
+			const int num_tiles_per_row = 16;
+			const int width = num_tiles_per_row * 8;
+			const int height = 3 * 8 * 8;
+			gb_TileLine img[height][num_tiles_per_row];
+
+			for (int y = 0; y < height; ++y)
+			{
+				for (int tile_x = 0; tile_x < num_tiles_per_row; ++tile_x)
+				{
+					int tile_idx = (y >> 3u) * num_tiles_per_row + tile_x;
+					if (y < height / 3 * 2)
+					{
+						img[y][tile_x] = gb_GetTileLine(gb, 1, tile_idx, y & 7u, gb_DefaultPalette());
+					}
+					else
+					{
+						tile_idx -= 256;
+						img[y][tile_x] = gb_GetTileLine(gb, 0, tile_idx, y & 7u, gb_DefaultPalette());
+					}
+				}
+			}
+
+			glBindTexture(GL_TEXTURE_2D, config->debug.tile_sets_texture);
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, img);
+
+			ImGui::Image((void *)(uint64_t)config->debug.tile_sets_texture, ImVec2(7.0f * width, 7.0f * height));
+			ImGui::End();
+		}
+
+		{
+			ImGui::Begin(tab_name_sprites);
+			ImGui::Text("Sprites:");
+			ImGui::End();
+		}
+
+		{
 			ImGui::Begin(tab_name_disassembly);
 			const size_t num_instructions = 20;
 			const size_t buf_len = (32 + 1);  // 32 + 1 newline chars per instruction
@@ -1074,10 +1095,6 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 			ImGui::End();
 		}
 
-		ImGui::Begin(tab_name_sprites);
-		ImGui::Text("TODO");
-		ImGui::End();
-
 		{
 			ImGui::Begin(tab_name_cpu);
 			ImGui::Text("Registers:");
@@ -1087,10 +1104,28 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 			ImGui::Text("h = 0x%02X\tl = 0x%02X\thl = 0x%04X\n", gb->cpu.h, gb->cpu.l, gb->cpu.hl);
 			ImGui::Text("sp = 0x%04X\n", gb->cpu.sp);
 			ImGui::Text("pc = 0x%04X\n", gb->cpu.pc);
-			ImGui::Text("");
 			ImGui::Text("Flags:");
 			ImGui::Text("z = %d\tn = %d\th = %d\tc = %d\t", gb->cpu.flags.zero, gb->cpu.flags.subtract,
 					gb->cpu.flags.half_carry, gb->cpu.flags.carry);
+			ImGui::End();
+		}
+
+		{
+			const gb_GameBoy::gb_Cpu::gb_Interrupt *intr = &gb->cpu.interrupt;
+			ImGui::Begin(tab_name_int_timer);
+			ImGui::Text("Interrupts: %s", intr->ime ? "on" : "off");
+			ImGui::Text("          IE | IF");
+			ImGui::Text("VBLANK  =  %u |  %u", intr->ie_flags.vblank, intr->if_flags.vblank);
+			ImGui::Text("LCDSTAT =  %u |  %u", intr->ie_flags.lcd_stat, intr->if_flags.lcd_stat);
+			ImGui::Text("TIMER   =  %u |  %u", intr->ie_flags.timer, intr->if_flags.timer);
+			ImGui::Text("SERIAL  =  %u |  %u", intr->ie_flags.serial, intr->if_flags.serial);
+			ImGui::Text("JOYPAD  =  %u |  %u", intr->ie_flags.joypad, intr->if_flags.joypad);
+			ImGui::Separator();
+			ImGui::Text("Timer: %s", gb->timer.tac.enable ? "on" : "off");
+			ImGui::Text("div  = 0x%02X", gb->timer.div);
+			ImGui::Text("tima = 0x%02X", gb->timer.tima);
+			ImGui::Text("tma  = 0x%02X", gb->timer.tma);
+			ImGui::Text("tac  = 0x%02X", gb->timer.tac);
 			ImGui::End();
 		}
 	}
@@ -1104,18 +1139,25 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 		ImGui::Begin(tab_name_mem_view);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
-		ImGui::Begin(tab_name_disassembly);
+		ImGui::Begin(tab_name_tiles);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
 		ImGui::Begin(tab_name_sprites);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
+
+		ImGui::Begin(tab_name_disassembly);
+		ImGui::Text("%s", placeholder);
+		ImGui::End();
 		ImGui::Begin(tab_name_cpu);
+		ImGui::Text("%s", placeholder);
+		ImGui::End();
+		ImGui::Begin(tab_name_int_timer);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
 	}
 
-	{  // TODO
+	{
 		ImGui::Begin(tab_name_options);
 		ImGui::Checkbox("Highlight current instruction", &config->debug.views_follow_pc);
 
@@ -1617,7 +1659,18 @@ main(int argc, char *argv[])
 				const size_t emulated_m_cycles = gb_ExecuteNextInstruction(&gb);
 				assert(emulated_m_cycles > 0);
 				m_cycle_acc -= emulated_m_cycles;
+
+				// Breakpoints for debugging
+				for (int i = 0; i < num_breakpoints; ++i)
+				{
+					if (breakpoints[i].enable && gb.cpu.pc == breakpoints[i].address)
+					{
+						config.gui.single_step_mode = true;
+						goto exit;
+					}
+				}
 			}
+		exit:;
 		}
 		config.gui.exec_next_step = false;
 
