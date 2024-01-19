@@ -479,7 +479,7 @@ struct Config
 		bool mag_filter_changed = true;
 		int speed_frame_multiplier = 1;
 
-		bool skip_bios = true;  // TODO false;
+		bool skip_bios = false;
 		bool single_step_mode = false;
 		bool exec_next_step = false;
 	} gui;
@@ -491,6 +491,7 @@ struct Config
 		MemoryEditor mem_view;
 		bool views_follow_pc = true;
 		GLuint tile_sets_texture = 0;
+		// TODO: maybe we won't need those guys.
 		GLuint tile_map_0_texture = 0;
 		GLuint tile_map_1_texture = 0;
 	} debug;
@@ -931,6 +932,7 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 	const char *tab_name_options = "Options and Info";
 	const char *tab_name_disassembly = "Disassembly at PC";
 	const char *tab_name_cpu = "CPU State";
+	const char *tab_name_ppu = "PPU State";
 	const char *tab_name_int_timer = "INT & Timer";
 	const char *tab_name_break = "Breakpoints";
 
@@ -974,7 +976,7 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 			ImGuiID dock_tr;
 			ImGuiID dock_br = ImGui::DockBuilderSplitNode(dock_r, ImGuiDir_Down, 0.65f, NULL, &dock_tr);
 			ImGuiID dock_tr_t;
-			ImGuiID dock_tr_b = ImGui::DockBuilderSplitNode(dock_tr, ImGuiDir_Down, 0.55f, NULL, &dock_tr_t);
+			ImGuiID dock_tr_b = ImGui::DockBuilderSplitNode(dock_tr, ImGuiDir_Down, 0.5f, NULL, &dock_tr_t);
 			ImGuiID dock_br_t;
 			ImGuiID dock_br_b = ImGui::DockBuilderSplitNode(dock_br, ImGuiDir_Down, 0.5f, NULL, &dock_br_t);
 
@@ -985,6 +987,7 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 			ImGui::DockBuilderDockWindow(tab_name_options, dock_tr_t);
 			ImGui::DockBuilderDockWindow(tab_name_disassembly, dock_tr_b);
 			ImGui::DockBuilderDockWindow(tab_name_break, dock_tr_b);
+			ImGui::DockBuilderDockWindow(tab_name_ppu, dock_br_t);
 			ImGui::DockBuilderDockWindow(tab_name_cpu, dock_br_t);
 			ImGui::DockBuilderDockWindow(tab_name_int_timer, dock_br_b);
 			ImGui::DockBuilderFinish(dock);
@@ -1096,6 +1099,23 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 		}
 
 		{
+			ImGui::Begin(tab_name_ppu);
+			ImGui::Text("Registers:");
+			ImGui::Text("lcdc = 0x%02X", gb->ppu.lcdc.reg);
+			ImGui::Text("stat = 0x%02X", gb->ppu.stat.reg);
+			ImGui::Text("scy = 0x%02X", gb->ppu.scy);
+			ImGui::Text("scx = 0x%02X", gb->ppu.scx);
+			ImGui::Text("ly = 0x%02X", gb->ppu.ly);
+			ImGui::Text("lyc = 0x%02X", gb->ppu.lyc);
+			ImGui::Text("bgp = 0x%02X", gb->ppu.bgp);
+			ImGui::Text("obp0 = 0x%02X", gb->ppu.obp0);
+			ImGui::Text("obp1 = 0x%02X", gb->ppu.obp1);
+			ImGui::Text("wy = 0x%02X", gb->ppu.wy);
+			ImGui::Text("wx = 0x%02X", gb->ppu.wx);
+			ImGui::End();
+		}
+
+		{
 			ImGui::Begin(tab_name_cpu);
 			ImGui::Text("Registers:");
 			ImGui::Text("a = 0x%02X\tf = 0x%02X\taf = 0x%04X\n", gb->cpu.a, gb->cpu.f, gb->cpu.af);
@@ -1160,6 +1180,7 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 	{
 		ImGui::Begin(tab_name_options);
 		ImGui::Checkbox("Highlight current instruction", &config->debug.views_follow_pc);
+		ImGui::Checkbox("Single step mode", &config->gui.single_step_mode);
 
 		// Compute average framerate.
 		static Uint64 frequency = SDL_GetPerformanceFrequency();
@@ -1254,6 +1275,23 @@ static const char* fragment_shader_source =
 		"	// TODO: Tone mapping etc.\n"
 		"	gl_FragColor = vec4(vec3(pixel_intensity), 1.0);\n"
 		"}\n";
+
+static void
+UpdateGameTexture(gb_GameBoy *gb, Config *cfg, GLuint texture, uint8_t *pixels)
+{
+	const gb_Framebuffer fb = gb_MagFramebuffer(gb, cfg->ini.mag_filter, pixels);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	if (cfg->gui.mag_filter_changed)
+	{
+		// Re-alloc texture when mag filter changed as the size is most likely different.
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, fb.width, fb.height, 0, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
+		cfg->gui.mag_filter_changed = false;
+	}
+	else
+	{
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, fb.width, fb.height, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
+	}
+}
 
 int
 main(int argc, char *argv[])
@@ -1441,7 +1479,7 @@ main(int argc, char *argv[])
 		glBindTexture(GL_TEXTURE_2D, config.debug.tile_sets_texture);
 		// The texture vertically stackes the 3 half tile sets.
 		// Each tile set is put in a rectangle of 16x8 tiles.
-		glTexImage2D(GL_TEXTURE_2D, 0, 1, 16 * 8, 3 * 8 * 8, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 16 * 8, 3 * 8 * 8, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -1450,7 +1488,7 @@ main(int argc, char *argv[])
 
 		glGenTextures(1, &config.debug.tile_map_0_texture);
 		glBindTexture(GL_TEXTURE_2D, config.debug.tile_map_0_texture);
-		glTexImage2D(GL_TEXTURE_2D, 0, 1, 32 * 8, 32 * 8, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 32 * 8, 32 * 8, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -1459,7 +1497,7 @@ main(int argc, char *argv[])
 
 		glGenTextures(1, &config.debug.tile_map_1_texture);
 		glBindTexture(GL_TEXTURE_2D, config.debug.tile_map_1_texture);
-		glTexImage2D(GL_TEXTURE_2D, 0, 1, 32 * 8, 32 * 8, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 32 * 8, 32 * 8, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -1649,6 +1687,11 @@ main(int argc, char *argv[])
 		if (is_running_debug_mode)
 		{
 			gb_ExecuteNextInstruction(&gb);
+
+			if (gb_FramebufferUpdated(&gb))
+			{
+				UpdateGameTexture(&gb, &config, texture, pixels);
+			}
 		}
 		else if (is_running_normal_mode)
 		{
@@ -1659,6 +1702,11 @@ main(int argc, char *argv[])
 				const size_t emulated_m_cycles = gb_ExecuteNextInstruction(&gb);
 				assert(emulated_m_cycles > 0);
 				m_cycle_acc -= emulated_m_cycles;
+
+				if (gb_FramebufferUpdated(&gb))
+				{
+					UpdateGameTexture(&gb, &config, texture, pixels);
+				}
 
 				// Breakpoints for debugging
 				for (int i = 0; i < num_breakpoints; ++i)
@@ -1717,19 +1765,7 @@ main(int argc, char *argv[])
 				glViewport(x, y, w, h);
 			}
 
-			const gb_Framebuffer fb = gb_MagFramebuffer(&gb, config.ini.mag_filter, pixels);
 			glBindTexture(GL_TEXTURE_2D, texture);
-			if (config.gui.mag_filter_changed)
-			{
-				// Re-alloc texture when mag filter changed as the size is most likely different.
-				glTexImage2D(GL_TEXTURE_2D, 0, 1, fb.width, fb.height, 0, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
-				config.gui.mag_filter_changed = false;
-			}
-			else
-			{
-				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, fb.width, fb.height, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
-			}
-
 			glUseProgram(shader_program);
 			glUniform2i(viewport_size_loc, w, h);
 			glUniform2i(viewport_pos_loc, x, y);

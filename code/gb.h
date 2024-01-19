@@ -10,28 +10,15 @@
 
 #define GB_MACHINE_FREQ 1048576
 // TODO: needed?
-//#define GB_MACHINE_CYCLES_PER_FRAME (70224 / 4)
+// #define GB_MACHINE_CYCLES_PER_FRAME (70224 / 4)
 
-typedef struct gb_CpuFlags
+typedef enum gb_PpuMode
 {
-	uint8_t _ : 4;
-	uint8_t carry : 1;
-	uint8_t half_carry : 1;
-	uint8_t subtract : 1;
-	uint8_t zero : 1;
-} gb_CpuFlags;
-
-typedef struct gb_PpuFlags
-{
-	uint8_t bg_enable : 1;
-	uint8_t sprite_enable : 1;
-	uint8_t sprite_size : 1;  // 0 -> 8x8, 1 -> 8x16
-	uint8_t bg_tilemap_select : 1;  // 0 -> 0x9800-0x9BFF, 1 -> 0x9C00-0x9FFF
-	uint8_t bg_tileset_select : 1;  // 0 -> 0x8800-0x97FF, 1 -> 0x8000-0x8FFF
-	uint8_t win_enable : 1;
-	uint8_t win_tilemap_select : 1;  // 0 -> 0x9800-0x9BFF, 1 -> 0x9C00-0x9FFF
-	uint8_t lcd_enable : 1;
-} gb_PpuFlags;
+	GB_PPU_MODE_HBLANK,
+	GB_PPU_MODE_VBLANK,
+	GB_PPU_MODE_OAM_SCAN,
+	GB_PPU_MODE_VRAM_SCAN,
+} gb_PpuMode;
 
 typedef struct gb_Palette
 {
@@ -79,7 +66,14 @@ typedef struct gb_GameBoy
 			{
 				union
 				{
-					gb_CpuFlags flags;
+					struct gb_CpuFlags
+					{
+						uint8_t _ : 4;
+						uint8_t carry : 1;
+						uint8_t half_carry : 1;
+						uint8_t subtract : 1;
+						uint8_t zero : 1;
+					} flags;
 					uint8_t f;
 				};
 				uint8_t a;
@@ -116,7 +110,6 @@ typedef struct gb_GameBoy
 		uint16_t pc;  // Program counter
 		uint16_t sp;  // Stack pointer
 
-		// TODO: init
 		struct gb_Interrupt
 		{
 			bool ime;  // Interrupt master enable flag
@@ -136,12 +129,37 @@ typedef struct gb_GameBoy
 
 	struct gb_Ppu
 	{
+		uint16_t mode_clock;
+
 		union
 		{
-			gb_PpuFlags flags;
-			uint8_t lcdc;
-		};
-		uint8_t stat;
+			struct gb_PpuLcdcFlags
+			{
+				uint8_t bg_enable : 1;
+				uint8_t sprite_enable : 1;
+				uint8_t sprite_size : 1;  // 0 -> 8x8, 1 -> 8x16
+				uint8_t bg_tilemap_select : 1;  // 0 -> 0x9800-0x9BFF, 1 -> 0x9C00-0x9FFF
+				uint8_t bg_tileset_select : 1;  // 0 -> 0x8800-0x97FF, 1 -> 0x8000-0x8FFF
+				uint8_t win_enable : 1;
+				uint8_t win_tilemap_select : 1;  // 0 -> 0x9800-0x9BFF, 1 -> 0x9C00-0x9FFF
+				uint8_t lcd_enable : 1;
+			} flags;
+			uint8_t reg;
+		} lcdc;
+		union
+		{
+			struct gb_PpuStatFlags
+			{
+				uint8_t mode : 2;  // A value of 'gb_PpuMode' (but can't use it as type).
+				uint8_t coincidence_flag : 1;
+				uint8_t interrupt_mode_hblank : 1;
+				uint8_t interrupt_mode_vblank : 1;
+				uint8_t interrupt_mode_oam_scan : 1;
+				uint8_t interrupt_coincidence : 1;
+				uint8_t _ : 1;
+			} flags;
+			uint8_t reg;
+		} stat;
 		uint8_t scy;  // Scroll Y
 		uint8_t scx;  // Scroll X
 		uint8_t ly;  // Line
@@ -160,7 +178,7 @@ typedef struct gb_GameBoy
 	{
 		bool bios_mapped;
 		uint8_t wram[8192];  // 8 KiB
-		// TODO: Consider caching the tiles.
+		// TODO(stefalie): Consider caching the tiles.
 		uint8_t vram[8192];  // 8 KiB
 		uint8_t external_ram[8192 * 4];  // Up to 4 banks of 8 KiB each
 		uint8_t zero_page_ram[128];
@@ -185,8 +203,8 @@ typedef struct gb_GameBoy
 				uint8_t rom_bank : 7;
 				uint8_t ram_bank : 4;
 				uint8_t rtc_mode_or_idx;
-				// TODO: implement Real Time Clock (RTC).
-				// Currenlty, loading an RTC ROM fails.
+				// TODO(stefalie): Real Time Clock (RTC) is currently not implemented/supported.
+				// Loading a ROM with RTC will fail.
 				uint8_t rtc_regs[5];
 			} mbc3;
 		};
@@ -194,7 +212,7 @@ typedef struct gb_GameBoy
 
 	struct gb_Timer
 	{
-		uint64_t remaining_m_cycles;
+		uint16_t remaining_m_cycles;  // Same concept as 'mode_clock' in 'gb_Ppu'.
 		uint16_t t_clock;
 		bool reset;  // Resets remaining_m_cycles upon timer activation.
 
@@ -294,10 +312,16 @@ typedef struct gb_TileLine
 gb_TileLine
 gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_index, gb_Palette palette);
 
+// TODO: remove?
 // Returns a line inside one tile inside one of the two maps.
 // 8 bits monochrome per pixel.
 gb_TileLine
 gb_GetMapTileLine(gb_GameBoy *gb, size_t map_index, size_t tile_x_index, size_t y_index, gb_Palette palette);
+
+// Returns true if a new frame has been fully rendered.
+// Use this to check if the emulator's texture should be updated.
+bool
+gb_FramebufferUpdated(gb_GameBoy *gb);
 
 typedef struct gb_Framebuffer
 {

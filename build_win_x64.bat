@@ -70,7 +70,7 @@ rem /EHa- Disable all exceptions
 rem /wd4201 Disable warning about anonymous structs/unions, it's allowed in C11
 rem See note under 'Clang' about duplicate include dirs.
 set MsvcCompilerFlags=/Zi /FC /Fe%ExeName% /I%SdlDir% /I../external /I%SdlDir%/SDL2 /I../external/imgui /std:c11 /WX /W4 /WL /GR- /EHa- /wd4201
-set MsvcLinkerFlags=/link /INCREMENTAL:NO /SUBSYSTEM:console /NOLOGO %SdlLibs% Shell32.lib OpenGL32.lib Comdlg32.lib
+set MsvcLinkerFlags=/link /INCREMENTAL:NO /SUBSYSTEM:windows /NOLOGO %SdlLibs% Shell32.lib OpenGL32.lib Comdlg32.lib
 rem /Zo Generates enhanced debugging information for optimized code.
 rem /Oi Generates intrinsic functions.
 rem /GL Whole program optimization
@@ -78,8 +78,10 @@ set MsvcRelCompilerFlags=/Zo /O2 /Oi /GL
 rem /LTCG (Link-time code generation)
 set MsvcRelLinkerFlags=/LTCG /OPT:REF /OPT:ICF
 rem /RTC1 Run-time error checks
+rem Enabling asan can be done with /fsanitize=address
 rem Enabling asan seems to result in the generation of gl.lib and gl.exp files.
-set MsvcDebCompilerFlags=/D_DEBUG /RTC1 /fsanitize=address
+rem Enabling asan slows down the emulator so much that we result in a spiral of death.
+set MsvcDebCompilerFlags=/D_DEBUG /RTC1
 set MsvcDebLinkerFlags=/DEBUG
 
 if "%1" equ "Clang" (

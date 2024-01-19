@@ -1,7 +1,6 @@
 // Copyright (C) 2022 Stefan Lienhard
 
 #include "gb.h"
-// TODO(stefalie): Get rid of the stdlib includes. Make it standalone.
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -272,6 +271,8 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 		return gb->rom.data[bank * bank_size + (addr - bank_size)];
 	}
 	// VRAM
+	// TODO(stefalie): VRAM/OAM is inaccessible during certain PPU modes.
+	// See: https://gbdev.io/pandocs/Rendering.html
 	case 0x8000:
 	case 0x9000:
 		return mem->vram[addr & 0x1FFF];
@@ -350,6 +351,8 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			assert((addr - 0xF000) < 0x0E00);
 			return mem->wram[addr & 0x1FFF];
 		case 0x0E00:
+			// TODO(stefalie): VRAM/OAM is inaccessible during certain PPU modes.
+			// See: https://gbdev.io/pandocs/Rendering.html
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{
 				return gb->ppu.oam[addr - 0xFEA0];
@@ -389,13 +392,11 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			// Display
 			else if (addr == 0xFF40)
 			{
-				return gb->ppu.lcdc;
+				return gb->ppu.lcdc.reg;
 			}
 			else if (addr == 0xFF41)
 			{
-				assert(!"TODO");
-				// return 0;
-				return gb->ppu.stat;
+				return gb->ppu.stat.reg;
 			}
 			else if (addr == 0xFF42)
 			{
@@ -558,10 +559,11 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 		}
 		break;
 	// VRAM
+	// TODO(stefalie): VRAM/OAM is inaccessible during certain PPU modes.
+	// See: https://gbdev.io/pandocs/Rendering.html
 	case 0x8000:
 	case 0x9000:
 		mem->vram[addr & 0x1FFF] = value;
-		// TODO: Update cached tile? But we currently don't cache tiles.
 		break;
 	// Switchable RAM bank
 	case 0xA000:
@@ -631,6 +633,8 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			mem->wram[addr & 0x1FFF] = value;
 			break;
 		case 0x0E00:
+			// TODO(stefalie): VRAM/OAM is inaccessible during certain PPU modes.
+			// See: https://gbdev.io/pandocs/Rendering.html
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{
 				// return gb->ppu.oam[addr - 0xFEA0];
@@ -690,12 +694,11 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			// Display
 			else if (addr == 0xFF40)
 			{
-				gb->ppu.lcdc = value;
+				gb->ppu.lcdc.reg = value;
 			}
 			else if (addr == 0xFF41)
 			{
-				assert(!"TODO");
-				gb->ppu.stat = value;
+				gb->ppu.stat.reg = value;
 			}
 			else if (addr == 0xFF42)
 			{
@@ -843,6 +846,9 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 	gb->cpu.interrupt.if_flags.reg = 0;
 
 	gb->cpu.halt = false;
+
+	// TODO: What parts need initializing how?
+	gb->ppu = (struct gb_Ppu){ 0 };
 
 	gb->timer = (struct gb_Timer){ 0 };
 
@@ -1685,14 +1691,14 @@ gb__Dec(gb_GameBoy *gb, uint8_t *val)
 	gb__SetFlags(gb, (*val) == 0, true, ((*val) & 0x0F) == 0x0F, gb->cpu.flags.carry == 1);
 }
 
-static size_t
+static uint16_t
 gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 {
 	const uint8_t extended_inst_prefix = 0xCB;
 	assert(gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) != extended_inst_prefix ||
 			gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) - 1 == extended_inst_prefix);
 
-	size_t result = gb__basic_instruction_infos[inst.opcode].min_num_machine_cycles;
+	uint16_t result = gb__basic_instruction_infos[inst.opcode].min_num_machine_cycles;
 
 	switch (inst.opcode)
 	{
@@ -2495,7 +2501,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	return result;
 }
 
-static size_t
+static uint16_t
 gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 {
 	const uint8_t extended_inst_prefix = 0xCB;
@@ -2942,10 +2948,10 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	return gb__extended_instruction_infos[inst.opcode].min_num_machine_cycles;
 }
 
-static size_t
+static uint16_t
 gb__HandleInterrupts(gb_GameBoy *gb)
 {
-	size_t num_m_cycles = 0;
+	uint16_t num_m_cycles = 0;
 
 	struct gb_Interrupt *intr = &gb->cpu.interrupt;
 
@@ -3004,14 +3010,14 @@ gb__HandleInterrupts(gb_GameBoy *gb)
 }
 
 static void
-gb__UpdateClockAndTimer(gb_GameBoy *gb, size_t num_elapsed_cylces)
+gb__UpdateClockAndTimer(gb_GameBoy *gb, size_t elapsed_m_cycles)
 {
 	// Only advance if CPU is not stopped.
 	// See: https://gbdev.io/pandocs/Timer_and_Divider_Registers.html#ff04--div-divider-register
 	// TODO: Is this correct? Or does only DIV not advance but the clock keeps running?
 	if (!gb->cpu.stop)
 	{
-		gb->timer.t_clock += (uint16_t)(4 * num_elapsed_cylces);
+		gb->timer.t_clock += (uint16_t)(4 * elapsed_m_cycles);
 
 		// The DIV timer is the higher byte of the 16 bit internal t-clock.
 		gb->timer.div = (gb->timer.t_clock >> 8u) & 0xFF;
@@ -3028,7 +3034,8 @@ gb__UpdateClockAndTimer(gb_GameBoy *gb, size_t num_elapsed_cylces)
 			}
 			else
 			{
-				gb->timer.remaining_m_cycles += num_elapsed_cylces;
+				assert(elapsed_m_cycles <= 0xFFFF);
+				gb->timer.remaining_m_cycles += (uint16_t)elapsed_m_cycles;
 			}
 
 			// The clock of the timer runs at a quarter of the m-clock.
@@ -3050,9 +3057,11 @@ gb__UpdateClockAndTimer(gb_GameBoy *gb, size_t num_elapsed_cylces)
 			}
 			assert(period_in_m_cyles >= 0);
 
+			// TODO: Is 'if' enough?
+			assert(gb->timer.remaining_m_cycles < 2 * period_in_m_cyles);
 			while (gb->timer.remaining_m_cycles >= period_in_m_cyles)
 			{
-				gb->timer.remaining_m_cycles -= period_in_m_cyles;
+				gb->timer.remaining_m_cycles -= (uint16_t)period_in_m_cyles;
 
 				if (gb->timer.tima == 255u)
 				{
@@ -3069,21 +3078,145 @@ gb__UpdateClockAndTimer(gb_GameBoy *gb, size_t num_elapsed_cylces)
 }
 
 static void
-gb__AdvancePpu(gb_GameBoy *gb, size_t num_elapsed_cylces)
+gb__RenderScanLine(gb_GameBoy *gb)
 {
-	(void)gb;
-	(void)num_elapsed_cylces;
-	// TODO: verify that it doesn't take a step that's too big.
+	const struct gb_PpuLcdcFlags *lcdc = &gb->ppu.lcdc.flags;
 
+	if (lcdc->bg_enable)
+	{
+		const size_t vram_offset = lcdc->bg_tilemap_select ? 0x1C00 : 0x1800;
+
+		const uint8_t y = gb->ppu.scy + gb->ppu.ly;
+		const size_t tile_y = y >> 3u;
+		const size_t in_tile_y = y & 7u;
+
+		// TODO
+		gb_Palette palette = gb_DefaultPalette();
+
+		size_t i = 0;
+		while (i < GB_FRAMEBUFFER_WIDTH)
+		// for (size_t i = 0; i < GB_FRAMEBUFFER_WIDTH; i += 8)
+		{
+			const size_t x = (gb->ppu.scx + i) & 0xFF;
+			const size_t tile_x = x >> 3u;
+
+			const size_t map_offset = vram_offset + (tile_y << 5u) + tile_x;
+			const uint8_t tile_idx = gb->memory.vram[map_offset];
+
+			gb_TileLine line = gb_GetTileLine(gb, lcdc->bg_tileset_select ? 1 : 0, tile_idx, in_tile_y, palette);
+
+			size_t in_tile_x = x & 7u;
+			for (; in_tile_x < 8 && i < GB_FRAMEBUFFER_WIDTH; ++i, ++in_tile_x)
+			{
+				gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + i] = line.pixels[in_tile_x];
+			}
+		}
+	}
+}
+
+static void
+gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
+{
+	// TODO: Handle LCD disabling/resets.
+	//
 	// Reset LCD clock, registers, etc.
 	// https://www.reddit.com/r/Gameboy/comments/a1c8h0/comment/eap4f8c/
-	//
-	// TODO: wait one frame before
 	//
 	// https://gbdev.io/pandocs/LCDC.html
 	// We don't emulate this:
 	// When re-enabling the LCD, the PPU will immediately start drawing again, but the screen will stay blank during the
 	// first frame.
+
+	gb->ppu.mode_clock += 4 * elapsed_m_cycles;
+
+	struct gb_PpuStatFlags *stat = &gb->ppu.stat.flags;
+
+	switch (stat->mode)
+	{
+	case GB_PPU_MODE_HBLANK:
+		if (gb->ppu.mode_clock >= 204)
+		{
+			gb->ppu.mode_clock -= 204;
+
+			++gb->ppu.ly;
+			assert(gb->ppu.ly <= 144);
+			stat->coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
+
+			if (stat->interrupt_coincidence && stat->coincidence_flag)
+			{
+				gb->cpu.interrupt.if_flags.lcd_stat = 1;
+			}
+
+			if (gb->ppu.ly == 144)
+			{
+				stat->mode = GB_PPU_MODE_VBLANK;
+				gb->cpu.interrupt.if_flags.vblank = 1;
+
+				if (stat->interrupt_mode_vblank)
+				{
+					gb->cpu.interrupt.if_flags.lcd_stat = 1;
+				}
+			}
+			else
+			{
+				stat->mode = GB_PPU_MODE_OAM_SCAN;
+
+				if (stat->interrupt_mode_oam_scan)
+				{
+					gb->cpu.interrupt.if_flags.lcd_stat = 1;
+				}
+			}
+		}
+		break;
+	case GB_PPU_MODE_VBLANK:
+		if (gb->ppu.mode_clock >= 456)
+		{
+			gb->ppu.mode_clock -= 456;
+			++gb->ppu.ly;
+			assert(gb->ppu.ly > 144 && gb->ppu.ly <= 154);
+			stat->coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
+
+			if (gb->ppu.ly == 154)
+			{
+				gb->ppu.ly = 0;
+				stat->mode = GB_PPU_MODE_OAM_SCAN;
+
+				if (stat->interrupt_mode_oam_scan)
+				{
+					gb->cpu.interrupt.if_flags.lcd_stat = 1;
+				}
+			}
+		}
+		break;
+	case GB_PPU_MODE_OAM_SCAN:
+		if (gb->ppu.mode_clock >= 80)
+		{
+			gb->ppu.mode_clock -= 80;
+			stat->mode = GB_PPU_MODE_VRAM_SCAN;
+		}
+		break;
+	case GB_PPU_MODE_VRAM_SCAN:
+		if (gb->ppu.mode_clock >= 172)
+		{
+			gb->ppu.mode_clock -= 172;
+			stat->mode = GB_PPU_MODE_HBLANK;
+
+			if (stat->interrupt_mode_hblank)
+			{
+				gb->cpu.interrupt.if_flags.lcd_stat = 1;
+			}
+
+			// This is vastly simplified. Ideally the LCD should get updated after
+			// every T cycle. See: https://gbdev.io/pandocs/Rendering.html
+			gb__RenderScanLine(gb);
+		}
+		break;
+	}
+
+	assert(stat->mode != GB_PPU_MODE_HBLANK || gb->ppu.mode_clock < 204);
+	assert(stat->mode != GB_PPU_MODE_VBLANK || gb->ppu.mode_clock < 456);
+	assert(stat->mode != GB_PPU_MODE_OAM_SCAN || gb->ppu.mode_clock < 80);
+	assert(stat->mode != GB_PPU_MODE_VRAM_SCAN || gb->ppu.mode_clock < 172);
 }
 
 size_t
@@ -3100,7 +3233,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		gb->timer.t_clock = 0xABCC;
 	}
 
-	const size_t num_interrupt_cycles = gb__HandleInterrupts(gb);
+	const uint16_t num_interrupt_cycles = gb__HandleInterrupts(gb);
 	if (num_interrupt_cycles)
 	{
 		gb__UpdateClockAndTimer(gb, num_interrupt_cycles);
@@ -3109,7 +3242,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		gb__AdvancePpu(gb, num_interrupt_cycles);
 	}
 
-	size_t num_cycles = 0;
+	uint16_t num_cycles = 0;
 	if (!gb->cpu.halt)
 	{
 		const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
@@ -3208,9 +3341,23 @@ gb_GetMapTileLine(gb_GameBoy *gb, size_t map_index, size_t tile_x_index, size_t 
 	assert(tile_x_index < 32);
 	assert(y_index < 8 * 32);
 
+	// const size_t vram_offset = lcdc->bg_tilemap_select ? 0x1C00 : 0x1800;
+
+	// const size_t tile_y = ((gb->ppu.ly + gb->ppu.scy) & 0xFF) >> 3u;
+	// const size_t tile_line_offset = tile_y << 5u;  // 32 tiles per line
+
+	// const size_t tile_x = gb->ppu.scx >> 3u;
+	// var lineoffs = (GPU._scx >> 3);
+
 	(void)gb;
 	(void)palette;
 	return (gb_TileLine){ 0 };
+}
+
+bool
+gb_FramebufferUpdated(gb_GameBoy *gb)
+{
+	return gb->ppu.ly == 144;
 }
 
 uint32_t
