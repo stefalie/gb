@@ -2,6 +2,7 @@
 
 #include "gb.h"
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -3526,51 +3527,88 @@ gb__MagFramebufferScale4xAdvMame4x(const gb_Framebuffer input, gb_Color *pixels)
 // (https://github.com/Treeki/libxbr-standalone/blob/master/xbr.c#L317). The JS
 // version and the tutorial are alot easier to grok, and therefore we base the
 // implementation here on that.
-// The Yuv difference is simplified since for monochrome Yuv == (gray, 0, 0).
-//
-// uint8_t b = abs(((a & BLUE_MASK)  >> 16) - ((b & BLUE_MASK)  >> 16));
-// uint8_t g = abs(((a & GREEN_MASK) >>  8) - ((b & GREEN_MASK) >>  8));
-// uint8_t r = abs( (a & RED_MASK)          -  (b & RED_MASK)         );
-// float y = fabsf( 0.299 * r + 0.587 * g + 0.114 * b);
-// float u = fabsf(-0.169 * r - 0.331 * g + 0.500 * b);
-// float v = fabsf( 0.500 * r - 0.419 * g - 0.081 * b);
-// uint32_t yuv_diff = 48 * y + 7 * u + 6 * v;
-#define XBR_THRESHHOLD_Y 48
-#define XBR_DIFF(a, b) (XBR_THRESHHOLD_Y * ((uint32_t)abs(a - b)))
+#define XBR_THRESHHOLD_Y 48.0f
+#define XBR_THRESHHOLD_U 7.0f
+#define XBR_THRESHHOLD_V 6.0f
 
-#define XBR_EQ(a, b) (abs(a - b) <= XBR_THRESHHOLD_Y)
+typedef struct gb__XbrYuv
+{
+	float y, u, v;
+} gb__XbrYuv;
 
-// The interpolation in the original C version with 4 channels is ingenious.
-// It's split up into 2 parts so that always 2 channels are interpolated at once
-// and the gaps inbetween are used to prevent spill into the higher up part.
-// For our single monotone channel it's easier, but we have to cast to a wider
-// type so that the value can temporarily overflow.
-#define XBR_INTERP(a, b, m, s) \
-	(0xFF & ((0xFF & (uint16_t)a) + ((((0xFF & (uint16_t)b) - (0xFF & (uint16_t)a)) * m) >> s)))
-#define XBR_INTERP_32(a, b) XBR_INTERP(a, b, 1, 3)
-#define XBR_INTERP_64(a, b) XBR_INTERP(a, b, 1, 2)
-#define XBR_INTERP_128(a, b) XBR_INTERP(a, b, 1, 1)
-#define XBR_INTERP_192(a, b) XBR_INTERP(a, b, 3, 2)
-#define XBR_INTERP_224(a, b) XBR_INTERP(a, b, 7, 3)
+static inline gb__XbrYuv
+gb__XbrRgb2Yuv(uint32_t rgb)
+{
+	const uint8_t r = rgb & 0xFF;
+	const uint8_t g = (rgb >> 8u) & 0xFF;
+	const uint8_t b = (rgb >> 16u) & 0xFF;
+	return (gb__XbrYuv){
+		.y = 0.299f * r + 0.587f * g + 0.114f * b,
+		.u = -0.169f * r - 0.331f * g + 0.500f * b,
+		.v = 0.500f * r - 0.419f * g - 0.081f * b,
+	};
+}
 
-/*
+static inline uint32_t
+gb__XbrDiff(uint32_t a, uint32_t b)
+{
+	const gb__XbrYuv a_yuv = gb__XbrRgb2Yuv(a);
+	const gb__XbrYuv b_yuv = gb__XbrRgb2Yuv(b);
+	return (uint32_t)(fabsf(a_yuv.y - b_yuv.y) * XBR_THRESHHOLD_Y + fabsf(a_yuv.u - b_yuv.u) * XBR_THRESHHOLD_U +
+			fabsf(a_yuv.v - b_yuv.v) * XBR_THRESHHOLD_V);
+}
+
+static inline bool
+gb__XbrEq(uint32_t a, uint32_t b)
+{
+	const gb__XbrYuv a_yuv = gb__XbrRgb2Yuv(a);
+	const gb__XbrYuv b_yuv = gb__XbrRgb2Yuv(b);
+	return fabsf(a_yuv.y - b_yuv.y) <= XBR_THRESHHOLD_Y && fabsf(a_yuv.u - b_yuv.u) <= XBR_THRESHHOLD_U &&
+			fabsf(a_yuv.v - b_yuv.v) <= XBR_THRESHHOLD_V;
+}
+
+static inline uint32_t
+gb__XbrInterp(uint32_t a, uint32_t b, uint32_t m, uint32_t s)
+{
+	const uint32_t part_mask = 0x00FF00FF;
+
+	const uint32_t a_part1 = a & part_mask;
+	const uint32_t b_part1 = b & part_mask;
+	const uint32_t a_part2 = (a >> 8u) & part_mask;
+	const uint32_t b_part2 = (b >> 8u) & part_mask;
+
+	const uint32_t result_part1 = part_mask & (a_part1 + (((b_part1 - a_part1) * m) >> s));
+	const uint32_t result_part2 = (part_mask & (a_part2 + (((b_part2 - a_part2) * m) >> s))) << 8u;
+
+	return result_part1 + result_part2;
+}
+
+#define XBR_INTERP_32(a, b) gb__XbrInterp(a, b, 1, 3)
+#define XBR_INTERP_64(a, b) gb__XbrInterp(a, b, 1, 2)
+#define XBR_INTERP_128(a, b) gb__XbrInterp(a, b, 1, 1)
+#define XBR_INTERP_192(a, b) gb__XbrInterp(a, b, 3, 2)
+#define XBR_INTERP_224(a, b) gb__XbrInterp(a, b, 7, 3)
+
 static inline void
-gb__XbrFilter2(gb_Color E, gb_Color I, gb_Color H, gb_Color F, gb_Color G, gb_Color C, gb_Color D, gb_Color B,
-		gb_Color F4, gb_Color I4, gb_Color H5, gb_Color I5, int N1, int N2, int N3, gb_Color *E_out)
+gb__XbrFilter2(uint32_t E, uint32_t I, uint32_t H, uint32_t F, uint32_t G, uint32_t C, uint32_t D, uint32_t B,
+		uint32_t F4, uint32_t I4, uint32_t H5, uint32_t I5, int N1, int N2, int N3, uint32_t *E_out)
 {
 	if (E != H && E != F)
 	{
-		const uint32_t e = XBR_DIFF(E, C) + XBR_DIFF(E, G) + XBR_DIFF(I, H5) + XBR_DIFF(I, F4) + (4 * XBR_DIFF(H, F));
-		const uint32_t i = XBR_DIFF(H, D) + XBR_DIFF(H, I5) + XBR_DIFF(F, I4) + XBR_DIFF(F, B) + (4 * XBR_DIFF(E, I));
+		const uint32_t e = gb__XbrDiff(E, C) + gb__XbrDiff(E, G) + gb__XbrDiff(I, H5) + gb__XbrDiff(I, F4) +
+				(4 * gb__XbrDiff(H, F));
+		const uint32_t i = gb__XbrDiff(H, D) + gb__XbrDiff(H, I5) + gb__XbrDiff(F, I4) + gb__XbrDiff(F, B) +
+				(4 * gb__XbrDiff(E, I));
 		if (e <= i)
 		{
-			const gb_Color px = XBR_DIFF(E, F) <= XBR_DIFF(E, H) ? F : H;
+			const uint32_t px = gb__XbrDiff(E, F) <= gb__XbrDiff(E, H) ? F : H;
 			if (e < i &&
-					((!XBR_EQ(F, B) && !XBR_EQ(H, D)) || (XBR_EQ(E, I) && (!XBR_EQ(F, I4) && !XBR_EQ(H, I5))) ||
-							XBR_EQ(E, G) || XBR_EQ(E, C)))
+					((!gb__XbrEq(F, B) && !gb__XbrEq(H, D)) ||
+							(gb__XbrEq(E, I) && (!gb__XbrEq(F, I4) && !gb__XbrEq(H, I5))) || gb__XbrEq(E, G) ||
+							gb__XbrEq(E, C)))
 			{
-				const uint32_t ke = XBR_DIFF(F, G);
-				const uint32_t ki = XBR_DIFF(H, C);
+				const uint32_t ke = gb__XbrDiff(F, G);
+				const uint32_t ki = gb__XbrDiff(H, C);
 				const int left = ke << 1 <= ki && E != G && D != G;
 				const int up = ke >= ki << 1 && E != C && B != C;
 				if (left && up)
@@ -3600,25 +3638,23 @@ gb__XbrFilter2(gb_Color E, gb_Color I, gb_Color H, gb_Color F, gb_Color G, gb_Co
 			}
 		}
 	}
-}*/
+}
 
 static gb_Framebuffer
 gb__MagFramebufferXbr2(const gb_Framebuffer input, gb_Color *pixels)
 {
-	(void)input;
-	/*
 	const int nl = input.width * 2;
 
 	for (int y = 0; y < input.height; ++y)
 	{
 		// Output
-		gb_Color *E_out = pixels + y * input.width * 2 * 2;
+		uint32_t *E_out = &pixels[0].as_u32 + y * input.width * 2 * 2;
 
-		const gb_Color *row0 = input.pixels + (y - 2) * input.width - 2;
-		const gb_Color *row1 = row0 + input.width;
-		const gb_Color *row2 = row1 + input.width;
-		const gb_Color *row3 = row2 + input.width;
-		const gb_Color *row4 = row3 + input.width;
+		const uint32_t *row0 = &input.pixels[0].as_u32 + (y - 2) * input.width - 2;
+		const uint32_t *row1 = row0 + input.width;
+		const uint32_t *row2 = row1 + input.width;
+		const uint32_t *row3 = row2 + input.width;
+		const uint32_t *row4 = row3 + input.width;
 
 		// Clamping
 		if (y == 0)
@@ -3648,31 +3684,31 @@ gb__MagFramebufferXbr2(const gb_Framebuffer input, gb_Color *pixels)
 			const int next = 2 + (x < input.width - 1);
 			const int next2 = next + (x < input.width - 2);
 
-			const gb_Color A0 = row1[prev2];
-			const gb_Color D0 = row2[prev2];
-			const gb_Color G0 = row3[prev2];
+			const uint32_t A0 = row1[prev2];
+			const uint32_t D0 = row2[prev2];
+			const uint32_t G0 = row3[prev2];
 
-			const gb_Color A1 = row0[prev];
-			const gb_Color A = row1[prev];
-			const gb_Color D = row2[prev];
-			const gb_Color G = row3[prev];
-			const gb_Color G5 = row4[prev];
+			const uint32_t A1 = row0[prev];
+			const uint32_t A = row1[prev];
+			const uint32_t D = row2[prev];
+			const uint32_t G = row3[prev];
+			const uint32_t G5 = row4[prev];
 
-			const gb_Color B1 = row0[2];
-			const gb_Color B = row1[2];
-			const gb_Color E = row2[2];
-			const gb_Color H = row3[2];
-			const gb_Color H5 = row4[2];
+			const uint32_t B1 = row0[2];
+			const uint32_t B = row1[2];
+			const uint32_t E = row2[2];
+			const uint32_t H = row3[2];
+			const uint32_t H5 = row4[2];
 
-			const gb_Color C1 = row0[next];
-			const gb_Color C = row1[next];
-			const gb_Color F = row2[next];
-			const gb_Color I = row3[next];
-			const gb_Color I5 = row4[next];
+			const uint32_t C1 = row0[next];
+			const uint32_t C = row1[next];
+			const uint32_t F = row2[next];
+			const uint32_t I = row3[next];
+			const uint32_t I5 = row4[next];
 
-			const gb_Color C4 = row1[next2];
-			const gb_Color F4 = row2[next2];
-			const gb_Color I4 = row3[next2];
+			const uint32_t C4 = row1[next2];
+			const uint32_t F4 = row2[next2];
+			const uint32_t I4 = row3[next2];
 
 			// This uses only the n == 2 version
 			E_out[0] = E_out[1] = E_out[nl] = E_out[nl + 1] = E;
@@ -3689,7 +3725,6 @@ gb__MagFramebufferXbr2(const gb_Framebuffer input, gb_Color *pixels)
 			E_out += 2;
 		}
 	}
-*/
 
 	return (gb_Framebuffer){
 		.width = 2 * GB_FRAMEBUFFER_WIDTH,
