@@ -317,8 +317,9 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			}
 		}
 		// When writing to the bus but nothing is connected it's undefined afaik.
-		// Let's return 0 in that case.
-		return 0x0;
+		// Let's return 0xFF in that case. It's supposedly the default value of the
+		// data bus: https://www.reddit.com/r/EmuDev/comments/5nixai/gb_tetris_writing_to_unused_memory/
+		return 0xFF;
 	// (Internal) working RAM
 	case 0xC000:
 	case 0xD000:
@@ -340,7 +341,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			}
 			else  // Empty
 			{
-				return 0;
+				return 0xFF;
 			}
 		case 0x0F00:
 			if (addr == 0xFF00)
@@ -465,7 +466,8 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	case 0x2000:
 	case 0x3000:
 		assert(!mem->bios_mapped);
-		assert(mem->mbc_type != GB_MBC_TYPE_ROM_ONLY);  // TODO: probably wrong
+		// NOTE: Tetris writes to 0x2000 even though it's of MBC1 type, can't assert.
+		// See: https://www.reddit.com/r/EmuDev/comments/zddum6/gameboy_tetris_issues_with_getting_main_menu_to/
 		if (mem->mbc_type == GB_MBC_TYPE_1)
 		{
 			if (addr < 0x2000)
@@ -623,7 +625,9 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			else
 			{
 				// The empty area is ignored
-				assert(!"TODO");
+
+				// NOTE(stefalie): Tetris writes to 0xFEFF, therefore we can't assert.
+				// See: https://www.reddit.com/r/EmuDev/comments/5nixai/gb_tetris_writing_to_unused_memory/
 			}
 			break;
 		case 0x0F00:
