@@ -314,6 +314,14 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 size_t
 gb_ExecuteNextInstruction(gb_GameBoy *gb);
 
+typedef struct gb_Tile
+{
+	gb_Color pixels[8][8];
+} gb_Tile;
+
+gb_Tile
+gb_GetTile(gb_GameBoy *gb, size_t set_index, int tile_index);
+
 typedef struct gb_TileLine
 {
 	gb_Color pixels[8];
