@@ -17,10 +17,10 @@ gb_DefaultPalette(void)
 {
 	// Color scheme from https://gbdev.io/pandocs/Tile_Data.html
 	return (gb_Palette){
-		.dot_data_00 = 0xFF,
-		.dot_data_01 = 0xCC,
-		.dot_data_10 = 0x66,
-		.dot_data_11 = 0x00,
+		.dot_data_00_color = { .r = 0xE0, .g = 0xF8, .b = 0xD0 },
+		.dot_data_01_color = { .r = 0x88, .g = 0xC0, .b = 0x70 },
+		.dot_data_10_color = { .r = 0x34, .g = 0x68, .b = 0x56 },
+		.dot_data_11_color = { .r = 0x08, .g = 0x18, .b = 0x20 },
 	};
 }
 
@@ -3039,12 +3039,12 @@ gb__RenderScanLine(gb_GameBoy *gb)
 		const size_t in_tile_y = y & 7u;
 
 		const gb_Palette default_pal = gb_DefaultPalette();
-		const uint8_t *map = (const uint8_t *)&default_pal;
+		const gb_Color *map = (const gb_Color *)&default_pal;
 		gb_Palette pal;
-		pal.dot_data_00 = map[(gb->ppu.bgp >> 0u) & 0x03];
-		pal.dot_data_01 = map[(gb->ppu.bgp >> 2u) & 0x03];
-		pal.dot_data_10 = map[(gb->ppu.bgp >> 4u) & 0x03];
-		pal.dot_data_11 = map[(gb->ppu.bgp >> 6u) & 0x03];
+		pal.dot_data_00_color = map[(gb->ppu.bgp >> 0u) & 0x03];
+		pal.dot_data_01_color = map[(gb->ppu.bgp >> 2u) & 0x03];
+		pal.dot_data_10_color = map[(gb->ppu.bgp >> 4u) & 0x03];
+		pal.dot_data_11_color = map[(gb->ppu.bgp >> 6u) & 0x03];
 
 		size_t i = 0;
 		while (i < GB_FRAMEBUFFER_WIDTH)
@@ -3274,7 +3274,7 @@ gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_ind
 	const uint16_t tile_line = gb__Morton2(gb->memory.vram[vram_offset], gb->memory.vram[vram_offset + 1]);
 
 	// TODO: There must be some SIMD/SWAR way to do this.
-	const uint8_t *map = (const uint8_t *)&palette;
+	const gb_Color *map = (const gb_Color *)&palette;
 	gb_TileLine result;
 	result.pixels[0] = map[(tile_line >> 14u) & 3u];
 	result.pixels[1] = map[(tile_line >> 12u) & 3u];
@@ -3319,21 +3319,21 @@ gb_FramebufferUpdated(gb_GameBoy *gb)
 uint32_t
 gb_MagFramebufferSizeInBytes(gb_MagFilter mag_filter)
 {
-	const uint32_t num_pixels = GB_FRAMEBUFFER_WIDTH * GB_FRAMEBUFFER_HEIGHT;
+	const uint32_t num_bytes = GB_FRAMEBUFFER_WIDTH * GB_FRAMEBUFFER_HEIGHT * sizeof(gb_Color);
 
 	switch (mag_filter)
 	{
 	case GB_MAG_FILTER_NONE:
-		return num_pixels;
+		return num_bytes;
 	case GB_MAG_FILTER_EPX_SCALE2X_ADVMAME2X:
 	case GB_MAG_FILTER_XBR2:
-		return num_pixels * (2 * 2);
+		return num_bytes * (2 * 2);
 	case GB_MAG_FILTER_SCALE3X_ADVMAME3X_SCALEF:
-		return num_pixels * (3 * 3);
+		return num_bytes * (3 * 3);
 	case GB_MAG_FILTER_SCALE4X_ADVMAME4X:
 		// Needs storage for the temporary intermediate buffer. Smarter people might
 		// be able to do it in place.
-		return gb_MagFramebufferSizeInBytes(GB_MAG_FILTER_EPX_SCALE2X_ADVMAME2X) + num_pixels * (4 * 4);
+		return gb_MagFramebufferSizeInBytes(GB_MAG_FILTER_EPX_SCALE2X_ADVMAME2X) + num_bytes * (4 * 4);
 	default:
 		assert(false);
 		return 0;
@@ -3355,12 +3355,12 @@ gb_MaxMagFramebufferSizeInBytes(void)
 	return bytes;
 }
 
-static inline uint8_t
+static inline uint32_t
 gb__SrcPixel(const gb_Framebuffer input, int x, int y)
 {
 	x = CLAMP(x, 0, input.width - 1);
 	y = CLAMP(y, 0, input.height - 1);
-	return input.pixels[y * input.width + x];
+	return input.pixels[y * input.width + x].as_u32;
 }
 
 // TODO(stefalie): None of the magnification filters below are optimized/vectorized.
@@ -3371,19 +3371,19 @@ gb__SrcPixel(const gb_Framebuffer input, int x, int y)
 // McGuire, Gagiu; 2021; MMPX Style-Preserving Pixel-Art Magnification)
 // Also see: https://www.scale2x.it
 static gb_Framebuffer
-gb__MagFramebufferEpxScale2xAdvMame2x(const gb_Framebuffer input, uint8_t *pixels)
+gb__MagFramebufferEpxScale2xAdvMame2x(const gb_Framebuffer input, gb_Color *pixels)
 {
 	for (int y = 0; y < input.height; ++y)
 	{
 		for (int x = 0; x < input.width; ++x)
 		{
-			const uint8_t B = gb__SrcPixel(input, x + 0, y - 1);
-			const uint8_t D = gb__SrcPixel(input, x - 1, y + 0);  // Read in outer loop, and then as prev E.
-			const uint8_t E = gb__SrcPixel(input, x + 0, y + 0);  // Read in outer loop, and then as prev F.
-			const uint8_t F = gb__SrcPixel(input, x + 1, y + 0);
-			const uint8_t H = gb__SrcPixel(input, x + 0, y + 1);
+			const uint32_t B = gb__SrcPixel(input, x + 0, y - 1);
+			const uint32_t D = gb__SrcPixel(input, x - 1, y + 0);  // Read in outer loop, and then as prev E.
+			const uint32_t E = gb__SrcPixel(input, x + 0, y + 0);  // Read in outer loop, and then as prev F.
+			const uint32_t F = gb__SrcPixel(input, x + 1, y + 0);
+			const uint32_t H = gb__SrcPixel(input, x + 0, y + 1);
 
-			uint8_t J = E, K = E, L = E, M = E;
+			uint32_t J = E, K = E, L = E, M = E;
 
 			if (D == B && D != H && D != F)
 			{
@@ -3403,11 +3403,11 @@ gb__MagFramebufferEpxScale2xAdvMame2x(const gb_Framebuffer input, uint8_t *pixel
 			}
 
 			int dst_idx = (y * 2) * 2 * input.width + (2 * x);
-			pixels[dst_idx++] = J;
-			pixels[dst_idx] = K;
+			pixels[dst_idx++].as_u32 = J;
+			pixels[dst_idx].as_u32 = K;
 			dst_idx += 2 * input.width - 1;
-			pixels[dst_idx++] = L;
-			pixels[dst_idx] = M;
+			pixels[dst_idx++].as_u32 = L;
+			pixels[dst_idx].as_u32 = M;
 		}
 	}
 
@@ -3424,23 +3424,23 @@ gb__MagFramebufferEpxScale2xAdvMame2x(const gb_Framebuffer input, uint8_t *pixel
 // McGuire, Gagiu; 2021; MMPX Style-Preserving Pixel-Art Magnification)
 // Also see: https://www.scale2x.it
 static gb_Framebuffer
-gb__MagFramebufferScale3xAdvMame3xScaleF(gb_Framebuffer input, uint8_t *pixels)
+gb__MagFramebufferScale3xAdvMame3xScaleF(gb_Framebuffer input, gb_Color *pixels)
 {
 	for (int y = 0; y < input.height; ++y)
 	{
 		for (int x = 0; x < input.width; ++x)
 		{
-			const uint8_t A = gb__SrcPixel(input, x - 1, y - 1);
-			const uint8_t B = gb__SrcPixel(input, x + 0, y - 1);
-			const uint8_t C = gb__SrcPixel(input, x + 1, y - 1);
-			const uint8_t D = gb__SrcPixel(input, x - 1, y + 0);
-			const uint8_t E = gb__SrcPixel(input, x + 0, y + 0);
-			const uint8_t F = gb__SrcPixel(input, x + 1, y + 0);
-			const uint8_t G = gb__SrcPixel(input, x - 1, y + 1);
-			const uint8_t H = gb__SrcPixel(input, x + 0, y + 1);
-			const uint8_t I = gb__SrcPixel(input, x + 1, y + 1);
+			const uint32_t A = gb__SrcPixel(input, x - 1, y - 1);
+			const uint32_t B = gb__SrcPixel(input, x + 0, y - 1);
+			const uint32_t C = gb__SrcPixel(input, x + 1, y - 1);
+			const uint32_t D = gb__SrcPixel(input, x - 1, y + 0);
+			const uint32_t E = gb__SrcPixel(input, x + 0, y + 0);
+			const uint32_t F = gb__SrcPixel(input, x + 1, y + 0);
+			const uint32_t G = gb__SrcPixel(input, x - 1, y + 1);
+			const uint32_t H = gb__SrcPixel(input, x + 0, y + 1);
+			const uint32_t I = gb__SrcPixel(input, x + 1, y + 1);
 
-			uint8_t _1 = E, _2 = E, _3 = E, _4 = E, _5 = E, _6 = E, _7 = E, _8 = E, _9 = E;
+			uint32_t _1 = E, _2 = E, _3 = E, _4 = E, _5 = E, _6 = E, _7 = E, _8 = E, _9 = E;
 
 			const bool upper_left = D == B && D != H && B != F;
 			const bool upper_right = B == F && B != D && F != H;
@@ -3481,17 +3481,17 @@ gb__MagFramebufferScale3xAdvMame3xScaleF(gb_Framebuffer input, uint8_t *pixels)
 			}
 
 			int dst_idx = (y * 3) * 3 * input.width + (3 * x);
-			pixels[dst_idx++] = _1;
-			pixels[dst_idx++] = _2;
-			pixels[dst_idx] = _3;
+			pixels[dst_idx++].as_u32 = _1;
+			pixels[dst_idx++].as_u32 = _2;
+			pixels[dst_idx].as_u32 = _3;
 			dst_idx += 3 * input.width - 2;
-			pixels[dst_idx++] = _4;
-			pixels[dst_idx++] = _5;
-			pixels[dst_idx] = _6;
+			pixels[dst_idx++].as_u32 = _4;
+			pixels[dst_idx++].as_u32 = _5;
+			pixels[dst_idx].as_u32 = _6;
 			dst_idx += 3 * input.width - 2;
-			pixels[dst_idx++] = _7;
-			pixels[dst_idx++] = _8;
-			pixels[dst_idx] = _9;
+			pixels[dst_idx++].as_u32 = _7;
+			pixels[dst_idx++].as_u32 = _8;
+			pixels[dst_idx].as_u32 = _9;
 		}
 	}
 
@@ -3503,10 +3503,10 @@ gb__MagFramebufferScale3xAdvMame3xScaleF(gb_Framebuffer input, uint8_t *pixels)
 }
 
 static inline gb_Framebuffer
-gb__MagFramebufferScale4xAdvMame4x(const gb_Framebuffer input, uint8_t *pixels)
+gb__MagFramebufferScale4xAdvMame4x(const gb_Framebuffer input, gb_Color *pixels)
 {
 	// Run Scale2x twice.
-	uint8_t *pixels2x = pixels + (4 * input.width) * (4 * input.height);
+	gb_Color *pixels2x = pixels + (4 * input.width) * (4 * input.height);
 	const gb_Framebuffer fb2x = gb__MagFramebufferEpxScale2xAdvMame2x(input, pixels2x);
 	return gb__MagFramebufferEpxScale2xAdvMame2x(fb2x, pixels);
 }
@@ -3553,9 +3553,10 @@ gb__MagFramebufferScale4xAdvMame4x(const gb_Framebuffer input, uint8_t *pixels)
 #define XBR_INTERP_192(a, b) XBR_INTERP(a, b, 3, 2)
 #define XBR_INTERP_224(a, b) XBR_INTERP(a, b, 7, 3)
 
+/*
 static inline void
-gb__XbrFilter2(uint8_t E, uint8_t I, uint8_t H, uint8_t F, uint8_t G, uint8_t C, uint8_t D, uint8_t B, uint8_t F4,
-		uint8_t I4, uint8_t H5, uint8_t I5, int N1, int N2, int N3, uint8_t *E_out)
+gb__XbrFilter2(gb_Color E, gb_Color I, gb_Color H, gb_Color F, gb_Color G, gb_Color C, gb_Color D, gb_Color B,
+		gb_Color F4, gb_Color I4, gb_Color H5, gb_Color I5, int N1, int N2, int N3, gb_Color *E_out)
 {
 	if (E != H && E != F)
 	{
@@ -3563,7 +3564,7 @@ gb__XbrFilter2(uint8_t E, uint8_t I, uint8_t H, uint8_t F, uint8_t G, uint8_t C,
 		const uint32_t i = XBR_DIFF(H, D) + XBR_DIFF(H, I5) + XBR_DIFF(F, I4) + XBR_DIFF(F, B) + (4 * XBR_DIFF(E, I));
 		if (e <= i)
 		{
-			const uint8_t px = XBR_DIFF(E, F) <= XBR_DIFF(E, H) ? F : H;
+			const gb_Color px = XBR_DIFF(E, F) <= XBR_DIFF(E, H) ? F : H;
 			if (e < i &&
 					((!XBR_EQ(F, B) && !XBR_EQ(H, D)) || (XBR_EQ(E, I) && (!XBR_EQ(F, I4) && !XBR_EQ(H, I5))) ||
 							XBR_EQ(E, G) || XBR_EQ(E, C)))
@@ -3599,23 +3600,25 @@ gb__XbrFilter2(uint8_t E, uint8_t I, uint8_t H, uint8_t F, uint8_t G, uint8_t C,
 			}
 		}
 	}
-}
+}*/
 
 static gb_Framebuffer
-gb__MagFramebufferXbr2(const gb_Framebuffer input, uint8_t *pixels)
+gb__MagFramebufferXbr2(const gb_Framebuffer input, gb_Color *pixels)
 {
+	(void)input;
+	/*
 	const int nl = input.width * 2;
 
 	for (int y = 0; y < input.height; ++y)
 	{
 		// Output
-		uint8_t *E_out = pixels + y * input.width * 2 * 2;
+		gb_Color *E_out = pixels + y * input.width * 2 * 2;
 
-		const uint8_t *row0 = input.pixels + (y - 2) * input.width - 2;
-		const uint8_t *row1 = row0 + input.width;
-		const uint8_t *row2 = row1 + input.width;
-		const uint8_t *row3 = row2 + input.width;
-		const uint8_t *row4 = row3 + input.width;
+		const gb_Color *row0 = input.pixels + (y - 2) * input.width - 2;
+		const gb_Color *row1 = row0 + input.width;
+		const gb_Color *row2 = row1 + input.width;
+		const gb_Color *row3 = row2 + input.width;
+		const gb_Color *row4 = row3 + input.width;
 
 		// Clamping
 		if (y == 0)
@@ -3645,31 +3648,31 @@ gb__MagFramebufferXbr2(const gb_Framebuffer input, uint8_t *pixels)
 			const int next = 2 + (x < input.width - 1);
 			const int next2 = next + (x < input.width - 2);
 
-			const uint8_t A0 = row1[prev2];
-			const uint8_t D0 = row2[prev2];
-			const uint8_t G0 = row3[prev2];
+			const gb_Color A0 = row1[prev2];
+			const gb_Color D0 = row2[prev2];
+			const gb_Color G0 = row3[prev2];
 
-			const uint8_t A1 = row0[prev];
-			const uint8_t A = row1[prev];
-			const uint8_t D = row2[prev];
-			const uint8_t G = row3[prev];
-			const uint8_t G5 = row4[prev];
+			const gb_Color A1 = row0[prev];
+			const gb_Color A = row1[prev];
+			const gb_Color D = row2[prev];
+			const gb_Color G = row3[prev];
+			const gb_Color G5 = row4[prev];
 
-			const uint8_t B1 = row0[2];
-			const uint8_t B = row1[2];
-			const uint8_t E = row2[2];
-			const uint8_t H = row3[2];
-			const uint8_t H5 = row4[2];
+			const gb_Color B1 = row0[2];
+			const gb_Color B = row1[2];
+			const gb_Color E = row2[2];
+			const gb_Color H = row3[2];
+			const gb_Color H5 = row4[2];
 
-			const uint8_t C1 = row0[next];
-			const uint8_t C = row1[next];
-			const uint8_t F = row2[next];
-			const uint8_t I = row3[next];
-			const uint8_t I5 = row4[next];
+			const gb_Color C1 = row0[next];
+			const gb_Color C = row1[next];
+			const gb_Color F = row2[next];
+			const gb_Color I = row3[next];
+			const gb_Color I5 = row4[next];
 
-			const uint8_t C4 = row1[next2];
-			const uint8_t F4 = row2[next2];
-			const uint8_t I4 = row3[next2];
+			const gb_Color C4 = row1[next2];
+			const gb_Color F4 = row2[next2];
+			const gb_Color I4 = row3[next2];
 
 			// This uses only the n == 2 version
 			E_out[0] = E_out[1] = E_out[nl] = E_out[nl + 1] = E;
@@ -3686,6 +3689,7 @@ gb__MagFramebufferXbr2(const gb_Framebuffer input, uint8_t *pixels)
 			E_out += 2;
 		}
 	}
+*/
 
 	return (gb_Framebuffer){
 		.width = 2 * GB_FRAMEBUFFER_WIDTH,
@@ -3695,7 +3699,7 @@ gb__MagFramebufferXbr2(const gb_Framebuffer input, uint8_t *pixels)
 }
 
 gb_Framebuffer
-gb_MagFramebuffer(const gb_GameBoy *gb, gb_MagFilter mag_filter, uint8_t *pixels)
+gb_MagFramebuffer(const gb_GameBoy *gb, gb_MagFilter mag_filter, gb_Color *pixels)
 {
 	const gb_Framebuffer input = {
 		.width = GB_FRAMEBUFFER_WIDTH,

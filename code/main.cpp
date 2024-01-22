@@ -1066,7 +1066,7 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 			}
 
 			glBindTexture(GL_TEXTURE_2D, config->debug.tile_sets_texture);
-			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, img);
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, img);
 
 			ImGui::Image((void *)(uint64_t)config->debug.tile_sets_texture, ImVec2(7.0f * width, 7.0f * height));
 			ImGui::End();
@@ -1270,26 +1270,26 @@ static const char* fragment_shader_source =
 		"	mag_sample_uv /= vec2(textureSize(gameboy_fb_tex, 0));\n"
 		"\n"
 		"	mag_sample_uv.y = 1.0 - mag_sample_uv.y;  // Image is upside down in tex memory.\n"
-		"	float pixel_intensity = texture2D(gameboy_fb_tex, mag_sample_uv).r;\n"
+		"	vec3 color = texture2D(gameboy_fb_tex, mag_sample_uv).rgb;\n"
 		"\n"
 		"	// TODO: Tone mapping etc.\n"
-		"	gl_FragColor = vec4(vec3(pixel_intensity), 1.0);\n"
+		"	gl_FragColor = vec4(color, 1.0);\n"
 		"}\n";
 
 static void
-UpdateGameTexture(gb_GameBoy *gb, Config *cfg, GLuint texture, uint8_t *pixels)
+UpdateGameTexture(gb_GameBoy *gb, Config *cfg, GLuint texture, gb_Color *pixels)
 {
 	const gb_Framebuffer fb = gb_MagFramebuffer(gb, cfg->ini.mag_filter, pixels);
 	glBindTexture(GL_TEXTURE_2D, texture);
 	if (cfg->gui.mag_filter_changed)
 	{
 		// Re-alloc texture when mag filter changed as the size is most likely different.
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, fb.width, fb.height, 0, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, fb.width, fb.height, 0, GL_RGB, GL_UNSIGNED_BYTE, fb.pixels);
 		cfg->gui.mag_filter_changed = false;
 	}
 	else
 	{
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, fb.width, fb.height, GL_RED, GL_UNSIGNED_BYTE, fb.pixels);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, fb.width, fb.height, GL_RGBA, GL_UNSIGNED_BYTE, fb.pixels);
 	}
 }
 
@@ -1479,7 +1479,7 @@ main(int argc, char *argv[])
 		glBindTexture(GL_TEXTURE_2D, config.debug.tile_sets_texture);
 		// The texture vertically stackes the 3 half tile sets.
 		// Each tile set is put in a rectangle of 16x8 tiles.
-		glTexImage2D(GL_TEXTURE_2D, 0, 1/* TODO HACK */, 16 * 8, 3 * 8 * 8, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 16 * 8, 3 * 8 * 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -1488,7 +1488,7 @@ main(int argc, char *argv[])
 
 		glGenTextures(1, &config.debug.tile_map_0_texture);
 		glBindTexture(GL_TEXTURE_2D, config.debug.tile_map_0_texture);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 32 * 8, 32 * 8, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 32 * 8, 32 * 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -1497,7 +1497,7 @@ main(int argc, char *argv[])
 
 		glGenTextures(1, &config.debug.tile_map_1_texture);
 		glBindTexture(GL_TEXTURE_2D, config.debug.tile_map_1_texture);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 32 * 8, 32 * 8, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 32 * 8, 32 * 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -1506,7 +1506,7 @@ main(int argc, char *argv[])
 	}
 
 	gb_GameBoy gb = {};
-	uint8_t *pixels = (uint8_t *)malloc(gb_MaxMagFramebufferSizeInBytes());
+	gb_Color *pixels = (gb_Color *)malloc(gb_MaxMagFramebufferSizeInBytes());
 	if (argc > 1)
 	{
 		LoadRomFromFile(&config, &gb, argv[1]);

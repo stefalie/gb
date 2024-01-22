@@ -20,12 +20,28 @@ typedef enum gb_PpuMode
 	GB_PPU_MODE_VRAM_SCAN,
 } gb_PpuMode;
 
+// Note that this is currently rather wasteful as we only support the monochrome
+// DMG. If we however decide to go for Color GameBoy support, this will make it
+// easy. It also allows to map the monochrome values to whatever RGB values we
+// want.
+typedef union gb_Color
+{
+	struct
+	{
+		uint8_t r;
+		uint8_t g;
+		uint8_t b;
+		uint8_t _;  // Unused, for alignment.
+	};
+	uint32_t as_u32;
+} gb_Color;
+
 typedef struct gb_Palette
 {
-	uint8_t dot_data_00;
-	uint8_t dot_data_01;
-	uint8_t dot_data_10;
-	uint8_t dot_data_11;
+	gb_Color dot_data_00_color;
+	gb_Color dot_data_01_color;
+	gb_Color dot_data_10_color;
+	gb_Color dot_data_11_color;
 } gb_Palette;
 
 gb_Palette
@@ -235,10 +251,10 @@ typedef struct gb_GameBoy
 	{
 		bool updated;
 
-		// One gray-scale 1-byte value per pixels. This is unlike the original GameBoy
-		// with only 2 bits per pixel. Using a full byte per pixel makes it easier to
-		// directly map the framebuffer onto a texture.
-		uint8_t pixels[GB_FRAMEBUFFER_WIDTH * GB_FRAMEBUFFER_HEIGHT];
+		// The original DMG only has 2 bits per pixel, but This makes it easy to
+		// map the framebuffer onto a texture (and there won't be anything to change
+		// if we ever support the Color GameBoy).
+		gb_Color pixels[GB_FRAMEBUFFER_WIDTH * GB_FRAMEBUFFER_HEIGHT];
 	} display;
 
 	struct gb_Rom
@@ -300,7 +316,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb);
 
 typedef struct gb_TileLine
 {
-	uint8_t pixels[8];
+	gb_Color pixels[8];
 } gb_TileLine;
 
 // Returns a line inside one tile, 2 bits per pixel.
@@ -326,7 +342,7 @@ typedef struct gb_Framebuffer
 {
 	uint16_t width;
 	uint16_t height;
-	const uint8_t *pixels;
+	const gb_Color *pixels;
 } gb_Framebuffer;
 
 // Magnification filters for the framebuffer
@@ -370,4 +386,4 @@ gb_MaxMagFramebufferSizeInBytes(void);
 // Magnify 'gb's default framebuffer with a given filter and stores in user
 // provided buffer.
 gb_Framebuffer
-gb_MagFramebuffer(const gb_GameBoy *gb, gb_MagFilter mag_filter, uint8_t *pixels);
+gb_MagFramebuffer(const gb_GameBoy *gb, gb_MagFilter mag_filter, gb_Color *pixels);
