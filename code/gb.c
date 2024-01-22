@@ -74,8 +74,6 @@ static const uint8_t gb__bios[256] = { 0x31, 0xFE, 0xFF, 0xAF, 0x21, 0xFF, 0x9F,
 	0x42, 0x3C, 0x21, 0x04, 0x01, 0x11, 0xA8, 0x00, 0x1A, 0x13, 0xBE, 0x20, 0xFE, 0x23, 0x7D, 0xFE, 0x34, 0x20, 0xF5,
 	0x06, 0x19, 0x78, 0x86, 0x23, 0x05, 0x20, 0xFB, 0x86, 0x20, 0xFE, 0x3E, 0x01, 0xE0, 0x50 };
 
-// TODO: consider adding nibble functions? mostly for half carry?
-
 static inline uint8_t
 gb__Hi(uint16_t val)
 {
@@ -85,14 +83,7 @@ gb__Hi(uint16_t val)
 static inline uint8_t
 gb__Lo(uint16_t val)
 {
-	return val & 0xFF;
-}
-
-// TODO: Inline if only used once?
-static inline uint16_t
-gb__LoHi(uint8_t lo, uint8_t hi)
-{
-	return lo + (hi << 8u);
+	return (uint8_t)val;
 }
 
 static inline const gb__RomHeader *
@@ -112,10 +103,6 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
 	const uint8_t nintendo_logo[] = { 0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00,
 		0x0C, 0x00, 0x0D, 0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9,
 		0x99, 0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E };
-	// TODO: I think this is identical. Identical to what?
-	// TODO: I think this can be skipped if we execute the BIOS startup sequence:
-	// the comparison still happens, but it will be emulated.
-	// const uint8_t* nintendo_logo = &gb__bios[120];
 
 	if (memcmp(nintendo_logo, header->nintendo_logo, sizeof(header->nintendo_logo)))
 	{
@@ -776,7 +763,7 @@ gb__MemoryWriteWord(gb_GameBoy *gb, uint16_t addr, uint16_t value)
 static inline uint16_t
 gb__MemoryReadWord(gb_GameBoy *gb, uint16_t addr)
 {
-	return gb__LoHi(gb_MemoryReadByte(gb, addr), gb_MemoryReadByte(gb, addr + 1));
+	return gb_MemoryReadByte(gb, addr) + (gb_MemoryReadByte(gb, addr + 1) << 8u);
 }
 
 static inline void
@@ -3019,7 +3006,7 @@ gb__UpdateClockAndTimer(gb_GameBoy *gb, size_t elapsed_m_cycles)
 		gb->timer.t_clock += (uint16_t)(4 * elapsed_m_cycles);
 
 		// The DIV timer is the higher byte of the 16 bit internal t-clock.
-		gb->timer.div = (gb->timer.t_clock >> 8u) & 0xFF;
+		gb->timer.div = gb__Hi(gb->timer.t_clock);
 
 		if (gb->timer.tac.enable)
 		{

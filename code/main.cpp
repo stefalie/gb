@@ -1479,7 +1479,7 @@ main(int argc, char *argv[])
 		glBindTexture(GL_TEXTURE_2D, config.debug.tile_sets_texture);
 		// The texture vertically stackes the 3 half tile sets.
 		// Each tile set is put in a rectangle of 16x8 tiles.
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 16 * 8, 3 * 8 * 8, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		glTexImage2D(GL_TEXTURE_2D, 0, 1/* TODO HACK */, 16 * 8, 3 * 8 * 8, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
