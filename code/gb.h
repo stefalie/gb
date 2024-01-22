@@ -233,6 +233,8 @@ typedef struct gb_GameBoy
 
 	struct gb_Display
 	{
+		bool updated;
+
 		// One gray-scale 1-byte value per pixels. This is unlike the original GameBoy
 		// with only 2 bits per pixel. Using a full byte per pixel makes it easier to
 		// directly map the framebuffer onto a texture.
@@ -318,6 +320,7 @@ gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_ind
 gb_TileLine
 gb_GetMapTileLine(gb_GameBoy *gb, size_t map_index, size_t tile_x_index, size_t y_index, gb_Palette palette);
 
+// TODO: find a different name as this changes the state of the emu.
 // Returns true if a new frame has been fully rendered.
 // Use this to check if the emulator's texture should be updated.
 bool

@@ -3058,7 +3058,9 @@ gb__UpdateClockAndTimer(gb_GameBoy *gb, size_t elapsed_m_cycles)
 			assert(period_in_m_cyles >= 0);
 
 			// TODO: Is 'if' enough?
-			assert(gb->timer.remaining_m_cycles < 2 * period_in_m_cyles);
+			// TODO: this often fails in the debugger?
+			// This can potentially fail just after the clock_select was changed.
+			// assert(gb->timer.remaining_m_cycles < 2 * period_in_m_cyles);
 			while (gb->timer.remaining_m_cycles >= period_in_m_cyles)
 			{
 				gb->timer.remaining_m_cycles -= (uint16_t)period_in_m_cyles;
@@ -3156,6 +3158,7 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				{
 					gb->cpu.interrupt.if_flags.lcd_stat = 1;
 				}
+				gb->display.updated = true;
 			}
 			else
 			{
@@ -3357,7 +3360,9 @@ gb_GetMapTileLine(gb_GameBoy *gb, size_t map_index, size_t tile_x_index, size_t 
 bool
 gb_FramebufferUpdated(gb_GameBoy *gb)
 {
-	return gb->ppu.ly == 144;
+	bool result = gb->display.updated;
+	gb->display.updated = false;
+	return result;
 }
 
 uint32_t
@@ -3671,11 +3676,11 @@ gb__MagFramebufferXbr2(const gb_Framebuffer input, uint8_t *pixels)
 		{
 			row0 = row1;
 		}
-		else if (y == input.width - 2)
+		else if (y == input.height - 2)
 		{
 			row4 = row3;
 		}
-		else if (y == input.width - 1)
+		else if (y == input.height - 1)
 		{
 			row4 = row2;
 			row3 = row2;
