@@ -10,10 +10,6 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define CLAMP(v, min, max) MIN(MAX(v, min), max)
 
-// Dummy image to test image mag filters.
-// TODO(stefalie): Remove once the emulator can actually generate images.
-// Converted with: https://www.digole.com/tools/PicturetoC_Hex_converter.php
-
 #define BLARGG_TEST_ENABLE 1
 
 gb_Palette
@@ -27,10 +23,6 @@ gb_DefaultPalette(void)
 		.dot_data_11 = 0x00,
 	};
 }
-
-// TODO:
-// header struct:
-// https://github.com/ThomasRinsma/dromaius/blob/ffe8e2bead2c11c525a07578a99d5ae464515f76/src/memory.h#L62
 
 #define ROM_HEADER_START_ADDRESS 0x0100
 typedef struct gb__RomHeader
