@@ -19,6 +19,7 @@
 gb_Palette
 gb_DefaultPalette(void)
 {
+	// Color scheme from https://gbdev.io/pandocs/Tile_Data.html
 	return (gb_Palette){
 		.dot_data_00 = 0xFF,
 		.dot_data_01 = 0xCC,
@@ -784,6 +785,12 @@ gb__PopWordToStack(gb_GameBoy *gb)
 void
 gb_Reset(gb_GameBoy *gb, bool skip_bios)
 {
+	// TODO
+	//// Reset everything to zero except the ROM info.
+	//struct gb_Rom prev_rom = gb->rom;
+	//*gb = (gb_GameBoy){ 0 };
+	//gb->rom = prev_rom;
+
 	struct gb_Memory *mem = &gb->memory;
 	mem->bios_mapped = true;
 
@@ -838,6 +845,7 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 
 	gb->timer = (struct gb_Timer){ 0 };
 
+	gb->display.updated = false;
 	gb__MemoryWriteByte(gb, 0xFF05, 0x00);
 	gb__MemoryWriteByte(gb, 0xFF06, 0x00);
 	gb__MemoryWriteByte(gb, 0xFF07, 0x00);
@@ -3327,6 +3335,7 @@ gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_ind
 	return result;
 }
 
+// TODO: rem?
 gb_TileLine
 gb_GetMapTileLine(gb_GameBoy *gb, size_t map_index, size_t tile_x_index, size_t y_index, gb_Palette palette)
 {
