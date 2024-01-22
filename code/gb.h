@@ -249,10 +249,6 @@ typedef struct gb_GameBoy
 	} rom;
 } gb_GameBoy;
 
-// TODO rem, I think reset is enough
-void
-gb_Init(gb_GameBoy *gb);
-
 // Returns true in error case if the ROM cannot be loaded, is broken,
 // or is not for GameBoy.
 // TODO(stefalie): Consider returning an error code of what went wrong.

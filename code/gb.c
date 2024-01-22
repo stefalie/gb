@@ -28,13 +28,6 @@ gb_DefaultPalette(void)
 	};
 }
 
-void
-gb_Init(gb_GameBoy *gb)
-{
-	*gb = (gb_GameBoy){ 0 };  // TODO: mve to reset? load?
-	// memcpy(gb->display.pixels, gb_tetris_splash_screen, sizeof(gb->display.pixels));
-}
-
 // TODO:
 // header struct:
 // https://github.com/ThomasRinsma/dromaius/blob/ffe8e2bead2c11c525a07578a99d5ae464515f76/src/memory.h#L62
@@ -785,36 +778,21 @@ gb__PopWordToStack(gb_GameBoy *gb)
 void
 gb_Reset(gb_GameBoy *gb, bool skip_bios)
 {
-	// TODO
-	//// Reset everything to zero except the ROM info.
-	//struct gb_Rom prev_rom = gb->rom;
-	//*gb = (gb_GameBoy){ 0 };
-	//gb->rom = prev_rom;
+	// Reset everything to zero except the ROM info.
+	struct gb_Rom prev_rom = gb->rom;
+	*gb = (gb_GameBoy){ 0 };
+	gb->rom = prev_rom;
 
 	struct gb_Memory *mem = &gb->memory;
 	mem->bios_mapped = true;
 
-	if (mem->mbc_type == GB_MBC_TYPE_1)
+	if (mem->mbc_type == GB_MBC_TYPE_2)
 	{
-		mem->mbc_external_ram_enable = false;
-		mem->mbc1.rom_bank = 0;
-		mem->mbc1.ram_bank = 0;
-		mem->mbc1.bank_mode = 0;
-	}
-	else if (mem->mbc_type == GB_MBC_TYPE_2)
-	{
-		mem->mbc_external_ram_enable = false;
 		mem->mbc2.rom_bank = 1;
 	}
-	else if (mem->mbc_type == GB_MBC_TYPE_3)
-	{
-		// TODO: Are these correctly initialized like this? Or can they stay uninitialized?
-		// gbdev.io doesn't give default values for these.
-		mem->mbc_external_ram_enable = false;
-		mem->mbc3.rom_bank = 0;
-		mem->mbc3.rtc_mode_or_idx = 0;
-		// TODO: Init RTC.
-	}
+	// TODO: Are MBC3 values correct if initialized to 0?
+	// gbdev.io doesn't give default values.
+	// TODO: How to init RTC in MBC3?
 
 	// (see page 18 of the GameBoy CPU Manual)
 	gb->cpu.a = 0x01;
@@ -823,29 +801,11 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 	gb->cpu.de = 0x00D8;
 	gb->cpu.hl = 0x014D;
 	gb->cpu.sp = 0xFFFE;
-	if (!skip_bios)
-	{
-		gb->cpu.pc = 0x0;
-	}
-	else
+	if (skip_bios)
 	{
 		gb->cpu.pc = ROM_HEADER_START_ADDRESS;
 	}
-	// TODO: Do we automatically end up at 0x0100 if we run from 0x0?
 
-	gb->cpu.interrupt.ime = false;
-	gb->cpu.interrupt.ime_after_next_inst = false;
-	gb->cpu.interrupt.ie_flags.reg = 0;
-	gb->cpu.interrupt.if_flags.reg = 0;
-
-	gb->cpu.halt = false;
-
-	// TODO: What parts need initializing how?
-	gb->ppu = (struct gb_Ppu){ 0 };
-
-	gb->timer = (struct gb_Timer){ 0 };
-
-	gb->display.updated = false;
 	gb__MemoryWriteByte(gb, 0xFF05, 0x00);
 	gb__MemoryWriteByte(gb, 0xFF06, 0x00);
 	gb__MemoryWriteByte(gb, 0xFF07, 0x00);

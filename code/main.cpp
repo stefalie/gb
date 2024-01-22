@@ -1506,7 +1506,6 @@ main(int argc, char *argv[])
 	}
 
 	gb_GameBoy gb = {};
-	gb_Init(&gb);
 	uint8_t *pixels = (uint8_t *)malloc(gb_MaxMagFramebufferSizeInBytes());
 	if (argc > 1)
 	{
