@@ -36,17 +36,6 @@ typedef union gb_Color
 	uint32_t as_u32;
 } gb_Color;
 
-typedef struct gb_Palette
-{
-	gb_Color dot_data_00_color;
-	gb_Color dot_data_01_color;
-	gb_Color dot_data_10_color;
-	gb_Color dot_data_11_color;
-} gb_Palette;
-
-gb_Palette
-gb_DefaultPalette(void);
-
 // Memory Bank Controller type
 typedef enum gb_MbcType
 {
@@ -319,24 +308,6 @@ typedef struct gb_Tile
 
 gb_Tile
 gb_GetTile(gb_GameBoy *gb, size_t set_index, int tile_index);
-
-typedef struct gb_TileLine
-{
-	gb_Color pixels[8];
-} gb_TileLine;
-
-// Returns a line inside one tile, 2 bits per pixel.
-// uint16_t
-// gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_index);
-// Returns a line inside one tile, 8 bits per pixel.
-gb_TileLine
-gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_index, gb_Palette palette);
-
-// TODO: remove?
-// Returns a line inside one tile inside one of the two maps.
-// 8 bits monochrome per pixel.
-gb_TileLine
-gb_GetMapTileLine(gb_GameBoy *gb, size_t map_index, size_t tile_x_index, size_t y_index, gb_Palette palette);
 
 // Returns true if a new frame has been fully rendered.
 // Use this to check if the emulator's texture should be updated.

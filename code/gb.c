@@ -13,15 +13,22 @@
 
 #define BLARGG_TEST_ENABLE 1
 
-gb_Palette
-gb_DefaultPalette(void)
+typedef struct gb__Palette
+{
+	gb_Color colors[4];
+} gb__Palette;
+
+gb__Palette
+gb__DefaultPalette(void)
 {
 	// Color scheme from https://gbdev.io/pandocs/Tile_Data.html
-	return (gb_Palette){
-		.dot_data_00_color = { .r = 0xE0, .g = 0xF8, .b = 0xD0 },
-		.dot_data_01_color = { .r = 0x88, .g = 0xC0, .b = 0x70 },
-		.dot_data_10_color = { .r = 0x34, .g = 0x68, .b = 0x56 },
-		.dot_data_11_color = { .r = 0x08, .g = 0x18, .b = 0x20 },
+	return (gb__Palette){
+		.colors = {
+			[0] = { .r = 0xE0, .g = 0xF8, .b = 0xD0 },
+			[1] = { .r = 0x88, .g = 0xC0, .b = 0x70 },
+			[2] = { .r = 0x34, .g = 0x68, .b = 0x56 },
+			[3] = { .r = 0x08, .g = 0x18, .b = 0x20 },
+		},
 	};
 }
 
@@ -3031,6 +3038,66 @@ gb__UpdateClockAndTimer(gb_GameBoy *gb, size_t elapsed_m_cycles)
 	}
 }
 
+// Adapted from: Ericson, 2005, Real-Time Collision Detection, pages 316-317
+static uint16_t
+gb__Part1By1(uint16_t n)
+{
+	// n = --------76543210 : Bits initially
+	// n = ----7654----3210 : After (1)
+	// n = --76--54--32--10 : After (2)
+	// n = -7-6-5-4-3-2-1-0 : After (3)
+	n = (n ^ (n << 4)) & 0x0f0f0f0f;  // (1)
+	n = (n ^ (n << 2)) & 0x33333333;  // (2)
+	n = (n ^ (n << 1)) & 0x55555555;  // (3)
+	return n;
+}
+
+static uint16_t
+gb__Morton2(uint16_t line1, uint16_t line2)
+{
+	return (gb__Part1By1(line2) << 1) + gb__Part1By1(line1);
+}
+
+typedef struct gb__TileLine
+{
+	gb_Color pixels[8];
+} gb__TileLine;
+
+gb__TileLine
+gb__GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_index, gb__Palette palette)
+{
+	assert(set_index == 0 || set_index == 1);
+	assert(line_index < 8);
+	assert((tile_index >= 0 && tile_index < 256) || set_index == 0);
+	assert((tile_index >= -128 && tile_index < 128) || set_index == 1);
+
+	const size_t set_offset = set_index == 0 ? 0x1000 : 0x0;
+
+	size_t vram_offset = set_offset;
+
+	// A tile uses 16 bytes (2 bytes per line for 8x8 pixels).
+	vram_offset += tile_index << 4;
+	vram_offset += line_index << 1;
+	assert(vram_offset < 0x17FF);
+	assert((vram_offset & 1u) == 0);
+
+	const uint16_t tile_line = gb__Morton2(gb->memory.vram[vram_offset], gb->memory.vram[vram_offset + 1]);
+
+	// TODO(stefalie): There must be some SIMD/SWAR way to do this.
+	return (gb__TileLine){
+		.pixels = {
+			[0] = palette.colors[(tile_line >> 14u) & 3u],
+			[1] = palette.colors[(tile_line >> 12u) & 3u],
+			[2] = palette.colors[(tile_line >> 10u) & 3u],
+			[3] = palette.colors[(tile_line >> 8u) & 3u],
+			[4] = palette.colors[(tile_line >> 6u) & 3u],
+			[5] = palette.colors[(tile_line >> 4u) & 3u],
+			[6] = palette.colors[(tile_line >> 2u) & 3u],
+			[7] = palette.colors[(tile_line >> 0u) & 3u],
+		},
+	};
+}
+
 static void
 gb__RenderScanLine(gb_GameBoy *gb)
 {
@@ -3044,13 +3111,15 @@ gb__RenderScanLine(gb_GameBoy *gb)
 		const size_t tile_y = y >> 3u;
 		const size_t in_tile_y = y & 7u;
 
-		const gb_Palette default_pal = gb_DefaultPalette();
-		const gb_Color *map = (const gb_Color *)&default_pal;
-		gb_Palette pal;
-		pal.dot_data_00_color = map[(gb->ppu.bgp >> 0u) & 0x03];
-		pal.dot_data_01_color = map[(gb->ppu.bgp >> 2u) & 0x03];
-		pal.dot_data_10_color = map[(gb->ppu.bgp >> 4u) & 0x03];
-		pal.dot_data_11_color = map[(gb->ppu.bgp >> 6u) & 0x03];
+		const gb__Palette default_pal = gb__DefaultPalette();
+		const gb__Palette pal = {
+			.colors = {
+				[0] = default_pal.colors[(gb->ppu.bgp >> 0u) & 0x03],
+				[1] = default_pal.colors[(gb->ppu.bgp >> 2u) & 0x03],
+				[2] = default_pal.colors[(gb->ppu.bgp >> 4u) & 0x03],
+				[3] = default_pal.colors[(gb->ppu.bgp >> 6u) & 0x03],
+			},
+		};
 
 		size_t i = 0;
 		while (i < GB_FRAMEBUFFER_WIDTH)
@@ -3061,7 +3130,7 @@ gb__RenderScanLine(gb_GameBoy *gb)
 			const size_t map_offset = vram_offset + (tile_y << 5u) + tile_x;
 			const uint8_t tile_idx = gb->memory.vram[map_offset];
 
-			gb_TileLine line = gb_GetTileLine(gb, lcdc->bg_tileset_select ? 1 : 0, tile_idx, in_tile_y, pal);
+			gb__TileLine line = gb__GetTileLine(gb, lcdc->bg_tileset_select ? 1 : 0, tile_idx, in_tile_y, pal);
 
 			size_t in_tile_x = x & 7u;
 			for (; in_tile_x < 8 && i < GB_FRAMEBUFFER_WIDTH; ++i, ++in_tile_x)
@@ -3237,79 +3306,19 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	return num_interrupt_cycles + num_cycles;
 }
 
-// Adapted from: Ericson, 2005, Real-Time Collision Detection, pages 316-317
-static uint16_t
-gb__Part1By1(uint16_t n)
+gb_Tile
+gb_GetTile(gb_GameBoy *gb, size_t set_index, int tile_index)
 {
-	// n = --------76543210 : Bits initially
-	// n = ----7654----3210 : After (1)
-	// n = --76--54--32--10 : After (2)
-	// n = -7-6-5-4-3-2-1-0 : After (3)
-	n = (n ^ (n << 4)) & 0x0f0f0f0f;  // (1)
-	n = (n ^ (n << 2)) & 0x33333333;  // (2)
-	n = (n ^ (n << 1)) & 0x55555555;  // (3)
-	return n;
-}
+	gb_Tile result;
 
-static uint16_t
-gb__Morton2(uint16_t line1, uint16_t line2)
-{
-	return (gb__Part1By1(line2) << 1) + gb__Part1By1(line1);
-}
+	const gb__Palette default_pal = gb__DefaultPalette();
+	for (int y = 0; y < 8; ++y)
+	{
+		gb__TileLine line = gb__GetTileLine(gb, set_index, tile_index, y, default_pal);
+		memcpy(result.pixels[y], line.pixels, sizeof(line.pixels));
+	}
 
-gb_TileLine
-gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_index, gb_Palette palette)
-{
-	assert(set_index == 0 || set_index == 1);
-	assert(line_index < 8);
-	assert((tile_index >= 0 && tile_index < 256) || set_index == 0);
-	assert((tile_index >= -128 && tile_index < 128) || set_index == 1);
-
-	const size_t set_offset = set_index == 0 ? 0x1000 : 0x0;
-
-	size_t vram_offset = set_offset;
-
-	// A tile uses 16 bytes (2 bytes per line for 8x8 pixels).
-	vram_offset += tile_index << 4;
-	vram_offset += line_index << 1;
-	assert(vram_offset < 0x17FF);
-	assert((vram_offset & 1u) == 0);
-
-	const uint16_t tile_line = gb__Morton2(gb->memory.vram[vram_offset], gb->memory.vram[vram_offset + 1]);
-
-	// TODO(stefalie): There must be some SIMD/SWAR way to do this.
-	const gb_Color *map = (const gb_Color *)&palette;
-	gb_TileLine result;
-	result.pixels[0] = map[(tile_line >> 14u) & 3u];
-	result.pixels[1] = map[(tile_line >> 12u) & 3u];
-	result.pixels[2] = map[(tile_line >> 10u) & 3u];
-	result.pixels[3] = map[(tile_line >> 8u) & 3u];
-	result.pixels[4] = map[(tile_line >> 6u) & 3u];
-	result.pixels[5] = map[(tile_line >> 4u) & 3u];
-	result.pixels[6] = map[(tile_line >> 2u) & 3u];
-	result.pixels[7] = map[(tile_line >> 0u) & 3u];
 	return result;
-}
-
-// TODO: rem?
-gb_TileLine
-gb_GetMapTileLine(gb_GameBoy *gb, size_t map_index, size_t tile_x_index, size_t y_index, gb_Palette palette)
-{
-	assert(map_index == 0 || map_index == 1);
-	assert(tile_x_index < 32);
-	assert(y_index < 8 * 32);
-
-	// const size_t vram_offset = lcdc->bg_tilemap_select ? 0x1C00 : 0x1800;
-
-	// const size_t tile_y = ((gb->ppu.ly + gb->ppu.scy) & 0xFF) >> 3u;
-	// const size_t tile_line_offset = tile_y << 5u;  // 32 tiles per line
-
-	// const size_t tile_x = gb->ppu.scx >> 3u;
-	// var lineoffs = (GPU._scx >> 3);
-
-	(void)gb;
-	(void)palette;
-	return (gb_TileLine){ 0 };
 }
 
 bool

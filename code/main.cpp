@@ -1040,26 +1040,34 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 
 		{
 			ImGui::Begin(tab_name_tiles);
-			ImGui::Text("Tiles:");
 
 			const int num_tiles_per_row = 16;
+			const int num_tiles_per_col = 24;
 			const int width = num_tiles_per_row * 8;
-			const int height = 3 * 8 * 8;
-			gb_TileLine img[height][num_tiles_per_row];
+			const int height = num_tiles_per_col * 8;
+			gb_Color img[height][width];
 
-			for (int y = 0; y < height; ++y)
+			// For each tile
+			gb_Tile tile;
+			for (int ty = 0; ty < num_tiles_per_col; ++ty)
 			{
-				for (int tile_x = 0; tile_x < num_tiles_per_row; ++tile_x)
+				for (int tx = 0; tx < num_tiles_per_row; ++tx)
 				{
-					int tile_idx = (y >> 3u) * num_tiles_per_row + tile_x;
-					if (y < height / 3 * 2)
+					int tile_idx = ty * num_tiles_per_row + tx;
+					if (ty < num_tiles_per_col / 3 * 2)
 					{
-						img[y][tile_x] = gb_GetTileLine(gb, 1, tile_idx, y & 7u, gb_DefaultPalette());
+						tile = gb_GetTile(gb, 1, tile_idx);
 					}
 					else
 					{
 						tile_idx -= 256;
-						img[y][tile_x] = gb_GetTileLine(gb, 0, tile_idx, y & 7u, gb_DefaultPalette());
+						tile = gb_GetTile(gb, 0, tile_idx);
+					}
+
+					// For each line of current tile.
+					for (int y = 0; y < 8; ++y)
+					{
+						memcpy(&img[ty * 8 + y][tx * 8], tile.pixels[y], sizeof(tile.pixels[y]));
 					}
 				}
 			}
@@ -1073,7 +1081,6 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 
 		{
 			ImGui::Begin(tab_name_sprites);
-			ImGui::Text("Sprites:");
 			ImGui::End();
 		}
 
