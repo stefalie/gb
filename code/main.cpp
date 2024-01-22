@@ -1697,15 +1697,17 @@ main(int argc, char *argv[])
 		{
 			m_cycle_acc += config.gui.speed_frame_multiplier * elapsed_m_cycles;
 
+			bool has_updated_fb = false;
 			while (m_cycle_acc > 0)
 			{
 				const size_t emulated_m_cycles = gb_ExecuteNextInstruction(&gb);
 				assert(emulated_m_cycles > 0);
 				m_cycle_acc -= emulated_m_cycles;
 
-				if (gb_FramebufferUpdated(&gb))
+				if (gb_FramebufferUpdated(&gb) && !has_updated_fb)
 				{
 					UpdateGameTexture(&gb, &config, texture, pixels);
+					has_updated_fb = true;
 				}
 
 				// Breakpoints for debugging
