@@ -13,7 +13,6 @@
 // Dummy image to test image mag filters.
 // TODO(stefalie): Remove once the emulator can actually generate images.
 // Converted with: https://www.digole.com/tools/PicturetoC_Hex_converter.php
-#include "tetris.h"
 
 #define BLARGG_TEST_ENABLE 1
 
@@ -31,8 +30,8 @@ gb_DefaultPalette(void)
 void
 gb_Init(gb_GameBoy *gb)
 {
-	*gb = (gb_GameBoy){ 0 };  // TODO: mve to load?
-	memcpy(gb->display.pixels, gb_tetris_splash_screen, sizeof(gb->display.pixels));
+	*gb = (gb_GameBoy){ 0 };  // TODO: mve to reset? load?
+	// memcpy(gb->display.pixels, gb_tetris_splash_screen, sizeof(gb->display.pixels));
 }
 
 // TODO:
@@ -3092,12 +3091,16 @@ gb__RenderScanLine(gb_GameBoy *gb)
 		const size_t tile_y = y >> 3u;
 		const size_t in_tile_y = y & 7u;
 
-		// TODO
-		gb_Palette palette = gb_DefaultPalette();
+		const gb_Palette default_pal = gb_DefaultPalette();
+		const uint8_t *map = (const uint8_t *)&default_pal;
+		gb_Palette pal;
+		pal.dot_data_00 = map[(gb->ppu.bgp >> 0u) & 0x03];
+		pal.dot_data_01 = map[(gb->ppu.bgp >> 2u) & 0x03];
+		pal.dot_data_10 = map[(gb->ppu.bgp >> 4u) & 0x03];
+		pal.dot_data_11 = map[(gb->ppu.bgp >> 6u) & 0x03];
 
 		size_t i = 0;
 		while (i < GB_FRAMEBUFFER_WIDTH)
-		// for (size_t i = 0; i < GB_FRAMEBUFFER_WIDTH; i += 8)
 		{
 			const size_t x = (gb->ppu.scx + i) & 0xFF;
 			const size_t tile_x = x >> 3u;
@@ -3105,7 +3108,7 @@ gb__RenderScanLine(gb_GameBoy *gb)
 			const size_t map_offset = vram_offset + (tile_y << 5u) + tile_x;
 			const uint8_t tile_idx = gb->memory.vram[map_offset];
 
-			gb_TileLine line = gb_GetTileLine(gb, lcdc->bg_tileset_select ? 1 : 0, tile_idx, in_tile_y, palette);
+			gb_TileLine line = gb_GetTileLine(gb, lcdc->bg_tileset_select ? 1 : 0, tile_idx, in_tile_y, pal);
 
 			size_t in_tile_x = x & 7u;
 			for (; in_tile_x < 8 && i < GB_FRAMEBUFFER_WIDTH; ++i, ++in_tile_x)
