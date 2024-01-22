@@ -269,13 +269,11 @@ typedef struct gb_GameBoy
 // or is not for GameBoy.
 // TODO(stefalie): Consider returning an error code of what went wrong.
 bool
-gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes);
+gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes, bool skip_bios);
 
-// Read a byte/word from the GameBoy's memory space at 'addr'.
+// Read a byte from the GameBoy's memory space at 'addr'.
 uint8_t
 gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr);
-uint16_t
-gb_MemoryReadWord(const gb_GameBoy *gb, uint16_t addr);
 
 // Resets the GameBoy.
 void
@@ -340,9 +338,9 @@ gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_ind
 gb_TileLine
 gb_GetMapTileLine(gb_GameBoy *gb, size_t map_index, size_t tile_x_index, size_t y_index, gb_Palette palette);
 
-// TODO: find a different name as this changes the state of the emu.
 // Returns true if a new frame has been fully rendered.
 // Use this to check if the emulator's texture should be updated.
+// Calling this will reset the emulator's internal "framebuffer updated" flag.
 bool
 gb_FramebufferUpdated(gb_GameBoy *gb);
 

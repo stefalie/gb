@@ -2,7 +2,7 @@
 
 #include "gb.h"
 #include <assert.h>
-#include <math.h>
+#include <math.h>  // TODO(stefalie): Only used for fabs, consider removing.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -80,7 +80,7 @@ gb__GetHeader(const gb_GameBoy *gb)
 }
 
 bool
-gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
+gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes, bool skip_bios)
 {
 	gb->rom.data = rom;
 	gb->rom.num_bytes = num_bytes;
@@ -176,6 +176,7 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes)
 	}
 #endif
 
+	gb_Reset(gb, skip_bios);
 	return false;
 }
 
@@ -417,7 +418,6 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			else if (addr >= 0xFF80 && addr < 0xFFFF)
 			{
 				assert((addr - 0xFF80) < 0x80);
-				// assert(!"TODO");
 				return mem->zero_page_ram[addr & 0x7F];
 			}
 			// Interrupt enable
@@ -748,7 +748,7 @@ gb__MemoryWriteWord(gb_GameBoy *gb, uint16_t addr, uint16_t value)
 }
 
 static inline uint16_t
-gb__MemoryReadWord(gb_GameBoy *gb, uint16_t addr)
+gb__MemoryReadWord(const gb_GameBoy *gb, uint16_t addr)
 {
 	return gb_MemoryReadByte(gb, addr) + (gb_MemoryReadByte(gb, addr + 1) << 8u);
 }
@@ -771,12 +771,17 @@ gb__PopWordToStack(gb_GameBoy *gb)
 void
 gb_Reset(gb_GameBoy *gb, bool skip_bios)
 {
-	// Reset everything to zero except the ROM info.
-	struct gb_Rom prev_rom = gb->rom;
+	struct gb_Memory *mem = &gb->memory;
+
+	// Reset everything to zero except the ROM info and the MBC type.
+	const struct gb_Rom prev_rom = gb->rom;
+	const gb_MbcType prev_mbc_type = mem->mbc_type;
 	*gb = (gb_GameBoy){ 0 };
 	gb->rom = prev_rom;
+	mem->mbc_type = prev_mbc_type;
 
-	struct gb_Memory *mem = &gb->memory;
+	gb->display.updated = true;
+
 	mem->bios_mapped = true;
 
 	if (mem->mbc_type == GB_MBC_TYPE_2)
@@ -1440,7 +1445,7 @@ gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
 	}
 	else if (inst.num_operand_bytes == 2)
 	{
-		inst.operand_word = gb_MemoryReadWord(gb, addr + 1);
+		inst.operand_word = gb__MemoryReadWord(gb, addr + 1);
 	}
 
 	return inst;
@@ -1452,7 +1457,7 @@ gb_InstructionSize(gb_Instruction inst)
 	return inst.is_extended ? 2 : 1 + inst.num_operand_bytes;
 }
 
-// TODO: get rid of snprintf, strlen, memcpy to avoid std includes.
+// TODO(stefalie): get rid of snprintf, strlen, memcpy to avoid std includes.
 // should all be easy, and from snprintf you only need to know how to convert 1 byte numbers to 2-char strings.
 size_t
 gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_len)
@@ -1701,7 +1706,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	case 0x10:  // STOP
 		gb->timer.div = 0;
 		gb->cpu.stop = true;
-		// TODO: not implemented. Supposedly no licensed DMG game ever used it.
+		// TODO(stefalie): not implemented. Supposedly no licensed DMG game ever used it.
 		break;
 	case 0x11:  // LD DE, u16
 		gb->cpu.de = inst.operand_word;
@@ -2000,7 +2005,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		const bool intr_pending = gb->cpu.interrupt.ie_flags.reg & gb->cpu.interrupt.if_flags.reg;
 		if (!gb->cpu.interrupt.ime && intr_pending)
 		{
-			// TODO: HALT bug
+			// TODO(stefalie): HALT bug
 			// This causes to skip the increase of PC after the next time that PC is read.
 			// If the next instruction is a single byte, it will simply duplicate that instruction.
 			// If the next instruction has multiple bytes, it will be messed up completely.
@@ -2454,7 +2459,7 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	const uint8_t extended_inst_prefix = 0xCB;
 	assert(gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) == extended_inst_prefix);
 
-	// TODO: Consider using if/else if branches. It will be more compact than using a switch.
+	// TODO(stefalie): Consider using if/else if branches. It will be more compact than using a switch.
 	switch (inst.opcode)
 	{
 	case 0x00:  // RLC B
@@ -2961,7 +2966,7 @@ gb__UpdateClockAndTimer(gb_GameBoy *gb, size_t elapsed_m_cycles)
 {
 	// Only advance if CPU is not stopped.
 	// See: https://gbdev.io/pandocs/Timer_and_Divider_Registers.html#ff04--div-divider-register
-	// TODO: Is this correct? Or does only DIV not advance but the clock keeps running?
+	// TODO(stefalie): Is this correct? Or does only DIV not advance but the clock keeps running?
 	if (!gb->cpu.stop)
 	{
 		gb->timer.t_clock += (uint16_t)(4 * elapsed_m_cycles);
@@ -3070,7 +3075,7 @@ gb__RenderScanLine(gb_GameBoy *gb)
 static void
 gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 {
-	// TODO: Handle LCD disabling/resets.
+	// TODO(stefalie): Handle LCD disabling/resets.
 	//
 	// Reset LCD clock, registers, etc.
 	// https://www.reddit.com/r/Gameboy/comments/a1c8h0/comment/eap4f8c/
@@ -3191,8 +3196,6 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	if (num_interrupt_cycles)
 	{
 		gb__UpdateClockAndTimer(gb, num_interrupt_cycles);
-		// TODO: Do we also have to advance the PPU here?
-		// Theoretically I think so, yes!
 		gb__AdvancePpu(gb, num_interrupt_cycles);
 	}
 
@@ -3218,7 +3221,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	{
 		// When the CPU is halted, we still need to let cycles "elapse" so that the
 		// timer progresses.
-		// TODO: Take bigger steps when just advancing the timer? 4 m cycles instead?
+		// TODO(stefalie): Take bigger steps when just advancing the timer? 4 m cycles instead?
 		num_cycles = 1;
 	}
 
@@ -3274,7 +3277,7 @@ gb_GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_ind
 
 	const uint16_t tile_line = gb__Morton2(gb->memory.vram[vram_offset], gb->memory.vram[vram_offset + 1]);
 
-	// TODO: There must be some SIMD/SWAR way to do this.
+	// TODO(stefalie): There must be some SIMD/SWAR way to do this.
 	const gb_Color *map = (const gb_Color *)&palette;
 	gb_TileLine result;
 	result.pixels[0] = map[(tile_line >> 14u) & 3u];

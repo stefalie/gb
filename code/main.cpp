@@ -4,7 +4,7 @@
 // - UI timeout
 // - pause popup
 // - ESC should be pause
-// - make input handle function seperate.
+// - make input handle function separate.
 // - make lambdas out of the OrComplainFunctions
 // - deal with pause state, you might also need the previous state (if you press
 // esc and don't quit, you want to be back
@@ -535,7 +535,7 @@ LoadRomFromFile(Config *config, gb_GameBoy *gb, const char *file_path)
 			config->rom = {};
 		}
 		config->rom = rom;
-		if (gb_LoadRom(gb, config->rom.data, config->rom.size))
+		if (gb_LoadRom(gb, config->rom.data, config->rom.size, config->gui.skip_bios))
 		{
 			config->gui.show_rom_load_error = true;
 			free(config->rom.data);
@@ -545,7 +545,6 @@ LoadRomFromFile(Config *config, gb_GameBoy *gb, const char *file_path)
 		{
 			config->gui.has_active_rom = true;
 			config->gui.exec_next_step = false;
-			gb_Reset(gb, config->gui.skip_bios);
 		}
 	}
 	else
@@ -1312,7 +1311,6 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
-
 	Config config;
 	config.debug.mem_view.ReadOnly = true;
 	config.debug.mem_view.ReadFn = &DebuggerMemoryViewReadFunc;
@@ -1425,6 +1423,13 @@ main(int argc, char *argv[])
 				dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, main_font_size);
 	}
 
+	gb_GameBoy gb = {};
+	gb_Color *pixels = (gb_Color *)malloc(gb_MaxMagFramebufferSizeInBytes());
+	if (argc > 1)
+	{
+		LoadRomFromFile(&config, &gb, argv[1]);
+	}
+
 	// OpenGL setup. Leave matrices as identity.
 	GLuint shader_program;
 	GLint viewport_size_loc;
@@ -1486,6 +1491,7 @@ main(int argc, char *argv[])
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glCheckError();
 
+		// TODO rem
 		glGenTextures(1, &config.debug.tile_map_0_texture);
 		glBindTexture(GL_TEXTURE_2D, config.debug.tile_map_0_texture);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 32 * 8, 32 * 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
@@ -1505,13 +1511,6 @@ main(int argc, char *argv[])
 		glCheckError();
 	}
 
-	gb_GameBoy gb = {};
-	gb_Color *pixels = (gb_Color *)malloc(gb_MaxMagFramebufferSizeInBytes());
-	if (argc > 1)
-	{
-		LoadRomFromFile(&config, &gb, argv[1]);
-	}
-
 	const uint64_t counter_freq = SDL_GetPerformanceFrequency();
 	uint64_t prev_time = SDL_GetPerformanceCounter();
 
@@ -1526,6 +1525,7 @@ main(int argc, char *argv[])
 			ImGui::SetCurrentContext(config.handles.debug_imgui);
 		}
 
+		// TODO(stefalie): Consider putting in separate procedure.
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
 		{
