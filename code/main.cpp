@@ -1703,7 +1703,14 @@ main(int argc, char *argv[])
 		{
 			m_cycle_acc += config.gui.speed_frame_multiplier * elapsed_m_cycles;
 
+			// Makes sure that we run the magnification filter and texture update
+			// only once per frame (it's expensive).
+			// TODO(stefalie): This solution shows the first GameBoy frame rendered
+			// in the current SDL frame. Using the last GameBoy frame would be better,
+			// but it's not straight forward to figure out how many GameBoy frames
+			// will be executed.
 			bool has_updated_fb = false;
+
 			while (m_cycle_acc > 0)
 			{
 				const size_t emulated_m_cycles = gb_ExecuteNextInstruction(&gb);

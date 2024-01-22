@@ -9,8 +9,7 @@
 #define GB_FRAMEBUFFER_HEIGHT 144
 
 #define GB_MACHINE_FREQ 1048576
-// TODO: needed?
-// #define GB_MACHINE_CYCLES_PER_FRAME (70224 / 4)
+#define GB_MACHINE_CYCLES_PER_FRAME (70224 / 4)
 
 typedef enum gb_PpuMode
 {
