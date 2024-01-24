@@ -192,6 +192,13 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 {
 	const struct gb_Memory *mem = &gb->memory;
 
+	// The data bus value for undefined addresses seems to be 0xFF.
+	// - For MBC1 with disabled external RAM, it's stated here:
+	//   https://gbdev.io/pandocs/MBC1.html
+	// - More clues here:
+	//   https://www.reddit.com/r/EmuDev/comments/5nixai/gb_tetris_writing_to_unused_memory/
+	const uint8_t undefined_value = 0xFF;
+
 	switch (addr & 0xF000)
 	{
 	// ROM bank 0 or BIOS
@@ -278,12 +285,6 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				assert(mem->mbc1.ram_bank == 1 || ram_size == 3);
 				return mem->external_ram[addr & 0x1FFF + (mem->mbc1.ram_bank << 13u)];
 			}
-			else
-			{
-				// Basically undefined, but often 0xFF in MBC1.
-				// See: https://gbdev.io/pandocs/MBC1.html
-				return 0xFF;
-			}
 		}
 		else if (mem->mbc_type == GB_MBC_TYPE_2)
 		{
@@ -316,20 +317,17 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				}
 			}
 		}
-		// When writing to the bus but nothing is connected it's undefined afaik.
-		// Let's return 0xFF in that case. It's supposedly the default value of the
-		// data bus: https://www.reddit.com/r/EmuDev/comments/5nixai/gb_tetris_writing_to_unused_memory/
-		return 0xFF;
+		return undefined_value;
 	// (Internal) working RAM
 	case 0xC000:
 	case 0xD000:
-	case 0xE000:
+	case 0xE000:  // Echo of (Internal) working RAM, [0xE000, 0xFE00)
 		return mem->wram[addr & 0x1FFF];
 	// Echo of (Internal) working RAM, I/O, zero page
 	case 0xF000:
 		switch (addr & 0x0F00)
 		{
-		default:  // Echo of (Internal) working RAM, [0xF000, 0xFE00)
+		default:  // Echo of (Internal) working RAM, [0xE000, 0xFE00)
 			assert((addr - 0xF000) < 0x0E00);
 			return mem->wram[addr & 0x1FFF];
 		case 0x0E00:
@@ -337,17 +335,32 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			// See: https://gbdev.io/pandocs/Rendering.html
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{
-				return gb->ppu.oam[addr - 0xFEA0];
+				return gb->ppu.oam[addr & 0xFF];
 			}
 			else  // Empty
 			{
-				return 0xFF;
+				return undefined_value;
 			}
 		case 0x0F00:
+			// Joypad
 			if (addr == 0xFF00)
 			{
-				// TODO
-				return 0;
+				// The documentaton is unclear about what happens when both selection
+				// wires are active, i.e., == 0. I assume it's just ANDed together.
+				uint8_t p1 = 0x0F;
+				if (gb->joypad.buttons_select == 0)
+				{
+					p1 &= gb->joypad.buttons;
+				}
+				if (gb->joypad.dpad_select == 0)
+				{
+					p1 &= gb->joypad.dpad;
+				}
+				assert((gb->joypad.selection_wire & ~0x30) == 0);
+				p1 |= gb->joypad.selection_wire;
+				assert((p1 & ~0x3F) == 0);
+				assert(false);
+				return p1;
 			}
 			// Timer
 			else if (addr == 0xFF04)
@@ -370,6 +383,19 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			else if (addr == 0xFF0F)
 			{
 				return gb->cpu.interrupt.if_flags.reg;
+			}
+			// Sound channels
+			else if ((addr >= 0xFF10 && addr <= 0xFF14) || (addr >= 0xFF16 && addr <= 0xFF1E) ||
+					(addr >= 0xFF20 && addr <= 0xFF26))
+			{
+				// TODO
+				return gb->sound.nr[addr - 0xFF10];
+			}
+			// Wave pattern
+			else if (addr >= 0xFF30 && addr <= 0xFF3F)
+			{
+				// TODO
+				return gb->sound.w[addr - 0xFF30];
 			}
 			// Display
 			else if (addr == 0xFF40)
@@ -398,9 +424,8 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			}
 			else if (addr == 0xFF46)
 			{
-				// DMA
-				assert(false);
-				return 0;
+				// DMA is write-only
+				return undefined_value;
 			}
 			else if (addr == 0xFF47)
 			{
@@ -435,9 +460,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			}
 			else
 			{
-				// TODO
-				// assert(false);
-				return 0;
+				return undefined_value;
 			}
 			break;
 		}
@@ -505,7 +528,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	// RAM bank selection
 	case 0x4000:
 	case 0x5000:
-		assert(mem->mbc_type != GB_MBC_TYPE_ROM_ONLY);  // TODO: probably wrong
+		// assert(mem->mbc_type != GB_MBC_TYPE_ROM_ONLY);  // TODO: probably wrong
 		if (mem->mbc_type == GB_MBC_TYPE_1)
 		{
 			mem->mbc1.ram_bank = value;
@@ -603,14 +626,14 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	// (Internal) working RAM
 	case 0xC000:
 	case 0xD000:
-	case 0xE000:
+	case 0xE000:  // Echo of (Internal) working RAM, [0xE000, 0xFE00)
 		mem->wram[addr & 0x1FFF] = value;
 		break;
 	// Echo of (Internal) working RAM, I/O, zero page
 	case 0xF000:
 		switch (addr & 0x0F00)
 		{
-		default:  // Echo of (Internal) working RAM, [0xF000, 0xFE00)
+		default:  // Echo of (Internal) working RAM, [0xE000, 0xFE00)
 			assert((addr - 0xF000) < 0x0E00);
 			mem->wram[addr & 0x1FFF] = value;
 			break;
@@ -619,8 +642,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			// See: https://gbdev.io/pandocs/Rendering.html
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{
-				// return gb->ppu.oam[addr - 0xFEA0];
-				assert(!"TODO");
+				gb->ppu.oam[addr & 0xFF] = value;
 			}
 			else
 			{
@@ -631,9 +653,10 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			}
 			break;
 		case 0x0F00:
+			// Joypad
 			if (addr == 0xFF00)
 			{
-				// TODO
+				gb->joypad.selection_wire = value & 0x30;
 			}
 			// Serial port
 			else if (addr == 0xFF01)
@@ -675,6 +698,19 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			{
 				gb->cpu.interrupt.if_flags.reg = value & 0x1F;
 			}
+			// Sound channels
+			else if ((addr >= 0xFF10 && addr <= 0xFF14) || (addr >= 0xFF16 && addr <= 0xFF1E) ||
+					(addr >= 0xFF20 && addr <= 0xFF26))
+			{
+				// TODO
+				gb->sound.nr[addr - 0xFF10] = value;
+			}
+			// Wave pattern
+			else if (addr >= 0xFF30 && addr <= 0xFF3F)
+			{
+				// TODO
+				gb->sound.w[addr - 0xFF30] = value;
+			}
 			// Display
 			else if (addr == 0xFF40)
 			{
@@ -682,7 +718,9 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			}
 			else if (addr == 0xFF41)
 			{
+				gb_PpuMode mode_read_only = gb->ppu.stat.flags.mode;
 				gb->ppu.stat.reg = value;
+				gb->ppu.stat.flags.mode = mode_read_only;
 			}
 			else if (addr == 0xFF42)
 			{
@@ -694,8 +732,15 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			}
 			else if (addr == 0xFF44)
 			{
-				// TODO: Is this correct?
-				gb->ppu.ly = 0;
+				// According to gbdev.io LY is read-only (https://gbdev.io/pandocs/STAT.html).
+				//
+				// According to the GameBoy CPU Manual, writing LY resets it to 0.
+				// (Shouldn't that also reset the mode of the PPU then)?
+				// gb->ppu.ly = 0;
+				//
+				// Let's trust gbdev.io and do nothing.
+
+				// TODO
 			}
 			else if (addr == 0xFF45)
 			{
@@ -703,8 +748,18 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			}
 			else if (addr == 0xFF46)
 			{
-				assert(!"TODO");
-				// TODO DMA
+				// DMA
+				// Src: $XX00-$XX9F   ;XX = $00 to $DF
+				// Dst: $FE00-$FE9F
+				//
+				// Technically during DMA only HRAM is accessible.
+				// See: https://gbdev.io/pandocs/OAM_DMA_Transfer.html#oam-dma-transfer
+				// We simply ignore that here.
+				for (uint16_t i = 0; i < 0xA0; ++i)
+				{
+					gb__MemoryWriteByte(gb, 0xFE00 + i, gb_MemoryReadByte(gb, (value << 8u) + i));
+				}
+				break;
 			}
 			else if (addr == 0xFF47)
 			{
@@ -726,6 +781,10 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			{
 				gb->ppu.wx = value;
 			}
+			else if (addr == 0xFF50)
+			{
+				gb->memory.bios_mapped = false;
+			}
 			// Zero page RAM
 			else if (addr >= 0xFF80 && addr < 0xFFFF)
 			{
@@ -739,8 +798,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			}
 			else
 			{
-				// TODO
-				// assert(false);
+				// NOTE: Once more, Tetris tries to write into non-existing memory.
 			}
 			break;
 		}
@@ -793,7 +851,14 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 
 	gb->display.updated = true;
 
-	mem->bios_mapped = true;
+	if (skip_bios)
+	{
+		gb->cpu.pc = ROM_HEADER_START_ADDRESS;
+	}
+	else
+	{
+		mem->bios_mapped = true;
+	}
 
 	if (mem->mbc_type == GB_MBC_TYPE_2)
 	{
@@ -810,10 +875,19 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 	gb->cpu.de = 0x00D8;
 	gb->cpu.hl = 0x014D;
 	gb->cpu.sp = 0xFFFE;
-	if (skip_bios)
-	{
-		gb->cpu.pc = ROM_HEADER_START_ADDRESS;
-	}
+
+	// TODO(stefalie): Which PPU mode and with which LY value should
+	// the GameBoy start in when skipping the BIOS?
+	// no$gmb seems to start in mode 1 with LY == 0.
+	// This shouldn't really matter, should it?
+	gb->ppu.stat.flags.coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
+
+	gb->joypad.buttons = 0x0F;
+	gb->joypad.dpad = 0x0F;
+	// TODO
+	// gb->joypad.selection_wire = 0x30;
+	gb->joypad.dpad_select = 1;
+	gb->joypad.buttons_select = 1;
 
 	gb__MemoryWriteByte(gb, 0xFF05, 0x00);
 	gb__MemoryWriteByte(gb, 0xFF06, 0x00);
@@ -2963,8 +3037,10 @@ gb__HandleInterrupts(gb_GameBoy *gb)
 			gb->cpu.pc = 0x60;
 		}
 	}
-	else if (!intr->ime && intr_pending.reg)
+	else if (gb->cpu.halt && !intr->ime && intr_pending.reg)
 	{
+		// Exiting halt mode with interrupts disabled.
+		// See 3rd to last paragraph in Sec. 4.9 of The Cycle-Accurate Game Boy Docs
 		gb->cpu.halt = false;
 		num_m_cycles = 1;
 	}
@@ -3105,9 +3181,23 @@ gb__GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_in
 static void
 gb__RenderScanLine(gb_GameBoy *gb)
 {
+	assert(gb->ppu.ly < 144);
+
 	const struct gb_PpuLcdcFlags *lcdc = &gb->ppu.lcdc.flags;
 
-	if (lcdc->bg_enable)
+	const gb__Palette default_pal = gb__DefaultPalette();
+	const gb__Palette pal = {
+		.colors = {
+			[0] = default_pal.colors[(gb->ppu.bgp >> 0u) & 0x03],
+			[1] = default_pal.colors[(gb->ppu.bgp >> 2u) & 0x03],
+			[2] = default_pal.colors[(gb->ppu.bgp >> 4u) & 0x03],
+			[3] = default_pal.colors[(gb->ppu.bgp >> 6u) & 0x03],
+		},
+	};
+
+	const size_t tileset_idx = lcdc->bg_and_win_tileset_select ? 1 : 0;
+
+	if (lcdc->bg_and_win_enable)
 	{
 		const size_t vram_offset = lcdc->bg_tilemap_select ? 0x1C00 : 0x1800;
 
@@ -3115,31 +3205,57 @@ gb__RenderScanLine(gb_GameBoy *gb)
 		const size_t tile_y = y >> 3u;
 		const size_t in_tile_y = y & 7u;
 
-		const gb__Palette default_pal = gb__DefaultPalette();
-		const gb__Palette pal = {
-			.colors = {
-				[0] = default_pal.colors[(gb->ppu.bgp >> 0u) & 0x03],
-				[1] = default_pal.colors[(gb->ppu.bgp >> 2u) & 0x03],
-				[2] = default_pal.colors[(gb->ppu.bgp >> 4u) & 0x03],
-				[3] = default_pal.colors[(gb->ppu.bgp >> 6u) & 0x03],
-			},
-		};
-
-		size_t i = 0;
+		// i == display x coord, x == tilemap x coord
+		uint8_t i = 0;
 		while (i < GB_FRAMEBUFFER_WIDTH)
 		{
-			const size_t x = (gb->ppu.scx + i) & 0xFF;
+			const uint8_t x = gb->ppu.scx + i;
 			const size_t tile_x = x >> 3u;
 
 			const size_t map_offset = vram_offset + (tile_y << 5u) + tile_x;
 			const uint8_t tile_idx = gb->memory.vram[map_offset];
 
-			gb__TileLine line = gb__GetTileLine(gb, lcdc->bg_tileset_select ? 1 : 0, tile_idx, in_tile_y, pal);
+			gb__TileLine line = gb__GetTileLine(gb, tileset_idx, tile_idx, in_tile_y, pal);
 
-			size_t in_tile_x = x & 7u;
-			for (; in_tile_x < 8 && i < GB_FRAMEBUFFER_WIDTH; ++i, ++in_tile_x)
+			for (size_t in_tile_x = x & 7u; in_tile_x < 8 && i < GB_FRAMEBUFFER_WIDTH; ++i, ++in_tile_x)
 			{
 				gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + i] = line.pixels[in_tile_x];
+			}
+		}
+	}
+
+	if (lcdc->win_enable && lcdc->bg_and_win_enable)
+	{
+		// TODO(stefalie): It seems that the window should use its own, seperate "ly".
+		// See: https://gbdev.io/pandocs/Tile_Maps.html
+
+		if (gb->ppu.ly >= gb->ppu.wy)
+		{
+			assert(gb->ppu.wy < 144);
+
+			const size_t vram_offset = lcdc->win_tilemap_select ? 0x1C00 : 0x1800;
+
+			const size_t y = gb->ppu.ly - gb->ppu.wy;
+			const size_t tile_y = y >> 3u;
+			const size_t in_tile_y = y & 7u;
+
+			// i == display x coord, x == tilemap x coord
+			size_t i = MAX(0, (int)gb->ppu.wx - 7);
+			while (i < GB_FRAMEBUFFER_WIDTH)
+			{
+				const size_t x = 7 - gb->ppu.wx + i;  // i = x + wx - 7
+				assert(x < GB_FRAMEBUFFER_WIDTH);
+				const size_t tile_x = x >> 3u;
+
+				const size_t map_offset = vram_offset + (tile_y << 5u) + tile_x;
+				const uint8_t tile_idx = gb->memory.vram[map_offset];
+
+				gb__TileLine line = gb__GetTileLine(gb, tileset_idx, tile_idx, in_tile_y, pal);
+
+				for (size_t in_tile_x = x & 7u; in_tile_x < 8 && i < GB_FRAMEBUFFER_WIDTH; ++i, ++in_tile_x)
+				{
+					gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + i] = line.pixels[in_tile_x];
+				}
 			}
 		}
 	}
@@ -3259,7 +3375,10 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 
 	if (gb->cpu.pc == 0x0100)
 	{
-		gb->memory.bios_mapped = false;
+		// The BIOS gets automatically unmapped by writing to 0xFF50, and the
+		// BIOS itself does that.
+		assert(!gb->memory.bios_mapped);
+
 		// See Sec. 5.1 of The Cycle-Accurate Game Boy Docs
 		// The timer will be bogus will running the BIOS.
 		gb->timer.t_clock = 0xABCC;
@@ -3308,6 +3427,58 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	gb__AdvancePpu(gb, num_cycles);
 
 	return num_interrupt_cycles + num_cycles;
+}
+
+void
+gb_SetInput(gb_GameBoy *gb, gb_Input input, bool down)
+{
+	uint8_t *reg = NULL;
+	uint8_t bit = 0;
+	switch (input)
+	{
+	case GB_INPUT_BUTTON_A:
+		reg = &gb->joypad.buttons;
+		bit = 0x01;
+		break;
+	case GB_INPUT_BUTTON_B:
+		reg = &gb->joypad.buttons;
+		bit = 0x02;
+		break;
+	case GB_INPUT_BUTTON_SELECT:
+		reg = &gb->joypad.buttons;
+		bit = 0x04;
+		break;
+	case GB_INPUT_BUTTON_START:
+		reg = &gb->joypad.buttons;
+		bit = 0x08;
+		break;
+	case GB_INPUT_ARROW_RIGHT:
+		reg = &gb->joypad.dpad;
+		bit = 0x01;
+		break;
+	case GB_INPUT_ARROW_LEFT:
+		reg = &gb->joypad.dpad;
+		bit = 0x02;
+		break;
+	case GB_INPUT_ARROW_UP:
+		reg = &gb->joypad.dpad;
+		bit = 0x04;
+		break;
+	case GB_INPUT_ARROW_DOWN:
+		reg = &gb->joypad.dpad;
+		bit = 0x08;
+		break;
+	}
+
+	if (down)
+	{
+		*reg &= ~bit;
+	}
+	else
+	{
+		*reg |= bit;
+	}
+	assert((*reg & 0xF0) == 0);
 }
 
 gb_Tile

@@ -108,26 +108,28 @@ struct Input
 		SDL_GameControllerButton button;
 		SDL_GameControllerAxis axis;
 	} sdl;
+
+	gb_Input gb_input_type;
 };
 
-// TODO: rename to kDefaultInputs ?
+// TODO(stefalie): Split up into 2 sets? With/without controller.
 static const Input default_inputs[] = {
 	// Keyboard
-	{ "key_a", "A", Input::TYPE_KEY, { SDLK_x } },
-	{ "key_b", "B", Input::TYPE_KEY, { SDLK_z } },
-	{ "key_start", "Start", Input::TYPE_KEY, { SDLK_RETURN } },
-	{ "key_select", "Select", Input::TYPE_KEY, { SDLK_BACKSPACE } },
-	{ "key_left", "Left", Input::TYPE_KEY, { SDLK_LEFT } },
-	{ "key_right", "Right", Input::TYPE_KEY, { SDLK_RIGHT } },
-	{ "key_up", "Up", Input::TYPE_KEY, { SDLK_UP } },
-	{ "key_down", "Down", Input::TYPE_KEY, { SDLK_DOWN } },
+	{ "key_a", "A", Input::TYPE_KEY, { SDLK_x }, GB_INPUT_BUTTON_A },
+	{ "key_b", "B", Input::TYPE_KEY, { SDLK_z }, GB_INPUT_BUTTON_B },
+	{ "key_start", "Start", Input::TYPE_KEY, { SDLK_RETURN }, GB_INPUT_BUTTON_START },
+	{ "key_select", "Select", Input::TYPE_KEY, { SDLK_BACKSPACE }, GB_INPUT_BUTTON_SELECT },
+	{ "key_left", "Left", Input::TYPE_KEY, { SDLK_LEFT }, GB_INPUT_ARROW_LEFT },
+	{ "key_right", "Right", Input::TYPE_KEY, { SDLK_RIGHT }, GB_INPUT_ARROW_RIGHT },
+	{ "key_up", "Up", Input::TYPE_KEY, { SDLK_UP }, GB_INPUT_ARROW_UP },
+	{ "key_down", "Down", Input::TYPE_KEY, { SDLK_DOWN }, GB_INPUT_ARROW_DOWN },
 	// Controller
-	{ "button_a", "A", Input::TYPE_BUTTON, { SDL_CONTROLLER_BUTTON_B } },
-	{ "button_b", "B", Input::TYPE_BUTTON, { SDL_CONTROLLER_BUTTON_A } },
-	{ "button_start", "Start", Input::TYPE_BUTTON, { SDL_CONTROLLER_BUTTON_START } },
-	{ "button_select", "Select", Input::TYPE_BUTTON, { SDL_CONTROLLER_BUTTON_BACK } },
-	{ "stick_horizontal", "Horizontal", Input::TYPE_AXIS, { SDL_CONTROLLER_AXIS_LEFTX } },
-	{ "stick_vertical", "Vertical", Input::TYPE_AXIS, { SDL_CONTROLLER_AXIS_LEFTY } },
+	{ "button_a", "A", Input::TYPE_BUTTON, { SDL_CONTROLLER_BUTTON_B }, GB_INPUT_BUTTON_A },
+	{ "button_b", "B", Input::TYPE_BUTTON, { SDL_CONTROLLER_BUTTON_A }, GB_INPUT_BUTTON_B },
+	{ "button_start", "Start", Input::TYPE_BUTTON, { SDL_CONTROLLER_BUTTON_START }, GB_INPUT_BUTTON_START },
+	{ "button_select", "Select", Input::TYPE_BUTTON, { SDL_CONTROLLER_BUTTON_BACK }, GB_INPUT_BUTTON_SELECT },
+	{ "stick_horizontal", "Horizontal", Input::TYPE_AXIS, { SDL_CONTROLLER_AXIS_LEFTX }, (gb_Input)-1 },
+	{ "stick_vertical", "Vertical", Input::TYPE_AXIS, { SDL_CONTROLLER_AXIS_LEFTY }, (gb_Input)-1 },
 };
 static const size_t num_inputs = sizeof(default_inputs) / sizeof(default_inputs[0]);
 
@@ -221,7 +223,7 @@ DpiScale()
 	return dpi_scale;
 }
 
-const uint32_t window_default_scale_factor = 5;
+static const uint32_t window_default_scale_factor = 5;
 
 struct Ini
 {
@@ -479,7 +481,7 @@ struct Config
 		bool mag_filter_changed = true;
 		int speed_frame_multiplier = 1;
 
-		bool skip_bios = false;
+		bool skip_bios = true;
 		bool single_step_mode = false;
 		bool exec_next_step = false;
 	} gui;
@@ -494,6 +496,7 @@ struct Config
 		// TODO: maybe we won't need those guys.
 		GLuint tile_map_0_texture = 0;
 		GLuint tile_map_1_texture = 0;
+		size_t elapsed_m_cycles = 0;
 	} debug;
 
 	struct Handles
@@ -545,6 +548,7 @@ LoadRomFromFile(Config *config, gb_GameBoy *gb, const char *file_path)
 		{
 			config->gui.has_active_rom = true;
 			config->gui.exec_next_step = false;
+			config->debug.elapsed_m_cycles = 0;
 		}
 	}
 	else
@@ -623,6 +627,7 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 			if (ImGui::MenuItem("Reset"))
 			{
 				gb_Reset(gb, config->gui.skip_bios);
+				config->debug.elapsed_m_cycles = 0;
 			}
 			// TODO
 			ImGui::MenuItem("Pause", "Space", false, config->gui.has_active_rom);
@@ -1200,8 +1205,8 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 		// I dunno why. Maybe because of all the two window shenanigans we do?
 		// This FPS counter includes rendering the debug window, which is likely the
 		// bottleneck.
-		ImGui::Text("Frame time: %.3f ms", avg_dt_in_ms);
-		ImGui::Text("FPS: %.1f", 1000.0f / avg_dt_in_ms);
+		ImGui::Text("Frame time: %.3f ms, FPS: %.1f", avg_dt_in_ms, 1000.0f / avg_dt_in_ms);
+		ImGui::Text("M cycles: %u", config->debug.elapsed_m_cycles);
 		prev_time = curr_time;
 
 		ImGui::End();
@@ -1538,18 +1543,20 @@ main(int argc, char *argv[])
 		{
 			ImGui_ImplSDL2_ProcessEvent(&event);
 
-			// TODO: Not needed for GB I think. Also modal popup wants input and then doesn't give us the keys anymore.
+			// TODO(stefalie): I have no clue anymore what this was about.
+			// Not needed for GB I think. Also modal popup wants input and then doesn't give us the keys anymore.
 			// BAD.
-			// ImGuiIO& io = ImGui::GetIO(); if ((io.WantCaptureMouse && (event.type == SDL_MOUSEWHEEL ||
-			// event.type == SDL_MOUSEBUTTONDOWN)) ||
+			// ImGuiIO &io = ImGui::GetIO();
+			// if ((io.WantCaptureMouse && (event.type == SDL_MOUSEWHEEL || event.type == SDL_MOUSEBUTTONDOWN)) ||
 			//		(io.WantCaptureKeyboard && (event.type == SDL_KEYUP || event.type == SDL_KEYDOWN)))
-			//{
+			// {
 			//	continue;
-			//}
+			// }
 
 			// TODO(stefalie): Deal with Ctrl+? combinations to open ROM files. etc.
 
 			// Highjack (certain) inputs when the input config is modified.
+			const int controller_axis_sensitivity_threshold = 20000;  // No idea if this value is generally ok?!
 			if (config.modify_input)
 			{
 				bool event_captured = false;
@@ -1567,8 +1574,7 @@ main(int argc, char *argv[])
 					event_captured = true;
 				}
 				else if (event.type == SDL_CONTROLLERAXISMOTION && config.modify_input->type == Input::TYPE_AXIS &&
-						(abs(event.caxis.value) > 20000)  // No idea if this sensitivity threshold is generally ok.
-				)
+						(abs(event.caxis.value) > controller_axis_sensitivity_threshold))
 				{
 					config.modify_input->sdl.axis = (SDL_GameControllerAxis)event.caxis.axis;
 					event_captured = true;
@@ -1620,41 +1626,62 @@ main(int argc, char *argv[])
 				config.handles.controller = NULL;
 				break;
 			case SDL_CONTROLLERBUTTONDOWN:
+			case SDL_CONTROLLERBUTTONUP:
 				for (size_t i = 0; i < num_inputs; ++i)
 				{
 					Input input = config.ini.inputs[i];
 					if (input.type == Input::TYPE_BUTTON && event.cbutton.button == input.sdl.button)
 					{
-						SDL_Log("Pressed button '%s'.\n", input.nice_name);
+						gb_SetInput(&gb, input.gb_input_type, event.type == SDL_CONTROLLERBUTTONDOWN);
 					}
 				}
-				break;
-			case SDL_CONTROLLERBUTTONUP:
-				// TODO:
 				break;
 			case SDL_CONTROLLERAXISMOTION:
 				for (size_t i = 0; i < num_inputs; ++i)
 				{
+					// TODO: Test this, it might all be bogus.
 					Input input = config.ini.inputs[i];
 					if (input.type == Input::TYPE_AXIS && event.caxis.axis == input.sdl.axis)
 					{
-						SDL_Log("Moved '%s' by %i.\n", input.nice_name, event.caxis.value);
+						const bool is_pushed = abs(event.caxis.value) > controller_axis_sensitivity_threshold;
+						const bool is_x_axis = event.caxis.axis == SDL_CONTROLLER_AXIS_LEFTX ||
+								event.caxis.axis == SDL_CONTROLLER_AXIS_RIGHTX;
+						const bool is_positive = event.caxis.value >= 0;
+
+						if (is_x_axis && is_positive)
+						{
+							gb_SetInput(&gb, GB_INPUT_ARROW_RIGHT, is_pushed);
+						}
+						else if (is_x_axis && !is_positive)
+						{
+							gb_SetInput(&gb, GB_INPUT_ARROW_LEFT, is_pushed);
+						}
+						else if (!is_x_axis && is_positive)
+						{
+							gb_SetInput(&gb, GB_INPUT_ARROW_UP, is_pushed);
+						}
+						else /* if (!is_x_axis && !is_positive) */
+						{
+							gb_SetInput(&gb, GB_INPUT_ARROW_DOWN, is_pushed);
+						}
 					}
 				}
 				break;
 			case SDL_KEYDOWN:
-				if (event.key.keysym.sym == SDLK_ESCAPE)
+			case SDL_KEYUP:
+				if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)
 				{
 					if (SDL_GetWindowFlags(config.handles.window) & SDL_WINDOW_INPUT_FOCUS)
 					{
 						config.gui.pressed_escape = true;
 					}
 				}
-				else if (event.key.keysym.sym == SDLK_RETURN && (SDL_GetModState() & KMOD_LALT))
+				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN &&
+						(SDL_GetModState() & KMOD_LALT))
 				{
 					config.gui.toggle_fullscreen = true;
 				}
-				else if (event.key.keysym.sym == SDLK_F10)
+				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F10)
 				{
 					config.gui.exec_next_step = true;
 				}
@@ -1665,10 +1692,11 @@ main(int argc, char *argv[])
 						Input input = config.ini.inputs[i];
 						if (input.type == Input::TYPE_KEY && event.key.keysym.sym == input.sdl.key)
 						{
-							SDL_Log("Pressed key '%s'.\n", input.nice_name);
+							gb_SetInput(&gb, input.gb_input_type, event.type == SDL_KEYDOWN);
 						}
 					}
 				}
+				break;
 			case SDL_MOUSEMOTION:
 				// TODO: Show menu for a few secs if game is running. If not running,
 				// always show menu.
@@ -1692,7 +1720,8 @@ main(int argc, char *argv[])
 
 		if (is_running_debug_mode)
 		{
-			gb_ExecuteNextInstruction(&gb);
+			const size_t m_cycles = gb_ExecuteNextInstruction(&gb);
+			config.debug.elapsed_m_cycles += m_cycles;
 
 			if (gb_FramebufferUpdated(&gb))
 			{
@@ -1716,6 +1745,7 @@ main(int argc, char *argv[])
 				const size_t emulated_m_cycles = gb_ExecuteNextInstruction(&gb);
 				assert(emulated_m_cycles > 0);
 				m_cycle_acc -= emulated_m_cycles;
+				config.debug.elapsed_m_cycles += emulated_m_cycles;
 
 				if (gb_FramebufferUpdated(&gb) && !has_updated_fb)
 				{

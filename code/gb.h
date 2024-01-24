@@ -125,6 +125,23 @@ typedef struct gb_GameBoy
 		bool halt;
 	} cpu;
 
+	struct gb_Joypad
+	{
+		uint8_t buttons;
+		uint8_t dpad;
+		union
+		{
+			uint8_t selection_wire;
+			struct
+			{
+				uint8_t invalid : 4;  // The lower nibble of buttons/dpad shoudl be here.
+				uint8_t dpad_select : 1;
+				uint8_t buttons_select : 1;
+				uint8_t _ : 2;
+			};
+		};
+	} joypad;
+
 	struct gb_SerialTransfer
 	{
 		uint8_t sb;
@@ -139,11 +156,11 @@ typedef struct gb_GameBoy
 		{
 			struct gb_PpuLcdcFlags
 			{
-				uint8_t bg_enable : 1;
+				uint8_t bg_and_win_enable : 1;
 				uint8_t sprite_enable : 1;
 				uint8_t sprite_size : 1;  // 0 -> 8x8, 1 -> 8x16
 				uint8_t bg_tilemap_select : 1;  // 0 -> 0x9800-0x9BFF, 1 -> 0x9C00-0x9FFF
-				uint8_t bg_tileset_select : 1;  // 0 -> 0x8800-0x97FF, 1 -> 0x8000-0x8FFF
+				uint8_t bg_and_win_tileset_select : 1;  // 0 -> 0x8800-0x97FF, 1 -> 0x8000-0x8FFF
 				uint8_t win_enable : 1;
 				uint8_t win_tilemap_select : 1;  // 0 -> 0x9800-0x9BFF, 1 -> 0x9C00-0x9FFF
 				uint8_t lcd_enable : 1;
@@ -251,6 +268,12 @@ typedef struct gb_GameBoy
 		const uint8_t *data;
 		uint32_t num_bytes;
 	} rom;
+
+	struct gb_Sound
+	{
+		uint8_t nr[23];
+		uint8_t w[16];
+	} sound;
 } gb_GameBoy;
 
 // Returns true in error case if the ROM cannot be loaded, is broken,
@@ -299,6 +322,21 @@ gb_DisassembleInstruction(gb_Instruction inst, char str_buf[], size_t str_buf_le
 // it takes to execute that instruction.
 size_t
 gb_ExecuteNextInstruction(gb_GameBoy *gb);
+
+typedef enum gb_Input
+{
+	GB_INPUT_BUTTON_A,
+	GB_INPUT_BUTTON_B,
+	GB_INPUT_BUTTON_SELECT,
+	GB_INPUT_BUTTON_START,
+	GB_INPUT_ARROW_RIGHT,
+	GB_INPUT_ARROW_LEFT,
+	GB_INPUT_ARROW_UP,
+	GB_INPUT_ARROW_DOWN,
+} gb_Input;
+
+void
+gb_SetInput(gb_GameBoy *gb, gb_Input input, bool down);
 
 typedef struct gb_Tile
 {
