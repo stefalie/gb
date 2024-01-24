@@ -1006,9 +1006,9 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 	}
 
 	ImGui::Begin(tab_name_break);
-	for (int i = 0; i < num_breakpoints; ++i)
+	for (size_t i = 0; i < num_breakpoints; ++i)
 	{
-		ImGui::PushID(i);
+		ImGui::PushID((int)i);
 		ImGui::InputScalar("Address", ImGuiDataType_U16, &breakpoints[i].address, NULL, NULL, "%04X",
 				ImGuiInputTextFlags_CharsHexadecimal);
 		ImGui::SameLine();
@@ -1148,11 +1148,11 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 			ImGui::Text("SERIAL  =  %u |  %u", intr->ie_flags.serial, intr->if_flags.serial);
 			ImGui::Text("JOYPAD  =  %u |  %u", intr->ie_flags.joypad, intr->if_flags.joypad);
 			ImGui::Separator();
-			ImGui::Text("Timer: %s", gb->timer.tac.enable ? "on" : "off");
+			ImGui::Text("Timer: %s, speed: %u", gb->timer.tac.enable ? "on" : "off", gb->timer.tac.clock_select);
 			ImGui::Text("div  = 0x%02X", gb->timer.div);
 			ImGui::Text("tima = 0x%02X", gb->timer.tima);
 			ImGui::Text("tma  = 0x%02X", gb->timer.tma);
-			ImGui::Text("tac  = 0x%02X", gb->timer.tac);
+			ImGui::Text("tac  = 0x%02X", gb->timer.tac.reg);
 			ImGui::End();
 		}
 	}
@@ -1205,7 +1205,7 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 		// This FPS counter includes rendering the debug window, which is likely the
 		// bottleneck.
 		ImGui::Text("Frame time: %.3f ms, FPS: %.1f", avg_dt_in_ms, 1000.0f / avg_dt_in_ms);
-		ImGui::Text("M cycles: %u", config->debug.elapsed_m_cycles);
+		ImGui::Text("M cycles: %zu", config->debug.elapsed_m_cycles);
 		prev_time = curr_time;
 
 		ImGui::End();
@@ -1756,7 +1756,7 @@ main(int argc, char *argv[])
 				}
 
 				// Breakpoints for debugging
-				for (int i = 0; i < num_breakpoints; ++i)
+				for (size_t i = 0; i < num_breakpoints; ++i)
 				{
 					if (breakpoints[i].enable && gb.cpu.pc == breakpoints[i].address)
 					{

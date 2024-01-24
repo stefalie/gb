@@ -1,6 +1,9 @@
 // Copyright (C) 2022 Stefan Lienhard
 
-// TODO: insert cmd to compile this -c -std=c11 /c /std:c11
+// Build with Visual Studio:
+// cl /std:c11 /c gb.c
+// Build with Clang:
+// clang -std=c11 -c gb.c
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -44,20 +47,6 @@ typedef enum gb_MbcType
 	GB_MBC_TYPE_3,
 } gb_MbcType;
 
-typedef union gb_InterruptBits
-{
-	struct
-	{
-		uint8_t vblank : 1;
-		uint8_t lcd_stat : 1;
-		uint8_t timer : 1;
-		uint8_t serial : 1;
-		uint8_t joypad : 1;
-		uint8_t _ : 3;
-	};
-	uint8_t reg;
-} gb_InterruptBits;
-
 typedef struct gb_GameBoy
 {
 	// The CPU conains only the registers.
@@ -70,7 +59,7 @@ typedef struct gb_GameBoy
 			{
 				union
 				{
-					struct gb_CpuFlags
+					struct
 					{
 						uint8_t _ : 4;
 						uint8_t carry : 1;
@@ -118,8 +107,20 @@ typedef struct gb_GameBoy
 		{
 			bool ime;  // Interrupt master enable flag
 			bool ime_after_next_inst;
-			gb_InterruptBits ie_flags;  // Interrupt enable flags
-			gb_InterruptBits if_flags;  // Interrupt requested flags
+
+			union gb_InterruptBits
+			{
+				struct
+				{
+					uint8_t vblank : 1;
+					uint8_t lcd_stat : 1;
+					uint8_t timer : 1;
+					uint8_t serial : 1;
+					uint8_t joypad : 1;
+					uint8_t _ : 3;
+				};
+				uint8_t reg;
+			} ie_flags, if_flags;  // Interrupt enable/request flags
 		} interrupt;
 		bool stop;
 		bool halt;
@@ -152,9 +153,9 @@ typedef struct gb_GameBoy
 	{
 		uint16_t mode_clock;
 
-		union
+		union gb_PpuLcdc
 		{
-			struct gb_PpuLcdcFlags
+			struct
 			{
 				uint8_t bg_and_win_enable : 1;
 				uint8_t sprite_enable : 1;
@@ -164,12 +165,13 @@ typedef struct gb_GameBoy
 				uint8_t win_enable : 1;
 				uint8_t win_tilemap_select : 1;  // 0 -> 0x9800-0x9BFF, 1 -> 0x9C00-0x9FFF
 				uint8_t lcd_enable : 1;
-			} flags;
+			};
 			uint8_t reg;
 		} lcdc;
-		union
+
+		union gb_PpuStat
 		{
-			struct gb_PpuStatFlags
+			struct
 			{
 				uint8_t mode : 2;  // A value of 'gb_PpuMode' (but can't use it as type).
 				uint8_t coincidence_flag : 1;
@@ -178,20 +180,21 @@ typedef struct gb_GameBoy
 				uint8_t interrupt_mode_oam_scan : 1;
 				uint8_t interrupt_coincidence : 1;
 				uint8_t _ : 1;
-			} flags;
+			};
 			uint8_t reg;
 		} stat;
+
 		uint8_t scy;  // Scroll Y
 		uint8_t scx;  // Scroll X
 		uint8_t ly;  // Line
 		uint8_t lyc;  // Line compare
-		// uint8_t dma;
 		uint8_t bgp;  // Background & window palette
 		uint8_t obp0;  // Object palette 0
 		uint8_t obp1;  // Object palette 1
 		uint8_t wy;  // Windows Y
 		uint8_t wx;  // Windows X
 
+		// TODO(stefalie): Move this to gb_Memory?!
 		uint8_t oam[160];  // Sprite attribute memory
 	} ppu;
 

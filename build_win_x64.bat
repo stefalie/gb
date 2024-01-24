@@ -59,7 +59,8 @@ rem -fuse-ld=lld Use clang lld linker instead of msvc link.
 rem /SUBSYSTEM:console warns about both main and wmain being present.
 set ClangLinkerFlags=-fuse-ld=lld -Xlinker /INCREMENTAL:NO -Xlinker /OPT:REF -Xlinker /SUBSYSTEM:windows -lShell32 -lOpenGL32 -lComdlg32 %SdlLibs%
 set ClangRelCompilerFlags=-DNDEBUG -O3 -Wno-unused-function
-set ClangDebCompilerFlags=-g -fsanitize=address
+rem See on ASAN below in Msvc build steps (-fsanitize=address)
+set ClangDebCompilerFlags=-g
 
 rem /Zi Generates complete debugging information.
 rem /FC Full paths in diagnostics

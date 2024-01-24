@@ -284,6 +284,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			if (mem->mbc_external_ram_enable)
 			{
 				const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
+				(void)ram_size;
 				assert(ram_size > 0 && ram_size < 4);
 				assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
 				assert(mem->mbc1.ram_bank == 1 || ram_size == 3);
@@ -307,6 +308,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				if (mem->mbc3.rtc_mode_or_idx == 0)
 				{
 					const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
+					(void)ram_size;
 					assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
 					assert(ram_size > 0);
 					assert(ram_size != 1 || mem->mbc3.ram_bank == 1);
@@ -613,6 +615,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				if (mem->mbc3.rtc_mode_or_idx == 0)
 				{
 					const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
+					(void)ram_size;
 					assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
 					assert(ram_size > 0);
 					assert(ram_size != 1 || mem->mbc3.ram_bank == 1);
@@ -723,9 +726,9 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			}
 			else if (addr == 0xFF41)
 			{
-				gb_PpuMode mode_read_only = gb->ppu.stat.flags.mode;
+				gb_PpuMode mode_read_only = gb->ppu.stat.mode;
 				gb->ppu.stat.reg = value;
-				gb->ppu.stat.flags.mode = mode_read_only;
+				gb->ppu.stat.mode = mode_read_only;
 			}
 			else if (addr == 0xFF42)
 			{
@@ -885,7 +888,7 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 	// the GameBoy start in when skipping the BIOS?
 	// no$gmb seems to start in mode 1 with LY == 0.
 	// This shouldn't really matter, should it?
-	gb->ppu.stat.flags.coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
+	gb->ppu.stat.coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
 
 	gb->joypad.buttons = 0x0F;
 	gb->joypad.dpad = 0x0F;
@@ -1503,6 +1506,8 @@ static const gb__InstructionInfo gb__extended_instruction_infos[256] = {
 	[0xFF] = { "SET 7, A", 0, 2 },
 };
 
+static const uint8_t extended_inst_prefix = 0xCB;
+
 gb_Instruction
 gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
 {
@@ -1512,7 +1517,6 @@ gb_FetchInstruction(const gb_GameBoy *gb, uint16_t addr)
 
 	gb__InstructionInfo info;
 
-	const uint8_t extended_inst_prefix = 0xCB;
 	if (inst.opcode == extended_inst_prefix)
 	{
 		++addr;
@@ -1736,7 +1740,6 @@ gb__Dec(gb_GameBoy *gb, uint8_t *val)
 static uint16_t
 gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 {
-	const uint8_t extended_inst_prefix = 0xCB;
 	assert(gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) != extended_inst_prefix ||
 			gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) - 1 == extended_inst_prefix);
 
@@ -2546,7 +2549,6 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 static uint16_t
 gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 {
-	const uint8_t extended_inst_prefix = 0xCB;
 	assert(gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) == extended_inst_prefix);
 
 	// TODO(stefalie): Consider using if/else if branches. It will be more compact than using a switch.
@@ -3188,7 +3190,7 @@ gb__RenderScanLine(gb_GameBoy *gb)
 {
 	assert(gb->ppu.ly < 144);
 
-	const struct gb_PpuLcdcFlags *lcdc = &gb->ppu.lcdc.flags;
+	const union gb_PpuLcdc *lcdc = &gb->ppu.lcdc;
 
 	const gb__Palette default_pal = gb__DefaultPalette();
 	const gb__Palette pal = {
@@ -3281,7 +3283,7 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 
 	gb->ppu.mode_clock += 4 * elapsed_m_cycles;
 
-	struct gb_PpuStatFlags *stat = &gb->ppu.stat.flags;
+	union gb_PpuStat *stat = &gb->ppu.stat;
 
 	switch (stat->mode)
 	{
