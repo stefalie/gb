@@ -341,7 +341,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			// See: https://gbdev.io/pandocs/Rendering.html
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{
-				return gb->ppu.oam[addr & 0xFF];
+				return gb->memory.oam.bytes[addr & 0xFF];
 			}
 			else  // Empty
 			{
@@ -650,7 +650,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			// See: https://gbdev.io/pandocs/Rendering.html
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{
-				gb->ppu.oam[addr & 0xFF] = value;
+				gb->memory.oam.bytes[addr & 0xFF] = value;
 			}
 			else
 			{
@@ -765,7 +765,9 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				// We simply ignore that here.
 				for (uint16_t i = 0; i < 0xA0; ++i)
 				{
-					gb__MemoryWriteByte(gb, 0xFE00 + i, gb_MemoryReadByte(gb, (value << 8u) + i));
+					// TODO: oam
+					gb->memory.oam.bytes[i] = gb_MemoryReadByte(gb, (value << 8u) + i);
+					// gb__MemoryWriteByte(gb, 0xFE00 + i, gb_MemoryReadByte(gb, (value << 8u) + i));
 				}
 				break;
 			}
@@ -3264,6 +3266,17 @@ gb__RenderScanLine(gb_GameBoy *gb)
 					gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + i] = line.pixels[in_tile_x];
 				}
 			}
+		}
+	}
+
+	size_t num_scanned_sprites = 0;
+	const int sprite_height = gb->ppu.lcdc.sprite_size == 1 ? 16 : 8;
+	for (size_t i = 0; i < 40 && num_scanned_sprites < 10; ++i)
+	{
+		const gb_Sprite sprite = gb->memory.oam.sprites[i];
+		if (gb->ppu.ly - (sprite.y_pos - 16) < sprite_height)
+		{
+			++num_scanned_sprites;
 		}
 	}
 }

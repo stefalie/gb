@@ -47,6 +47,26 @@ typedef enum gb_MbcType
 	GB_MBC_TYPE_3,
 } gb_MbcType;
 
+typedef struct gb_Sprite
+{
+	uint8_t y_pos;
+	uint8_t x_pos;
+	uint8_t tile_index;
+	union
+	{
+		struct
+		{
+			uint8_t _cgb_palette : 3;  // unused
+			uint8_t _cgb_bank : 1;  // unused
+			uint8_t dmg_palette : 1;
+			uint8_t x_flip : 1;
+			uint8_t y_flip : 1;
+			uint8_t priority : 1;
+		};
+		uint8_t flags;
+	};
+} gb_Sprite;
+
 typedef struct gb_GameBoy
 {
 	// The CPU conains only the registers.
@@ -193,19 +213,22 @@ typedef struct gb_GameBoy
 		uint8_t obp1;  // Object palette 1
 		uint8_t wy;  // Windows Y
 		uint8_t wx;  // Windows X
-
-		// TODO(stefalie): Move this to gb_Memory?!
-		uint8_t oam[160];  // Sprite attribute memory
 	} ppu;
 
 	struct gb_Memory
 	{
 		bool bios_mapped;
 		uint8_t wram[8192];  // 8 KiB
-		// TODO(stefalie): Consider caching the tiles.
+		// TODO(stefalie): Consider caching the tiles for better performance.
 		uint8_t vram[8192];  // 8 KiB
 		uint8_t external_ram[8192 * 4];  // Up to 4 banks of 8 KiB each
 		uint8_t zero_page_ram[128];
+
+		union
+		{
+			gb_Sprite sprites[40];
+			uint8_t bytes[160];
+		} oam; // Sprite attribute memory
 
 		// Memory Bank Controller
 		gb_MbcType mbc_type;
@@ -400,6 +423,7 @@ gb_MagFramebufferSizeInBytes(gb_MagFilter mag_filter);
 uint32_t
 gb_MaxMagFramebufferSizeInBytes(void);
 
+// TODO(stefalie): Magnification filters would be way faster in a shader.
 // Magnify 'gb's default framebuffer with a given filter and stores in user
 // provided buffer.
 gb_Framebuffer
