@@ -229,7 +229,11 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 		assert(num_rom_banks < 128);
 
 		uint8_t bank = 0;
-		if (mem->mbc_type == GB_MBC_TYPE_1)
+		if (mem->mbc_type == GB_MBC_TYPE_ROM_ONLY)
+		{
+			bank = 1;
+		}
+		else if (mem->mbc_type == GB_MBC_TYPE_1)
 		{
 			// 0 -> 1 transition
 			uint8_t lower_bits = mem->mbc1.rom_bank;
@@ -359,7 +363,6 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				assert((gb->joypad.selection_wire & ~0x30) == 0);
 				p1 |= gb->joypad.selection_wire;
 				assert((p1 & ~0x3F) == 0);
-				assert(false);
 				return p1;
 			}
 			// Timer
@@ -560,7 +563,9 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 		}
 		else if (mem->mbc_type == GB_MBC_TYPE_3)
 		{
-			assert(!"TODO Latch");
+			// Latch currenty time into RTC.
+			// TODO(stefalie): RTC not suppored,
+			assert(false);
 		}
 		break;
 	// VRAM

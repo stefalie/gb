@@ -2,13 +2,8 @@
 
 // TODO:
 // - UI timeout
-// - pause popup
-// - ESC should be pause
 // - make input handle function separate.
 // - make lambdas out of the OrComplainFunctions
-// - deal with pause state, you might also need the previous state (if you press
-// esc and don't quit, you want to be back
-//   in the state you were at before pressing esc).
 
 #define _CRT_SECURE_NO_WARNINGS
 #define NOMINMAX
@@ -177,9 +172,9 @@ static const struct
 	const char *nice_name = NULL;
 } mag_options[] = {
 	{ GB_MAG_FILTER_NONE, "none", "None" },
-	{ GB_MAG_FILTER_EPX_SCALE2X_ADVMAME2X, "epx_scale2x_advmame2x", "EPX/Scale2x/AdvMAME2x" },
-	{ GB_MAG_FILTER_SCALE3X_ADVMAME3X_SCALEF, "scale3x_advmame3x_scalef", "Scale3x/AdvMAME3x/ScaleF" },
-	{ GB_MAG_FILTER_SCALE4X_ADVMAME4X, "scale4x_advmame4x", "Scale4x/AdvMAME4x" },
+	{ GB_MAG_FILTER_EPX_SCALE2X_ADVMAME2X, "epx_scale2x_advmame2x", "EPX/Scale2x" },
+	{ GB_MAG_FILTER_SCALE3X_ADVMAME3X_SCALEF, "scale3x_advmame3x_scalef", "Scale3x/ScaleF" },
+	{ GB_MAG_FILTER_SCALE4X_ADVMAME4X, "scale4x_advmame4x", "Scale4x" },
 	{ GB_MAG_FILTER_XBR2, "xbr2", "xBR2" },
 };
 static const size_t num_mag_options = sizeof(mag_options) / sizeof(mag_options[0]);
@@ -190,7 +185,6 @@ enum Speed
 	SPEED_2X = 2,
 	SPEED_4X = 4,
 	SPEED_8X = 8,
-	SPEED_16X = 16,
 };
 static const struct
 {
@@ -201,7 +195,6 @@ static const struct
 	{ SPEED_2X, "2x" },
 	{ SPEED_4X, "4x" },
 	{ SPEED_8X, "8x" },
-	{ SPEED_16X, "16x" },
 };
 static const size_t num_speed_options = sizeof(speed_options) / sizeof(speed_options[0]);
 
@@ -479,11 +472,15 @@ struct Config
 		bool fullscreen = false;
 
 		bool mag_filter_changed = true;
-		int speed_frame_multiplier = 1;
+		Speed speed_frame_multiplier = SPEED_DEFAULT;
 
-		bool skip_bios = true;
-		bool single_step_mode = false;
+		bool skip_bios = false;
 		bool exec_next_step = false;
+
+		// TODO(stefalie): We might also want to store the previous state of pause
+		// for the case that we only pause to open a modal popup. When we return
+		// from the popup, we should go back to the state it had before the popup.
+		bool pause = false;
 	} gui;
 
 	struct Debugger
@@ -629,8 +626,10 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 				gb_Reset(gb, config->gui.skip_bios);
 				config->debug.elapsed_m_cycles = 0;
 			}
-			// TODO
-			ImGui::MenuItem("Pause", "Space", false, config->gui.has_active_rom);
+			if (ImGui::MenuItem("Pause", "Space", config->gui.pause))
+			{
+				config->gui.pause = !config->gui.pause;
+			}
 			ImGui::Separator();
 			// TODO
 			ImGui::MenuItem("Save", "F5", false, config->gui.has_active_rom);
@@ -697,7 +696,7 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 					if (ImGui::MenuItem(speed_options[i].nice_name, NULL,
 								config->gui.speed_frame_multiplier == speed_options[i].type))
 					{
-						config->gui.speed_frame_multiplier = mag_options[i].type;
+						config->gui.speed_frame_multiplier = speed_options[i].type;
 					}
 				}
 				ImGui::EndMenu();
@@ -718,10 +717,6 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 			{
 				config->gui.skip_bios = !config->gui.skip_bios;
 			}
-			if (ImGui::MenuItem("Single step mode", NULL, config->gui.single_step_mode))
-			{
-				config->gui.single_step_mode = !config->gui.single_step_mode;
-			}
 			if (ImGui::MenuItem("Step", "F10"))
 			{
 				config->gui.exec_next_step = true;
@@ -740,6 +735,12 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 				config->gui.show_about_popup = true;
 			}
 			ImGui::EndMenu();
+		}
+
+		if (config->gui.pause)
+		{
+			ImGui::SameLine(ImGui::GetWindowWidth() - 250);
+			ImGui::Text("(paused)");
 		}
 	}
 	ImGui::EndMainMenuBar();
@@ -771,6 +772,7 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 	if (config->gui.show_input_config_popup)
 	{
 		ImGuiOpenCenteredPopup("Configure Input");
+		config->gui.pause = true;
 	}
 	if (ImGui::BeginPopupModal("Configure Input", NULL, popup_flags))
 	{
@@ -838,6 +840,7 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 	if (config->gui.show_about_popup)
 	{
 		ImGuiOpenCenteredPopup("About GB");
+		config->gui.pause = true;
 	}
 	if (ImGui::BeginPopupModal("About GB", NULL, popup_flags))
 	{
@@ -846,7 +849,7 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 		ImGui::Text(
 				"GB is a simple GameBoy emulator\n"
 				"and debugger for Windows created\n"
-				"by Stefan Lienhard in 2022.");
+				"by Stefan Lienhard.");
 		ImGui::Text("https://github.com/stefalie/gb");
 		if (ImGui::Button("Cancel") || close_current_popup)
 		{
@@ -876,6 +879,7 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 	if (config->gui.show_quit_popup)
 	{
 		ImGuiOpenCenteredPopup("Quit");
+		config->gui.pause = true;
 	}
 	if (ImGui::BeginPopupModal("Quit", NULL, popup_flags))
 	{
@@ -1018,14 +1022,6 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 		const uint16_t inst_num_bytes = gb_FetchInstruction(gb, gb->cpu.pc).num_operand_bytes + 1;
 
 		MemoryEditor *rom_view = &config->debug.rom_view;
-		if (config->debug.views_follow_pc && (!gb->memory.bios_mapped || gb->cpu.pc >= 256))
-		{
-			rom_view->GotoAddrAndHighlight(gb->cpu.pc, gb->cpu.pc + inst_num_bytes);
-		}
-		else
-		{
-			rom_view->GotoAddrAndHighlight((size_t)-1, 0);
-		}
 		ImGui::Begin(tab_name_rom_view);
 		rom_view->DrawContents(config->rom.data, config->rom.size);
 		ImGui::End();
@@ -1180,6 +1176,9 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 		ImGui::Begin(tab_name_disassembly);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
+		ImGui::Begin(tab_name_ppu);
+		ImGui::Text("%s", placeholder);
+		ImGui::End();
 		ImGui::Begin(tab_name_cpu);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
@@ -1191,7 +1190,7 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 	{
 		ImGui::Begin(tab_name_options);
 		ImGui::Checkbox("Highlight current instruction", &config->debug.views_follow_pc);
-		ImGui::Checkbox("Single step mode", &config->gui.single_step_mode);
+		ImGui::Checkbox("Single step mode (pause)", &config->gui.pause);
 
 		// Compute average framerate.
 		static Uint64 frequency = SDL_GetPerformanceFrequency();
@@ -1685,6 +1684,10 @@ main(int argc, char *argv[])
 				{
 					config.gui.exec_next_step = true;
 				}
+				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE)
+				{
+					config.gui.pause = !config.gui.pause;
+				}
 				else
 				{
 					for (size_t i = 0; i < num_inputs; ++i)
@@ -1714,9 +1717,8 @@ main(int argc, char *argv[])
 		prev_time = curr_time;
 
 		// Run emulator
-		const bool is_running_debug_mode =
-				config.gui.has_active_rom && config.gui.single_step_mode && config.gui.exec_next_step;
-		const bool is_running_normal_mode = config.gui.has_active_rom && !config.gui.single_step_mode;
+		const bool is_running_debug_mode = config.gui.has_active_rom && config.gui.pause && config.gui.exec_next_step;
+		const bool is_running_normal_mode = config.gui.has_active_rom && !config.gui.pause;
 
 		if (is_running_debug_mode)
 		{
@@ -1758,7 +1760,7 @@ main(int argc, char *argv[])
 				{
 					if (breakpoints[i].enable && gb.cpu.pc == breakpoints[i].address)
 					{
-						config.gui.single_step_mode = true;
+						config.gui.pause = true;
 						goto exit;
 					}
 				}
