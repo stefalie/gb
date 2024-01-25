@@ -182,6 +182,7 @@ static const size_t num_mag_options = sizeof(mag_options) / sizeof(mag_options[0
 enum Speed
 {
 	SPEED_DEFAULT = 1,
+	SPEED_HALF = 0,
 	SPEED_2X = 2,
 	SPEED_4X = 4,
 	SPEED_8X = 8,
@@ -192,6 +193,7 @@ static const struct
 	const char *nice_name = NULL;
 } speed_options[] = {
 	{ SPEED_DEFAULT, "Default" },
+	{ SPEED_HALF, "1/2x" },
 	{ SPEED_2X, "2x" },
 	{ SPEED_4X, "4x" },
 	{ SPEED_8X, "8x" },
@@ -1732,7 +1734,14 @@ main(int argc, char *argv[])
 		}
 		else if (is_running_normal_mode)
 		{
-			m_cycle_acc += config.gui.speed_frame_multiplier * elapsed_m_cycles;
+			if (config.gui.speed_frame_multiplier == SPEED_HALF)
+			{
+				m_cycle_acc += elapsed_m_cycles / 2;
+			}
+			else
+			{
+				m_cycle_acc += config.gui.speed_frame_multiplier * elapsed_m_cycles;
+			}
 
 			// Makes sure that we run the magnification filter and texture update
 			// only once per frame (it's expensive).
