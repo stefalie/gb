@@ -1,10 +1,5 @@
 // Copyright (C) 2022 Stefan Lienhard
 
-// TODO:
-// - UI timeout
-// - make input handle function separate.
-// - make lambdas out of the OrComplainFunctions
-
 #define _CRT_SECURE_NO_WARNINGS
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
@@ -458,7 +453,8 @@ struct Config
 
 	struct Gui
 	{
-		bool show_gui = true;
+		const float show_gui_timeout_in_s = 2.0f;
+		float show_gui_timer = 0.0f;
 
 		bool pressed_escape = false;
 
@@ -586,166 +582,179 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 {
 	ImGui::PushFont(config->handles.font);
 
-	if (ImGui::BeginMainMenuBar())
+	if (config->gui.show_gui_timer < 0.0f)
 	{
-		if (ImGui::BeginMenu("File"))
-		{
-			if (ImGui::MenuItem("Open ROM"))
-			{
-				char file_path[MAX_PATH] = {};
+		config->gui.show_gui_timer = 0.0f;
+	}
+	if (config->gui.pause)
+	{
+		config->gui.show_gui_timer = config->gui.show_gui_timeout_in_s;
+	}
 
-				OPENFILENAME ofn = {};
-				ofn.lStructSize = sizeof(ofn);
-				ofn.lpstrFilter = "GameBoy (*.gb)\0*.gb\0All (*.*)\0*.*\0";
-				ofn.lpstrFile = file_path;
-				ofn.nMaxFile = sizeof(file_path);
-				ofn.lpstrInitialDir = NULL;
-				ofn.lpstrTitle = "Open GameBoy ROM";
-				ofn.Flags = OFN_FILEMUSTEXIST;
-				if (GetOpenFileNameA(&ofn))
-				{
-					LoadRomFromFile(config, gb, ofn.lpstrFile);
-				}
-			}
-			// TODO: Keep this menu element?
-			if (ImGui::MenuItem("Eject ROM", NULL, false, config->gui.has_active_rom))
-			{
-				config->gui.has_active_rom = false;
-				free(config->rom.data);
-				config->rom = {};
-			}
-			ImGui::Separator();
-			if (ImGui::MenuItem("Exit", "Esc"))
-			{
-				config->gui.show_quit_popup = true;
-			}
-			ImGui::EndMenu();
-		}
-		if (ImGui::BeginMenu("System"))
+	if (config->gui.pause || !config->gui.has_active_rom || config->gui.show_gui_timer > 0.0f)
+	{
+		if (ImGui::BeginMainMenuBar())
 		{
-			if (ImGui::MenuItem("Reset"))
+			if (ImGui::BeginMenu("File"))
 			{
-				gb_Reset(gb, config->gui.skip_bios);
-				config->debug.elapsed_m_cycles = 0;
-			}
-			if (ImGui::MenuItem("Pause", "Space", config->gui.pause))
-			{
-				config->gui.pause = !config->gui.pause;
-			}
-			ImGui::Separator();
-			// TODO
-			ImGui::MenuItem("Save", "F5", false, config->gui.has_active_rom);
-			// TODO
-			ImGui::MenuItem("Load", "F7", false, config->gui.has_active_rom);
-			if (ImGui::BeginMenu("Save Slot"))
-			{
-				char slot_name[7] = { 'S', 'l', 'o', 't', ' ', 'X', '\0' };
-				for (int i = 1; i <= 5; ++i)
+				if (ImGui::MenuItem("Open ROM"))
 				{
-					slot_name[5] = '0' + (char)i;
-					if (ImGui::MenuItem(slot_name, NULL, config->gui.save_slot == i))
+					char file_path[MAX_PATH] = {};
+
+					OPENFILENAME ofn = {};
+					ofn.lStructSize = sizeof(ofn);
+					ofn.lpstrFilter = "GameBoy (*.gb)\0*.gb\0All (*.*)\0*.*\0";
+					ofn.lpstrFile = file_path;
+					ofn.nMaxFile = sizeof(file_path);
+					ofn.lpstrInitialDir = NULL;
+					ofn.lpstrTitle = "Open GameBoy ROM";
+					ofn.Flags = OFN_FILEMUSTEXIST;
+					if (GetOpenFileNameA(&ofn))
 					{
-						config->gui.save_slot = i;
+						LoadRomFromFile(config, gb, ofn.lpstrFile);
 					}
 				}
-				ImGui::EndMenu();
-			}
-			ImGui::EndMenu();
-		}
-		if (ImGui::BeginMenu("Options"))
-		{
-			if (ImGui::BeginMenu("Screen Size"))
-			{
-
-				for (size_t i = 0; i < num_stretch_options; ++i)
+				// TODO: Keep this menu element?
+				if (ImGui::MenuItem("Eject ROM", NULL, false, config->gui.has_active_rom))
 				{
-					if (ImGui::MenuItem(
-								stretch_options[i].nice_name, NULL, config->ini.stretch == stretch_options[i].type))
-					{
-						config->ini.stretch = stretch_options[i].type;
-					}
+					config->gui.has_active_rom = false;
+					free(config->rom.data);
+					config->rom = {};
 				}
 				ImGui::Separator();
-				if (ImGui::MenuItem("Fullscreen", NULL, config->gui.fullscreen))
+				if (ImGui::MenuItem("Exit", "Esc"))
 				{
-					config->gui.toggle_fullscreen = true;
-				}
-				if (ImGui::MenuItem("Reset Window Size", NULL, false))
-				{
-					const float dpi_scale = DpiScale();
-					const int win_width = (int)(window_default_scale_factor * GB_FRAMEBUFFER_WIDTH * dpi_scale);
-					const int win_height = (int)(window_default_scale_factor * GB_FRAMEBUFFER_HEIGHT * dpi_scale);
-					SDL_SetWindowSize(config->handles.window, win_width, win_height);
+					config->gui.show_quit_popup = true;
 				}
 				ImGui::EndMenu();
 			}
-			if (ImGui::BeginMenu("Magnification Filter"))
+			if (ImGui::BeginMenu("System"))
 			{
-				for (size_t i = 0; i < num_mag_options; ++i)
+				if (ImGui::MenuItem("Reset"))
 				{
-					if (ImGui::MenuItem(mag_options[i].nice_name, NULL, config->ini.mag_filter == mag_options[i].type))
+					gb_Reset(gb, config->gui.skip_bios);
+					config->debug.elapsed_m_cycles = 0;
+				}
+				if (ImGui::MenuItem("Pause", "Space", config->gui.pause))
+				{
+					config->gui.pause = !config->gui.pause;
+				}
+				ImGui::Separator();
+				// TODO
+				ImGui::MenuItem("Save", "F5", false, config->gui.has_active_rom);
+				// TODO
+				ImGui::MenuItem("Load", "F7", false, config->gui.has_active_rom);
+				if (ImGui::BeginMenu("Save Slot"))
+				{
+					char slot_name[7] = { 'S', 'l', 'o', 't', ' ', 'X', '\0' };
+					for (int i = 1; i <= 5; ++i)
 					{
-						config->ini.mag_filter = mag_options[i].type;
-						config->gui.mag_filter_changed = true;
+						slot_name[5] = '0' + (char)i;
+						if (ImGui::MenuItem(slot_name, NULL, config->gui.save_slot == i))
+						{
+							config->gui.save_slot = i;
+						}
 					}
+					ImGui::EndMenu();
 				}
 				ImGui::EndMenu();
 			}
-			if (ImGui::BeginMenu("Speed"))
+			if (ImGui::BeginMenu("Options"))
 			{
-				for (size_t i = 0; i < num_speed_options; ++i)
+				if (ImGui::BeginMenu("Screen Size"))
 				{
-					if (ImGui::MenuItem(speed_options[i].nice_name, NULL,
-								config->gui.speed_frame_multiplier == speed_options[i].type))
-					{
-						config->gui.speed_frame_multiplier = speed_options[i].type;
-					}
-				}
-				ImGui::EndMenu();
-			}
-			if (ImGui::MenuItem("Configure Input"))
-			{
-				config->gui.show_input_config_popup = true;
-			}
-			ImGui::EndMenu();
-		}
-		if (ImGui::BeginMenu("Debug"))
-		{
-			if (ImGui::MenuItem("Open Debugger", NULL, config->debug.show))
-			{
-				config->debug.show = !config->debug.show;
-			}
-			if (ImGui::MenuItem("Skip BIOS", NULL, config->gui.skip_bios))
-			{
-				config->gui.skip_bios = !config->gui.skip_bios;
-			}
-			if (ImGui::MenuItem("Step", "F10"))
-			{
-				config->gui.exec_next_step = true;
-			}
-			ImGui::EndMenu();
-		}
-		if (ImGui::BeginMenu("Help"))
-		{
-			if (ImGui::MenuItem("Website"))
-			{
-				// https://discourse.libsdl.org/t/does-sdl2-have-function-to-open-url-in-browser/22730/3
-				ShellExecute(NULL, "open", "https://github.com/stefalie/gb", NULL, NULL, SW_SHOWNORMAL);
-			}
-			if (ImGui::MenuItem("About"))
-			{
-				config->gui.show_about_popup = true;
-			}
-			ImGui::EndMenu();
-		}
 
-		if (config->gui.pause)
-		{
-			ImGui::SameLine(ImGui::GetWindowWidth() - 250);
-			ImGui::Text("(paused)");
+					for (size_t i = 0; i < num_stretch_options; ++i)
+					{
+						if (ImGui::MenuItem(
+									stretch_options[i].nice_name, NULL, config->ini.stretch == stretch_options[i].type))
+						{
+							config->ini.stretch = stretch_options[i].type;
+						}
+					}
+					ImGui::Separator();
+					if (ImGui::MenuItem("Fullscreen", NULL, config->gui.fullscreen))
+					{
+						config->gui.toggle_fullscreen = true;
+					}
+					if (ImGui::MenuItem("Reset Window Size", NULL, false))
+					{
+						const float dpi_scale = DpiScale();
+						const int win_width = (int)(window_default_scale_factor * GB_FRAMEBUFFER_WIDTH * dpi_scale);
+						const int win_height = (int)(window_default_scale_factor * GB_FRAMEBUFFER_HEIGHT * dpi_scale);
+						SDL_SetWindowSize(config->handles.window, win_width, win_height);
+					}
+					ImGui::EndMenu();
+				}
+				if (ImGui::BeginMenu("Magnification Filter"))
+				{
+					for (size_t i = 0; i < num_mag_options; ++i)
+					{
+						if (ImGui::MenuItem(
+									mag_options[i].nice_name, NULL, config->ini.mag_filter == mag_options[i].type))
+						{
+							config->ini.mag_filter = mag_options[i].type;
+							config->gui.mag_filter_changed = true;
+						}
+					}
+					ImGui::EndMenu();
+				}
+				if (ImGui::BeginMenu("Speed"))
+				{
+					for (size_t i = 0; i < num_speed_options; ++i)
+					{
+						if (ImGui::MenuItem(speed_options[i].nice_name, NULL,
+									config->gui.speed_frame_multiplier == speed_options[i].type))
+						{
+							config->gui.speed_frame_multiplier = speed_options[i].type;
+						}
+					}
+					ImGui::EndMenu();
+				}
+				if (ImGui::MenuItem("Configure Input"))
+				{
+					config->gui.show_input_config_popup = true;
+				}
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Debug"))
+			{
+				if (ImGui::MenuItem("Open Debugger", NULL, config->debug.show))
+				{
+					config->debug.show = !config->debug.show;
+				}
+				if (ImGui::MenuItem("Skip BIOS", NULL, config->gui.skip_bios))
+				{
+					config->gui.skip_bios = !config->gui.skip_bios;
+				}
+				if (ImGui::MenuItem("Step", "F10"))
+				{
+					config->gui.exec_next_step = true;
+				}
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Help"))
+			{
+				if (ImGui::MenuItem("Website"))
+				{
+					// https://discourse.libsdl.org/t/does-sdl2-have-function-to-open-url-in-browser/22730/3
+					ShellExecute(NULL, "open", "https://github.com/stefalie/gb", NULL, NULL, SW_SHOWNORMAL);
+				}
+				if (ImGui::MenuItem("About"))
+				{
+					config->gui.show_about_popup = true;
+				}
+				ImGui::EndMenu();
+			}
+
+			if (config->gui.pause)
+			{
+				ImGui::SameLine(ImGui::GetWindowWidth() - 250);
+				ImGui::Text("(paused)");
+			}
 		}
+		ImGui::EndMainMenuBar();
 	}
-	ImGui::EndMainMenuBar();
 
 	// The current (if any) pop-up will be closed if ESC is hit or the window
 	// is closed. This is applies for all pop-ups except the quit popup.
@@ -1703,8 +1712,7 @@ main(int argc, char *argv[])
 				}
 				break;
 			case SDL_MOUSEMOTION:
-				// TODO: Show menu for a few secs if game is running. If not running,
-				// always show menu.
+				config.gui.show_gui_timer = config.gui.show_gui_timeout_in_s;
 				break;
 			case SDL_MOUSEBUTTONDOWN:
 				break;
@@ -1717,6 +1725,8 @@ main(int argc, char *argv[])
 		const double dt_in_s = (double)(curr_time - prev_time) / counter_freq;
 		const uint32_t elapsed_m_cycles = (uint32_t)(dt_in_s * GB_MACHINE_FREQ);
 		prev_time = curr_time;
+
+		config.gui.show_gui_timer -= (float)dt_in_s;
 
 		// Run emulator
 		const bool is_running_debug_mode = config.gui.has_active_rom && config.gui.pause && config.gui.exec_next_step;
@@ -1836,10 +1846,7 @@ main(int argc, char *argv[])
 		ImGui_ImplOpenGL2_NewFrame();
 		ImGui_ImplSDL2_NewFrame(config.handles.window);
 		ImGui::NewFrame();
-		if (config.gui.show_gui)
-		{
-			GuiDraw(&config, &gb);
-		}
+		GuiDraw(&config, &gb);
 		ImGui::Render();
 		ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
 
