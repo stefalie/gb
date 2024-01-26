@@ -3277,7 +3277,7 @@ gb__RenderScanLine(gb_GameBoy *gb)
 
 	if (true)
 	{  // Sprites
-		const uint32_t transparency = default_pal.colors[0].as_u32;
+		const uint32_t transparent = default_pal.colors[0].as_u32;
 
 		const gb__Palette obp0 = {
 			.colors = {
@@ -3300,14 +3300,21 @@ gb__RenderScanLine(gb_GameBoy *gb)
 		const int sprite_height = gb->ppu.lcdc.sprite_size == 1 ? 16 : 8;
 		assert(sprite_height == 8);  // TODO
 
-		for (size_t i = 0; i < 40 && num_scanned_sprites < 10; ++i)
+		for (size_t i = 0; i < 40; ++i)
 		{
 			const gb_Sprite sprite = gb->memory.oam.sprites[i];
 
 			const int in_tile_y = gb->ppu.ly - (sprite.y_pos - 16);
 			if (in_tile_y >= 0 && in_tile_y < sprite_height)
 			{
+				// TODO(stefalie): Technically, we should select the first 10,
+				// then sorte them according to x coordinate, and finally render
+				// them back to front.
 				++num_scanned_sprites;
+				if (num_scanned_sprites == 10)
+				{
+					break;
+				}
 
 				const int fb_start_x = sprite.x_pos - 8;
 				// TODO: skip this? hardware doesn't do it either?
@@ -3324,10 +3331,18 @@ gb__RenderScanLine(gb_GameBoy *gb)
 
 						if (fb_x >= 0 && fb_x < GB_FRAMEBUFFER_WIDTH)
 						{
-							gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + fb_x] = line.pixels[in_tile_x];
+							const gb_Color sprite_pixel = line.pixels[in_tile_x];
 
-							// TODO: handle z-order and transparency
-							(void)transparency;
+							if (sprite_pixel.as_u32 != transparent)
+							{
+								const size_t fb_pixel_coord = GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + fb_x;
+								const gb_Color bg_pixel = gb->display.pixels[fb_pixel_coord];
+
+								if (bg_pixel.as_u32 == transparent || sprite.priority == 0)
+								{
+									gb->display.pixels[fb_pixel_coord] = sprite_pixel;
+								}
+							}
 						}
 					}
 				}
