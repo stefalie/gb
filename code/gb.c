@@ -3152,6 +3152,9 @@ typedef struct gb__TileLine
 	gb_Color pixels[8];
 } gb__TileLine;
 
+// TODO(stefalie): The set_index corresponds to what is suggested here:
+// https://imrannazar.com/series/gameboy-emulation-in-javascript/graphics
+// I'm not sure anymore if that is a good idea and if that is common convention.
 gb__TileLine
 gb__GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_index, gb__Palette palette)
 {
@@ -3214,6 +3217,7 @@ gb__RenderScanLine(gb_GameBoy *gb)
 		const size_t tile_y = y >> 3u;
 		const size_t in_tile_y = y & 7u;
 
+		// TODO: rename fb_x
 		// i == display x coord, x == tilemap x coord
 		uint8_t i = 0;
 		while (i < GB_FRAMEBUFFER_WIDTH)
@@ -3248,6 +3252,8 @@ gb__RenderScanLine(gb_GameBoy *gb)
 			const size_t tile_y = y >> 3u;
 			const size_t in_tile_y = y & 7u;
 
+			// TODO: rename to fb_x
+			// TODO: x is tilemap_x
 			// i == display x coord, x == tilemap x coord
 			size_t i = MAX(0, (int)gb->ppu.wx - 7);
 			while (i < GB_FRAMEBUFFER_WIDTH)
@@ -3269,14 +3275,63 @@ gb__RenderScanLine(gb_GameBoy *gb)
 		}
 	}
 
-	size_t num_scanned_sprites = 0;
-	const int sprite_height = gb->ppu.lcdc.sprite_size == 1 ? 16 : 8;
-	for (size_t i = 0; i < 40 && num_scanned_sprites < 10; ++i)
-	{
-		const gb_Sprite sprite = gb->memory.oam.sprites[i];
-		if (gb->ppu.ly - (sprite.y_pos - 16) < sprite_height)
+	if (true)
+	{  // Sprites
+		const uint32_t transparency = default_pal.colors[0].as_u32;
+
+		const gb__Palette obp0 = {
+			.colors = {
+				[0] = default_pal.colors[(gb->ppu.obp0 >> 0u) & 0x03],
+				[1] = default_pal.colors[(gb->ppu.obp0 >> 2u) & 0x03],
+				[2] = default_pal.colors[(gb->ppu.obp0 >> 4u) & 0x03],
+				[3] = default_pal.colors[(gb->ppu.obp0 >> 6u) & 0x03],
+			},
+		};
+		const gb__Palette obp1 = {
+			.colors = {
+				[0] = default_pal.colors[(gb->ppu.obp1 >> 0u) & 0x03],
+				[1] = default_pal.colors[(gb->ppu.obp1 >> 2u) & 0x03],
+				[2] = default_pal.colors[(gb->ppu.obp1 >> 4u) & 0x03],
+				[3] = default_pal.colors[(gb->ppu.obp1 >> 6u) & 0x03],
+			},
+		};
+
+		size_t num_scanned_sprites = 0;
+		const int sprite_height = gb->ppu.lcdc.sprite_size == 1 ? 16 : 8;
+		assert(sprite_height == 8);  // TODO
+
+		for (size_t i = 0; i < 40 && num_scanned_sprites < 10; ++i)
 		{
-			++num_scanned_sprites;
+			const gb_Sprite sprite = gb->memory.oam.sprites[i];
+
+			const int in_tile_y = gb->ppu.ly - (sprite.y_pos - 16);
+			if (in_tile_y >= 0 && in_tile_y < sprite_height)
+			{
+				++num_scanned_sprites;
+
+				const int fb_start_x = sprite.x_pos - 8;
+				// TODO: skip this? hardware doesn't do it either?
+				if (fb_start_x > -8 && fb_start_x < GB_FRAMEBUFFER_WIDTH)
+				{
+					const gb__TileLine line =
+							gb__GetTileLine(gb, 1, sprite.tile_index, in_tile_y, sprite.dmg_palette == 0 ? obp0 : obp1);
+
+					assert(sprite.y_flip == 0);  // TODO
+
+					for (int in_tile_x = 0; in_tile_x < 8; ++in_tile_x)
+					{
+						const int fb_x = fb_start_x + (sprite.x_flip == 0 ? in_tile_x : 7 - in_tile_x);
+
+						if (fb_x >= 0 && fb_x < GB_FRAMEBUFFER_WIDTH)
+						{
+							gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + fb_x] = line.pixels[in_tile_x];
+
+							// TODO: handle z-order and transparency
+							(void)transparency;
+						}
+					}
+				}
+			}
 		}
 	}
 }
