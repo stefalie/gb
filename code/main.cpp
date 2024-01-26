@@ -155,8 +155,8 @@ static const struct
 	const char *nice_name = NULL;
 } stretch_options[] = {
 	{ STRETCH_NORMAL, "normal", "Stretch" },
-	{ STRETCH_ASPECT_CORRECT, "aspect_correct", "Aspect Correct Stretch" },
-	{ STRETCH_INTEGRAL_SCALE, "integral_scale", "Integral Scale Stretch" },
+	{ STRETCH_ASPECT_CORRECT, "aspect_correct", "Aspect Correct" },
+	{ STRETCH_INTEGRAL_SCALE, "integral_scale", "Integral Scale" },
 };
 static const size_t num_stretch_options = sizeof(stretch_options) / sizeof(stretch_options[0]);
 
@@ -688,7 +688,7 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 					{
 						config->gui.toggle_fullscreen = true;
 					}
-					if (ImGui::MenuItem("Reset Window Size", NULL, false))
+					if (ImGui::MenuItem("Reset Win Size", NULL, false))
 					{
 						const float dpi_scale = DpiScale();
 						const int win_width = (int)(window_default_scale_factor * GB_FRAMEBUFFER_WIDTH * dpi_scale);
@@ -697,7 +697,7 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 					}
 					ImGui::EndMenu();
 				}
-				if (ImGui::BeginMenu("Magnification Filter"))
+				if (ImGui::BeginMenu("Image Filter"))
 				{
 					for (size_t i = 0; i < num_mag_options; ++i)
 					{
