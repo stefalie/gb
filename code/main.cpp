@@ -453,8 +453,8 @@ struct Config
 
 	struct Gui
 	{
-		const float show_gui_timeout_in_s = 2.0f;
-		float show_gui_timer = 0.0f;
+		bool reset_gui_timeout = false;
+		float show_gui_timeout_in_s = 0.0f;
 
 		bool pressed_escape = false;
 
@@ -543,6 +543,7 @@ LoadRomFromFile(Config *config, gb_GameBoy *gb, const char *file_path)
 		{
 			config->gui.has_active_rom = true;
 			config->gui.exec_next_step = false;
+			config->gui.reset_gui_timeout = true;
 			config->debug.elapsed_m_cycles = 0;
 		}
 	}
@@ -582,21 +583,27 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 {
 	ImGui::PushFont(config->handles.font);
 
-	if (config->gui.show_gui_timer < 0.0f)
+	// The GUI/menu is shown if:
+	// - in pause mode
+	// - no ROM is loaded
+	// - menu or a submenu is open
+	// - when mouse if moving
+	// When none of these conditions is fulfilled anymore, there is a short
+	// time period before the menu is hidden.
+	if (config->gui.pause || !config->gui.has_active_rom || config->gui.reset_gui_timeout)
 	{
-		config->gui.show_gui_timer = 0.0f;
-	}
-	if (config->gui.pause)
-	{
-		config->gui.show_gui_timer = config->gui.show_gui_timeout_in_s;
+		config->gui.reset_gui_timeout = false;
+		config->gui.show_gui_timeout_in_s = 2.0f;
 	}
 
-	if (config->gui.pause || !config->gui.has_active_rom || config->gui.show_gui_timer > 0.0f)
+	if (config->gui.show_gui_timeout_in_s > 0.0f)
 	{
 		if (ImGui::BeginMainMenuBar())
 		{
 			if (ImGui::BeginMenu("File"))
 			{
+				config->gui.reset_gui_timeout = true;
+
 				if (ImGui::MenuItem("Open ROM"))
 				{
 					char file_path[MAX_PATH] = {};
@@ -630,6 +637,8 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 			}
 			if (ImGui::BeginMenu("System"))
 			{
+				config->gui.reset_gui_timeout = true;
+
 				if (ImGui::MenuItem("Reset"))
 				{
 					gb_Reset(gb, config->gui.skip_bios);
@@ -661,6 +670,8 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 			}
 			if (ImGui::BeginMenu("Options"))
 			{
+				config->gui.reset_gui_timeout = true;
+
 				if (ImGui::BeginMenu("Screen Size"))
 				{
 
@@ -719,6 +730,8 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 			}
 			if (ImGui::BeginMenu("Debug"))
 			{
+				config->gui.reset_gui_timeout = true;
+
 				if (ImGui::MenuItem("Open Debugger", NULL, config->debug.show))
 				{
 					config->debug.show = !config->debug.show;
@@ -735,6 +748,8 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 			}
 			if (ImGui::BeginMenu("Help"))
 			{
+				config->gui.reset_gui_timeout = true;
+
 				if (ImGui::MenuItem("Website"))
 				{
 					// https://discourse.libsdl.org/t/does-sdl2-have-function-to-open-url-in-browser/22730/3
@@ -1712,7 +1727,7 @@ main(int argc, char *argv[])
 				}
 				break;
 			case SDL_MOUSEMOTION:
-				config.gui.show_gui_timer = config.gui.show_gui_timeout_in_s;
+				config.gui.reset_gui_timeout = true;
 				break;
 			case SDL_MOUSEBUTTONDOWN:
 				break;
@@ -1726,7 +1741,11 @@ main(int argc, char *argv[])
 		const uint32_t elapsed_m_cycles = (uint32_t)(dt_in_s * GB_MACHINE_FREQ);
 		prev_time = curr_time;
 
-		config.gui.show_gui_timer -= (float)dt_in_s;
+		config.gui.show_gui_timeout_in_s -= (float)dt_in_s;
+		if (config.gui.show_gui_timeout_in_s < 0.0f)
+		{
+			config.gui.show_gui_timeout_in_s = 0.0f;
+		}
 
 		// Run emulator
 		const bool is_running_debug_mode = config.gui.has_active_rom && config.gui.pause && config.gui.exec_next_step;
@@ -1741,8 +1760,7 @@ main(int argc, char *argv[])
 			{
 				UpdateGameTexture(&gb, &config, texture, pixels);
 			}
-		}
-		else if (is_running_normal_mode)
+		} else if (is_running_normal_mode)
 		{
 			if (config.gui.speed_frame_multiplier == SPEED_HALF)
 			{
