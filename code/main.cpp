@@ -1621,9 +1621,12 @@ main(int argc, char *argv[])
 				if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED &&
 						SDL_GetWindowFromID(event.window.windowID) == config.handles.window)
 				{
-					// This can cause 1 pixel off rounding errors.
-					config.ini.window_width = (int)(event.window.data1 / dpi_scale);
-					config.ini.window_height = (int)(event.window.data2 / dpi_scale);
+					if (!config.gui.fullscreen)
+					{
+						// This can cause 1 pixel off rounding errors.
+						config.ini.window_width = (int)(event.window.data1 / dpi_scale);
+						config.ini.window_height = (int)(event.window.data2 / dpi_scale);
+					}
 				}
 				else if (event.window.event == SDL_WINDOWEVENT_CLOSE &&
 						SDL_GetWindowFromID(event.window.windowID) == config.handles.window)
@@ -1760,7 +1763,8 @@ main(int argc, char *argv[])
 			{
 				UpdateGameTexture(&gb, &config, texture, pixels);
 			}
-		} else if (is_running_normal_mode)
+		}
+		else if (is_running_normal_mode)
 		{
 			if (config.gui.speed_frame_multiplier == SPEED_HALF)
 			{
@@ -1876,11 +1880,19 @@ main(int argc, char *argv[])
 			config.gui.fullscreen = !config.gui.fullscreen;
 			if (config.gui.fullscreen)
 			{
-				// TODO(stefalie): Consider using SDL_WINDOW_FULLSCREEN_DESKTOP instead.
-				// I thought that proper fullscreen requires setting SDL_SetWindowDisplayMode(...),
-				// and that these different modes need to be querried first. But hey, it seems to work as is.
-				// See: https://discourse.libsdl.org/t/correct-way-to-swap-from-window-to-fullscreen/24270
-				SDL_SetWindowFullscreen(config.handles.window, SDL_WINDOW_FULLSCREEN);
+				// TODO(stefalie): Consider using SDL_WINDOW_FULLSCREEN instead.
+				// When switching to fullscreen with
+				// SDL_SetWindowFullscreen(config.handles.window, SDL_WINDOW_FULLSCREEN);
+				// then the fullscreen resolution depends on the window's size
+				// before going fullscreen.
+				//
+				// To do this properly, we would have to find the "best" display mode
+				// (see here: https://wiki.libsdl.org/SDL2/SDL_DisplayMode)
+				// and setting it via SDL_SetWindowDisplayMode(...).
+				// Also see: https://discourse.libsdl.org/t/correct-way-to-swap-from-window-to-fullscreen/24270
+				//
+				// For now, we just use a fullscreen window. Makes toggling faster.
+				SDL_SetWindowFullscreen(config.handles.window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 			}
 			else
 			{
