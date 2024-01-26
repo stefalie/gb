@@ -3298,13 +3298,12 @@ gb__RenderScanLine(gb_GameBoy *gb)
 
 		size_t num_scanned_sprites = 0;
 		const int sprite_height = gb->ppu.lcdc.sprite_size == 1 ? 16 : 8;
-		assert(sprite_height == 8);  // TODO
 
 		for (size_t i = 0; i < 40; ++i)
 		{
 			const gb_Sprite sprite = gb->memory.oam.sprites[i];
 
-			const int in_tile_y = gb->ppu.ly - (sprite.y_pos - 16);
+			int in_tile_y = gb->ppu.ly - (sprite.y_pos - 16);
 			if (in_tile_y >= 0 && in_tile_y < sprite_height)
 			{
 				// TODO(stefalie): Technically, we should select the first 10,
@@ -3320,10 +3319,22 @@ gb__RenderScanLine(gb_GameBoy *gb)
 				// TODO: skip this? hardware doesn't do it either?
 				if (fb_start_x > -8 && fb_start_x < GB_FRAMEBUFFER_WIDTH)
 				{
-					const gb__TileLine line =
-							gb__GetTileLine(gb, 1, sprite.tile_index, in_tile_y, sprite.dmg_palette == 0 ? obp0 : obp1);
+					// Flip vertically.
+					if (sprite.y_flip == 1)
+					{
+						in_tile_y = (sprite_height - 1) - in_tile_y;
+					}
+					assert(in_tile_y < sprite_height);
 
-					assert(sprite.y_flip == 0);  // TODO
+					// Second half of 8x16 sprite is in the next tile
+					int tile_idx = sprite.tile_index;
+					if (in_tile_y >= 8)
+					{
+						++tile_idx;
+					}
+
+					const gb__TileLine line =
+							gb__GetTileLine(gb, 1, tile_idx, in_tile_y, sprite.dmg_palette == 0 ? obp0 : obp1);
 
 					for (int in_tile_x = 0; in_tile_x < 8; ++in_tile_x)
 					{
