@@ -271,10 +271,10 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	// Switchable RAM bank
 	case 0xA000:
 	case 0xB000:
-		// TODO: What happens if one reads from a non-existing area in external RAM in MBC1/3?
-		// Undefined behavior I assume? Then the asserts can be removed and the code is OK.
-		// Nicer is probably to do nothing in that case (meaning you have to replace
-		// the asserts if/else).
+		// TODO(stefalie): What happens if one reads from a non-existing area in external
+		// RAM in MBC1/3? Undefined behavior I assume? Then the asserts can be removed
+		// and the code is OK. Nicer is probably to do nothing in that case (meaning you
+		// have to replace the asserts if/else).
 		if (mem->mbc_type == GB_MBC_TYPE_ROM_ONLY)
 		{
 			return mem->external_ram[addr & 0x1FFF];
@@ -285,9 +285,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			{
 				const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
 				(void)ram_size;
-				assert(ram_size > 0 && ram_size < 4);
-				assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
-				assert(mem->mbc1.ram_bank == 1 || ram_size == 3);
+				assert(mem->mbc1.ram_bank == 0 && ram_size == 2 || ram_size == 3);
 				return mem->external_ram[addr & 0x1FFF + (mem->mbc1.ram_bank << 13u)];
 			}
 		}
@@ -298,6 +296,9 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				// Higher nibble undefined.
 				// Therefore the masking by 0x0F is not really needed (espeically also because
 				// it is also masked when writing). Better be safe though.
+				const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
+				(void)ram_size;
+				assert(ram_size == 0 && (addr & 0x1FFF) < 0x0200);
 				return mem->external_ram[addr & 0x01FF] & 0x0F;
 			}
 		}
@@ -309,12 +310,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				{
 					const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
 					(void)ram_size;
-					assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
-					assert(ram_size > 0);
-					assert(ram_size != 1 || mem->mbc3.ram_bank == 1);
-					assert(ram_size != 2 || mem->mbc3.ram_bank == 1);
-					assert(ram_size != 3 || mem->mbc3.ram_bank < 4);
-					assert(ram_size != 4 || mem->mbc3.ram_bank < 16);
+					assert(mem->mbc1.ram_bank == 0 && ram_size == 2 || ram_size == 3);
 					return mem->external_ram[addr & 0x1FFF + (mem->mbc3.ram_bank << 13u)];
 				}
 				else
@@ -580,10 +576,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	// Switchable RAM bank
 	case 0xA000:
 	case 0xB000:
-		// TODO: What happens if one writes to a non-existing area in external RAM in MBC1/3?
-		// Undefined behavior I assume? Then the asserts can be removed and the code is OK.
-		// Nicer is probably to do nothing in that case (meaning you have to replace
-		// the asserts if/else).
+		// TODO(stefalie): See comment for the same memory range in gb_MemoryReadByte.
 		if (mem->mbc_type == GB_MBC_TYPE_ROM_ONLY)
 		{
 			mem->external_ram[addr & 0x1FFF] = value;
@@ -594,9 +587,8 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			{
 #if BLARGG_TEST_ENABLE == 0
 				const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
-				assert(ram_size > 0 && ram_size < 4);
-				assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
-				assert(mem->mbc1.ram_bank == 1 || ram_size == 3);
+				(void)ram_size;
+				assert(mem->mbc1.ram_bank == 0 && ram_size == 2 || ram_size == 3);
 #endif
 				mem->external_ram[addr & 0x1FFF + (mem->mbc1.ram_bank << 13u)] = value;
 			}
@@ -605,6 +597,9 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 		{
 			if (mem->mbc_external_ram_enable)
 			{
+				const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
+				(void)ram_size;
+				assert(ram_size == 0 && (addr & 0x1FFF) < 0x0200);
 				mem->external_ram[addr & 0x01FF] = value & 0x0F;
 			}
 		}
@@ -616,12 +611,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				{
 					const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
 					(void)ram_size;
-					assert((addr & 0x1FFF) < 0x0800 || ram_size > 1);
-					assert(ram_size > 0);
-					assert(ram_size != 1 || mem->mbc3.ram_bank == 1);
-					assert(ram_size != 2 || mem->mbc3.ram_bank == 1);
-					assert(ram_size != 3 || mem->mbc3.ram_bank < 4);
-					assert(ram_size != 4 || mem->mbc3.ram_bank < 16);
+					assert(mem->mbc1.ram_bank == 0 && ram_size == 2 || ram_size == 3);
 					mem->external_ram[addr & 0x1FFF + (mem->mbc3.ram_bank << 13u)] = value;
 				}
 				else
@@ -3607,6 +3597,7 @@ gb_SetInput(gb_GameBoy *gb, gb_Input input, bool down)
 	if (down)
 	{
 		*reg &= ~bit;
+		gb->cpu.interrupt.if_flags.joypad = 1;
 	}
 	else
 	{
