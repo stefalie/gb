@@ -3207,8 +3207,9 @@ gb__RenderScanLine(gb_GameBoy *gb)
 		},
 	};
 
-	const size_t tileset_idx = lcdc->bg_and_win_tileset_select ? 1 : 0;
+	const size_t tileset_idx = lcdc->bg_and_win_tileset_select;
 
+	// Background
 	if (lcdc->bg_and_win_enable)
 	{
 		const size_t vram_offset = lcdc->bg_tilemap_select ? 0x1C00 : 0x1800;
@@ -3217,26 +3218,26 @@ gb__RenderScanLine(gb_GameBoy *gb)
 		const size_t tile_y = y >> 3u;
 		const size_t in_tile_y = y & 7u;
 
-		// TODO: rename fb_x
-		// i == display x coord, x == tilemap x coord
-		uint8_t i = 0;
-		while (i < GB_FRAMEBUFFER_WIDTH)
+		uint8_t fb_x = 0;
+		while (fb_x < GB_FRAMEBUFFER_WIDTH)
 		{
-			const uint8_t x = gb->ppu.scx + i;
+			const uint8_t x = gb->ppu.scx + fb_x;
 			const size_t tile_x = x >> 3u;
 
 			const size_t map_offset = vram_offset + (tile_y << 5u) + tile_x;
-			const uint8_t tile_idx = gb->memory.vram[map_offset];
+			const uint8_t tile_idx_raw = gb->memory.vram[map_offset];
+			const int tile_idx = tileset_idx == 0 ? (int8_t)tile_idx_raw : tile_idx_raw;
 
 			gb__TileLine line = gb__GetTileLine(gb, tileset_idx, tile_idx, in_tile_y, pal);
 
-			for (size_t in_tile_x = x & 7u; in_tile_x < 8 && i < GB_FRAMEBUFFER_WIDTH; ++i, ++in_tile_x)
+			for (size_t in_tile_x = x & 7u; in_tile_x < 8 && fb_x < GB_FRAMEBUFFER_WIDTH; ++fb_x, ++in_tile_x)
 			{
-				gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + i] = line.pixels[in_tile_x];
+				gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + fb_x] = line.pixels[in_tile_x];
 			}
 		}
 	}
 
+	// Window
 	if (lcdc->win_enable && lcdc->bg_and_win_enable)
 	{
 		// TODO(stefalie): It seems that the window should use its own, seperate "ly".
@@ -3252,31 +3253,30 @@ gb__RenderScanLine(gb_GameBoy *gb)
 			const size_t tile_y = y >> 3u;
 			const size_t in_tile_y = y & 7u;
 
-			// TODO: rename to fb_x
-			// TODO: x is tilemap_x
-			// i == display x coord, x == tilemap x coord
-			size_t i = MAX(0, (int)gb->ppu.wx - 7);
-			while (i < GB_FRAMEBUFFER_WIDTH)
+			size_t fb_x = MAX(0, (int)gb->ppu.wx - 7);
+			while (fb_x < GB_FRAMEBUFFER_WIDTH)
 			{
-				const size_t x = 7 - gb->ppu.wx + i;  // i = x + wx - 7
+				const size_t x = 7 - gb->ppu.wx + fb_x;  // fb_x = x + wx - 7
 				assert(x < GB_FRAMEBUFFER_WIDTH);
 				const size_t tile_x = x >> 3u;
 
 				const size_t map_offset = vram_offset + (tile_y << 5u) + tile_x;
-				const uint8_t tile_idx = gb->memory.vram[map_offset];
+				const uint8_t tile_idx_raw = gb->memory.vram[map_offset];
+				const int tile_idx = tileset_idx == 0 ? (int8_t)tile_idx_raw : tile_idx_raw;
 
 				gb__TileLine line = gb__GetTileLine(gb, tileset_idx, tile_idx, in_tile_y, pal);
 
-				for (size_t in_tile_x = x & 7u; in_tile_x < 8 && i < GB_FRAMEBUFFER_WIDTH; ++i, ++in_tile_x)
+				for (size_t in_tile_x = x & 7u; in_tile_x < 8 && fb_x < GB_FRAMEBUFFER_WIDTH; ++fb_x, ++in_tile_x)
 				{
-					gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + i] = line.pixels[in_tile_x];
+					gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + fb_x] = line.pixels[in_tile_x];
 				}
 			}
 		}
 	}
 
-	if (true)
-	{  // Sprites
+	// Sprites
+	if (lcdc->sprite_enable)
+	{
 		const uint32_t transparent = default_pal.colors[0].as_u32;
 
 		const gb__Palette obp0 = {
@@ -3296,27 +3296,54 @@ gb__RenderScanLine(gb_GameBoy *gb)
 			},
 		};
 
-		size_t num_scanned_sprites = 0;
+		const gb_Sprite *sprites = gb->memory.oam.sprites;
 		const int sprite_height = gb->ppu.lcdc.sprite_size == 1 ? 16 : 8;
 
-		for (size_t i = 0; i < 40; ++i)
+		// Gather the first 10 sprites that overlap with scanline.
+		int num_scanned_sprites = 0;
+		gb_Sprite scanned_sprites[10];
+
+		for (int i = 0; i < 40 && num_scanned_sprites < 10; ++i)
 		{
-			const gb_Sprite sprite = gb->memory.oam.sprites[i];
+			int in_tile_y = gb->ppu.ly - (sprites[i].y_pos - 16);
+			if (in_tile_y >= 0 && in_tile_y < sprite_height)
+			{
+				scanned_sprites[num_scanned_sprites] = sprites[i];
+				++num_scanned_sprites;
+			}
+		}
+
+		// Insertion sort the scanned tiles by x position
+		// (For <= 10 elements this is likely faster than anything else.)
+		for (int i = 1; i < num_scanned_sprites; ++i)
+		{
+			gb_Sprite x = scanned_sprites[i];
+			int j = i;
+			while (j > 0 && scanned_sprites[j - 1].x_pos > x.x_pos)
+			{
+				scanned_sprites[j] = scanned_sprites[j - 1];
+				--j;
+			}
+			scanned_sprites[j] = x;
+		}
+
+		// Render sprites in order
+		//
+		// Whenever a sprite affects a pixel (even if it is behind the
+		// background), no other sprites will affect the same pixel.
+		// We use mask to track this, 1 bit per scanline pixel.
+		//
+		// See: https://gbdev.io/pandocs/OAM.html
+		uint8_t masked_pixels[160 / 8] = { 0 };
+
+		for (size_t i = 0; i < num_scanned_sprites; ++i)
+		{
+			const gb_Sprite sprite = scanned_sprites[i];
 
 			int in_tile_y = gb->ppu.ly - (sprite.y_pos - 16);
 			if (in_tile_y >= 0 && in_tile_y < sprite_height)
 			{
-				// TODO(stefalie): Technically, we should select the first 10,
-				// then sorte them according to x coordinate, and finally render
-				// them back to front.
-				++num_scanned_sprites;
-				if (num_scanned_sprites == 10)
-				{
-					break;
-				}
-
 				const int fb_start_x = sprite.x_pos - 8;
-				// TODO: skip this? hardware doesn't do it either?
 				if (fb_start_x > -8 && fb_start_x < GB_FRAMEBUFFER_WIDTH)
 				{
 					// Flip vertically.
@@ -3330,6 +3357,7 @@ gb__RenderScanLine(gb_GameBoy *gb)
 					int tile_idx = sprite.tile_index;
 					if (in_tile_y >= 8)
 					{
+						in_tile_y -= 8;
 						++tile_idx;
 					}
 
@@ -3349,7 +3377,12 @@ gb__RenderScanLine(gb_GameBoy *gb)
 								const size_t fb_pixel_coord = GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + fb_x;
 								const gb_Color bg_pixel = gb->display.pixels[fb_pixel_coord];
 
-								if (bg_pixel.as_u32 == transparent || sprite.priority == 0)
+								const int mask_idx = fb_x >> 3u;
+								const int mask_byte_mask = 1u << (fb_x & 0x07);
+								const bool is_masked = (masked_pixels[mask_idx] & mask_byte_mask) != 0;
+								masked_pixels[mask_idx] |= mask_byte_mask;
+
+								if (!is_masked && bg_pixel.as_u32 == transparent || sprite.priority == 0)
 								{
 									gb->display.pixels[fb_pixel_coord] = sprite_pixel;
 								}

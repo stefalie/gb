@@ -184,7 +184,7 @@ typedef struct gb_GameBoy
 				uint8_t bg_and_win_tileset_select : 1;  // 0 -> 0x8800-0x97FF, 1 -> 0x8000-0x8FFF
 				uint8_t win_enable : 1;
 				uint8_t win_tilemap_select : 1;  // 0 -> 0x9800-0x9BFF, 1 -> 0x9C00-0x9FFF
-				uint8_t lcd_enable : 1;
+				uint8_t lcd_enable : 1;  // TODO(steaflie): How/when is this used?
 			};
 			uint8_t reg;
 		} lcdc;
