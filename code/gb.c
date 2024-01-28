@@ -24,10 +24,10 @@ gb__DefaultPalette(void)
 	// Color scheme from https://gbdev.io/pandocs/Tile_Data.html
 	return (gb__Palette){
 		.colors = {
-			[0] = { .r = 0xE0, .g = 0xF8, .b = 0xD0 },
-			[1] = { .r = 0x88, .g = 0xC0, .b = 0x70 },
-			[2] = { .r = 0x34, .g = 0x68, .b = 0x56 },
-			[3] = { .r = 0x08, .g = 0x18, .b = 0x20 },
+			{ .r = 0xE0, .g = 0xF8, .b = 0xD0 },
+			{ .r = 0x88, .g = 0xC0, .b = 0x70 },
+			{ .r = 0x34, .g = 0x68, .b = 0x56 },
+			{ .r = 0x08, .g = 0x18, .b = 0x20 },
 		},
 	};
 }
@@ -3166,18 +3166,17 @@ gb__GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_in
 	const uint16_t tile_line = gb__Morton2(gb->memory.vram[vram_offset], gb->memory.vram[vram_offset + 1]);
 
 	// TODO(stefalie): There must be some SIMD/SWAR way to do this.
-	return (gb__TileLine){
-		.pixels = {
-			[0] = palette.colors[(tile_line >> 14u) & 3u],
-			[1] = palette.colors[(tile_line >> 12u) & 3u],
-			[2] = palette.colors[(tile_line >> 10u) & 3u],
-			[3] = palette.colors[(tile_line >> 8u) & 3u],
-			[4] = palette.colors[(tile_line >> 6u) & 3u],
-			[5] = palette.colors[(tile_line >> 4u) & 3u],
-			[6] = palette.colors[(tile_line >> 2u) & 3u],
-			[7] = palette.colors[(tile_line >> 0u) & 3u],
-		},
-	};
+	gb__TileLine result;
+	for (size_t i = 0; i < 8; ++i)
+	{
+		const size_t color_id = (tile_line >> ((7u - i) << 1u)) & 0x03;
+		result.pixels[i] = palette.colors[color_id];
+		if (color_id == 0)
+		{
+			result.pixels[i].transparent = 1;
+		}
+	}
+	return result;
 }
 
 static void
@@ -3190,10 +3189,10 @@ gb__RenderScanLine(gb_GameBoy *gb)
 	const gb__Palette default_pal = gb__DefaultPalette();
 	const gb__Palette pal = {
 		.colors = {
-			[0] = default_pal.colors[(gb->ppu.bgp >> 0u) & 0x03],
-			[1] = default_pal.colors[(gb->ppu.bgp >> 2u) & 0x03],
-			[2] = default_pal.colors[(gb->ppu.bgp >> 4u) & 0x03],
-			[3] = default_pal.colors[(gb->ppu.bgp >> 6u) & 0x03],
+			default_pal.colors[(gb->ppu.bgp >> 0u) & 0x03],
+			default_pal.colors[(gb->ppu.bgp >> 2u) & 0x03],
+			default_pal.colors[(gb->ppu.bgp >> 4u) & 0x03],
+			default_pal.colors[(gb->ppu.bgp >> 6u) & 0x03],
 		},
 	};
 
@@ -3267,22 +3266,20 @@ gb__RenderScanLine(gb_GameBoy *gb)
 	// Sprites
 	if (lcdc->sprite_enable)
 	{
-		const uint32_t transparent = default_pal.colors[0].as_u32;
-
 		const gb__Palette obp0 = {
 			.colors = {
-				[0] = default_pal.colors[(gb->ppu.obp0 >> 0u) & 0x03],
-				[1] = default_pal.colors[(gb->ppu.obp0 >> 2u) & 0x03],
-				[2] = default_pal.colors[(gb->ppu.obp0 >> 4u) & 0x03],
-				[3] = default_pal.colors[(gb->ppu.obp0 >> 6u) & 0x03],
+				default_pal.colors[(gb->ppu.obp0 >> 0u) & 0x03],
+				default_pal.colors[(gb->ppu.obp0 >> 2u) & 0x03],
+				default_pal.colors[(gb->ppu.obp0 >> 4u) & 0x03],
+				default_pal.colors[(gb->ppu.obp0 >> 6u) & 0x03],
 			},
 		};
 		const gb__Palette obp1 = {
 			.colors = {
-				[0] = default_pal.colors[(gb->ppu.obp1 >> 0u) & 0x03],
-				[1] = default_pal.colors[(gb->ppu.obp1 >> 2u) & 0x03],
-				[2] = default_pal.colors[(gb->ppu.obp1 >> 4u) & 0x03],
-				[3] = default_pal.colors[(gb->ppu.obp1 >> 6u) & 0x03],
+				default_pal.colors[(gb->ppu.obp1 >> 0u) & 0x03],
+				default_pal.colors[(gb->ppu.obp1 >> 2u) & 0x03],
+				default_pal.colors[(gb->ppu.obp1 >> 4u) & 0x03],
+				default_pal.colors[(gb->ppu.obp1 >> 6u) & 0x03],
 			},
 		};
 
@@ -3362,7 +3359,7 @@ gb__RenderScanLine(gb_GameBoy *gb)
 						{
 							const gb_Color sprite_pixel = line.pixels[in_tile_x];
 
-							if (sprite_pixel.as_u32 != transparent)
+							if (sprite_pixel.transparent == 0)
 							{
 								const size_t fb_pixel_coord = GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + fb_x;
 								const gb_Color bg_pixel = gb->display.pixels[fb_pixel_coord];
@@ -3372,7 +3369,7 @@ gb__RenderScanLine(gb_GameBoy *gb)
 								const bool is_masked = (masked_pixels[mask_idx] & mask_byte_mask) != 0;
 								masked_pixels[mask_idx] |= mask_byte_mask;
 
-								if (!is_masked && bg_pixel.as_u32 == transparent || sprite.priority == 0)
+								if (!is_masked && (bg_pixel.transparent == 1 || sprite.priority == 0))
 								{
 									gb->display.pixels[fb_pixel_coord] = sprite_pixel;
 								}
@@ -3382,6 +3379,13 @@ gb__RenderScanLine(gb_GameBoy *gb)
 				}
 			}
 		}
+	}
+
+	// Make sure all framebuffer pixels are marked as non-transparent.
+	// Otherwise the magnification filter might run into trouble.
+	for (size_t fb_x = 0; fb_x < 160; ++fb_x)
+	{
+		gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + fb_x].transparent = 0;
 	}
 }
 
