@@ -472,7 +472,7 @@ struct Config
 		bool mag_filter_changed = true;
 		Speed speed_frame_multiplier = SPEED_DEFAULT;
 
-		bool skip_bios = false;
+		bool skip_bios = true;
 		bool exec_next_step = false;
 
 		// TODO(stefalie): We might also want to store the previous state of pause
@@ -488,9 +488,6 @@ struct Config
 		MemoryEditor mem_view;
 		bool views_follow_pc = true;
 		GLuint tile_sets_texture = 0;
-		// TODO: maybe we won't need those guys.
-		GLuint tile_map_0_texture = 0;
-		GLuint tile_map_1_texture = 0;
 		size_t elapsed_m_cycles = 0;
 	} debug;
 
@@ -740,9 +737,17 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 				{
 					config->gui.skip_bios = !config->gui.skip_bios;
 				}
-				if (ImGui::MenuItem("Step", "F10"))
+				if (ImGui::MenuItem("Step Instruction", "F10"))
 				{
 					config->gui.exec_next_step = true;
+				}
+				if (ImGui::MenuItem("Step Frame", "F11"))
+				{
+					// TODO
+				}
+				if (ImGui::MenuItem("Step to Next longjmp", "F12"))
+				{
+					// TODO
 				}
 				ImGui::EndMenu();
 			}
@@ -962,7 +967,6 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 	const char *tab_name_rom_view = "ROM View";
 	const char *tab_name_mem_view = "Memory View";
 	const char *tab_name_tiles = "Tiles";
-	const char *tab_name_sprites = "Sprites";
 	const char *tab_name_options = "Options and Info";
 	const char *tab_name_disassembly = "Disassembly at PC";
 	const char *tab_name_cpu = "CPU State";
@@ -1017,7 +1021,6 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 			ImGui::DockBuilderDockWindow(tab_name_rom_view, dock_tl);
 			ImGui::DockBuilderDockWindow(tab_name_mem_view, dock_tl);
 			ImGui::DockBuilderDockWindow(tab_name_tiles, dock_bl_l);
-			ImGui::DockBuilderDockWindow(tab_name_sprites, dock_bl_r);
 			ImGui::DockBuilderDockWindow(tab_name_options, dock_tr_t);
 			ImGui::DockBuilderDockWindow(tab_name_disassembly, dock_tr_b);
 			ImGui::DockBuilderDockWindow(tab_name_break, dock_tr_b);
@@ -1107,11 +1110,6 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 		}
 
 		{
-			ImGui::Begin(tab_name_sprites);
-			ImGui::End();
-		}
-
-		{
 			ImGui::Begin(tab_name_disassembly);
 			const size_t num_instructions = 20;
 			const size_t buf_len = (32 + 1);  // 32 + 1 newline chars per instruction
@@ -1193,9 +1191,6 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
 		ImGui::Begin(tab_name_tiles);
-		ImGui::Text("%s", placeholder);
-		ImGui::End();
-		ImGui::Begin(tab_name_sprites);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
 
@@ -1522,25 +1517,6 @@ main(int argc, char *argv[])
 		// The texture vertically stackes the 3 half tile sets.
 		// Each tile set is put in a rectangle of 16x8 tiles.
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 16 * 8, 3 * 8 * 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glCheckError();
-
-		// TODO rem
-		glGenTextures(1, &config.debug.tile_map_0_texture);
-		glBindTexture(GL_TEXTURE_2D, config.debug.tile_map_0_texture);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 32 * 8, 32 * 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glCheckError();
-
-		glGenTextures(1, &config.debug.tile_map_1_texture);
-		glBindTexture(GL_TEXTURE_2D, config.debug.tile_map_1_texture);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 32 * 8, 32 * 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
