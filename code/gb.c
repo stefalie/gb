@@ -3266,7 +3266,7 @@ gb__RenderScanLine(gb_GameBoy *gb)
 			while (fb_x < GB_FRAMEBUFFER_WIDTH)
 			{
 				const size_t x = 7 - gb->ppu.wx + fb_x;  // fb_x = x + wx - 7
-				assert(x < GB_FRAMEBUFFER_WIDTH);
+				assert(x < GB_FRAMEBUFFER_WIDTH + 7);
 				const size_t tile_x = x >> 3u;
 
 				const size_t map_offset = vram_offset + (tile_y << 5u) + tile_x;
