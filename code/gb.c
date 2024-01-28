@@ -712,7 +712,28 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			// Display
 			else if (addr == 0xFF40)
 			{
+				const uint8_t prev_lcd_enable = gb->ppu.lcdc.lcd_enable;
 				gb->ppu.lcdc.reg = value;
+				if (prev_lcd_enable == 1 && gb->ppu.lcdc.lcd_enable == 0)
+				{
+					// Disable LCD
+					// See: https://www.reddit.com/r/Gameboy/comments/a1c8h0/comment/eap4f8c/
+					gb->ppu.ly = 0;
+					gb->ppu.stat.mode = 0;
+					gb->ppu.mode_clock = 0;
+
+					// Clear framebuffer to color 0.
+					// TODO(stefalie): It should be an even "whiter" color.
+					// See: https://gbdev.io/pandocs/LCDC.html#lcdc7--lcd-enable.
+					const gb__Palette default_pal = gb__DefaultPalette();
+					for (size_t y = 0; y < GB_FRAMEBUFFER_HEIGHT; ++y)
+					{
+						for (size_t x = 0; x < GB_FRAMEBUFFER_WIDTH; ++x)
+						{
+							gb->display.pixels[GB_FRAMEBUFFER_WIDTH * y + x] = default_pal.colors[0];
+						}
+					}
+				}
 			}
 			else if (addr == 0xFF41)
 			{
@@ -730,15 +751,14 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			}
 			else if (addr == 0xFF44)
 			{
-				// According to gbdev.io LY is read-only (https://gbdev.io/pandocs/STAT.html).
+				// According to gbdev.io LY is read-only (https://gbdev.io/pandocs/STAT.html)
+				// and also according to The Cycle-Accurate Game Boy Docs.
 				//
 				// According to the GameBoy CPU Manual, writing LY resets it to 0.
 				// (Shouldn't that also reset the mode of the PPU then)?
 				// gb->ppu.ly = 0;
 				//
 				// Let's trust gbdev.io and do nothing.
-
-				// TODO
 			}
 			else if (addr == 0xFF45)
 			{
@@ -3392,15 +3412,19 @@ gb__RenderScanLine(gb_GameBoy *gb)
 static void
 gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 {
-	// TODO(stefalie): Handle LCD disabling/resets.
-	//
-	// Reset LCD clock, registers, etc.
-	// https://www.reddit.com/r/Gameboy/comments/a1c8h0/comment/eap4f8c/
-	//
-	// https://gbdev.io/pandocs/LCDC.html
-	// We don't emulate this:
-	// When re-enabling the LCD, the PPU will immediately start drawing again, but the screen will stay blank during the
-	// first frame.
+	if (gb->ppu.lcdc.lcd_enable == 0)
+	{
+		// See: https://www.reddit.com/r/Gameboy/comments/a1c8h0/comment/eap4f8c/
+		assert(gb->ppu.ly == 0);
+		assert(gb->ppu.stat.mode == 0);
+		assert(gb->ppu.mode_clock == 0);
+		return;
+	}
+
+	// TODO(stefalie): We don't emulate this:
+	// "When re-enabling the LCD, the PPU will immediately start drawing again,
+	// but the screen will stay blank during the first frame."
+	// From: https://gbdev.io/pandocs/LCDC.html
 
 	gb->ppu.mode_clock += 4 * elapsed_m_cycles;
 
