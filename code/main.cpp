@@ -433,11 +433,68 @@ IniSave(const char *ini_path, const Ini *ini)
 	}
 }
 
+// TODO(stefalie): Maybe it would be better to use the filename of the ROM
+// instead of the name stored inside of the ROM. That would be good for the
+// esoteric use case of playing with two different ROM versions of the same
+// game.
+static inline void
+PrepareSavePath(const gb_GameBoy *gb, const char *dir, int slot, char (&path)[512])
+{
+	const size_t dir_len = strlen(dir);
+	assert(dir_len + sizeof(gb->rom.name) + 3 < sizeof(path));
+	assert(slot >= 0 && slot < 10);
+	strcpy(path, dir);
+	memcpy(path + dir_len, gb->rom.name, sizeof(gb->rom.name));
+	const size_t path_len_without_suffix = strlen(path);
+	path[path_len_without_suffix + 0] = '_';
+	path[path_len_without_suffix + 1] = '0' + (char)slot;
+	path[path_len_without_suffix + 2] = '\0';
+}
+
 struct Rom
 {
 	uint8_t *data = 0;
 	int size = 0;
 };
+
+static void
+SaveGameState(const gb_GameBoy *gb, const char *dir, int slot)
+{
+	char path[512];
+	PrepareSavePath(gb, dir, slot, path);
+
+	FILE *file = fopen(path, "wb");
+	assert(file);
+	if (file)
+	{
+		fwrite(gb, sizeof(gb_GameBoy), 1, file);
+		fclose(file);
+	}
+}
+
+static void
+LoadGameState(gb_GameBoy *gb, const char *dir, int slot, Rom rom)
+{
+	char path[512];
+	PrepareSavePath(gb, dir, slot, path);
+
+	FILE *file = fopen(path, "rb");
+	if (file)
+	{
+		fseek(file, 0, SEEK_END);
+		size_t size = ftell(file);
+		fseek(file, 0, SEEK_SET);
+		assert(size == sizeof(gb_GameBoy));
+		(void)size;
+
+		fread(gb, sizeof(gb_GameBoy), 1, file);
+		fclose(file);
+
+		// This is the only pointer inside the gb_GameBoy struct.
+		// It needs patching.
+		gb->rom.data = rom.data;
+	}
+}
 
 // TODO: rename Confg -> Emulator, config -> emu
 // This has become way more than just the config
@@ -505,7 +562,7 @@ struct Config
 	} handles;
 };
 
-static void
+static Rom
 LoadRomFromFile(Config *config, gb_GameBoy *gb, const char *file_path)
 {
 	Rom rom = {};
@@ -548,6 +605,8 @@ LoadRomFromFile(Config *config, gb_GameBoy *gb, const char *file_path)
 	{
 		config->gui.show_rom_load_error = true;
 	}
+
+	return rom;
 }
 
 // TODO(stefalie): Consider using only OpenGL 2.1 compatible functions, glCreateShaderProgram needs OpenGL 4.1.
@@ -576,7 +635,7 @@ ImGuiOpenCenteredPopup(const char *name)
 }
 
 static void
-GuiDraw(Config *config, gb_GameBoy *gb)
+GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 {
 	ImGui::PushFont(config->handles.font);
 
@@ -615,7 +674,7 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 					ofn.Flags = OFN_FILEMUSTEXIST;
 					if (GetOpenFileNameA(&ofn))
 					{
-						LoadRomFromFile(config, gb, ofn.lpstrFile);
+						rom = LoadRomFromFile(config, gb, ofn.lpstrFile);
 					}
 				}
 				// TODO: Keep this menu element?
@@ -646,10 +705,14 @@ GuiDraw(Config *config, gb_GameBoy *gb)
 					config->gui.pause = !config->gui.pause;
 				}
 				ImGui::Separator();
-				// TODO
-				ImGui::MenuItem("Save", "F5", false, config->gui.has_active_rom);
-				// TODO
-				ImGui::MenuItem("Load", "F7", false, config->gui.has_active_rom);
+				if (ImGui::MenuItem("Save", "F5", false, config->gui.has_active_rom))
+				{
+					SaveGameState(gb, save_dir_path, config->gui.save_slot);
+				}
+				if (ImGui::MenuItem("Load", "F7", false, config->gui.has_active_rom))
+				{
+					LoadGameState(gb, save_dir_path, config->gui.save_slot, rom);
+				}
 				if (ImGui::BeginMenu("Save Slot"))
 				{
 					char slot_name[7] = { 'S', 'l', 'o', 't', ' ', 'X', '\0' };
@@ -1347,15 +1410,14 @@ main(int argc, char *argv[])
 	config.debug.mem_view.ReadOnly = true;
 	config.debug.mem_view.ReadFn = &DebuggerMemoryViewReadFunc;
 	config.debug.rom_view.ReadOnly = true;
-	char *save_path = SDL_GetPrefPath(NULL, "GB");
+	char *save_dir_path = SDL_GetPrefPath(NULL, "GB");
 
 	// Load ini
 	const char *ini_name = "config.ini";
-	const size_t ini_path_len = strlen(save_path) + strlen(ini_name);
-	char *ini_path = (char *)malloc(ini_path_len + 1);
-	strcpy(ini_path, save_path);
+	char ini_path[512];
+	assert(strlen(save_dir_path) + strlen(ini_name) + 1 < sizeof(ini_path));
+	strcpy(ini_path, save_dir_path);
 	strcat(ini_path, ini_name);
-	ini_path[ini_path_len] = '\0';
 	config.ini = IniLoadOrInit(ini_path);
 
 	const float dpi_scale = DpiScale();
@@ -1455,11 +1517,13 @@ main(int argc, char *argv[])
 				dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, main_font_size);
 	}
 
+	Rom rom = {};
+
 	gb_GameBoy gb = {};
 	gb_Color *pixels = (gb_Color *)malloc(gb_MaxMagFramebufferSizeInBytes());
 	if (argc > 1)
 	{
-		LoadRomFromFile(&config, &gb, argv[1]);
+		rom = LoadRomFromFile(&config, &gb, argv[1]);
 	}
 
 	// OpenGL setup. Leave matrices as identity.
@@ -1685,6 +1749,14 @@ main(int argc, char *argv[])
 				{
 					config.gui.toggle_fullscreen = true;
 				}
+				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F5)
+				{
+					SaveGameState(&gb, save_dir_path, config.gui.save_slot);
+				}
+				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F7)
+				{
+					LoadGameState(&gb, save_dir_path, config.gui.save_slot, rom);
+				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F10)
 				{
 					config.gui.exec_next_step = true;
@@ -1844,7 +1916,7 @@ main(int argc, char *argv[])
 		ImGui_ImplOpenGL2_NewFrame();
 		ImGui_ImplSDL2_NewFrame(config.handles.window);
 		ImGui::NewFrame();
-		GuiDraw(&config, &gb);
+		GuiDraw(&config, &gb, save_dir_path, rom);
 		ImGui::Render();
 		ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
 
@@ -1908,8 +1980,7 @@ main(int argc, char *argv[])
 	{
 		free(config.rom.data);
 	}
-	free(ini_path);
-	SDL_free(save_path);
+	SDL_free(save_dir_path);
 
 	if (config.handles.controller)
 	{
