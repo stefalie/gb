@@ -267,6 +267,8 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	// See: https://gbdev.io/pandocs/Rendering.html
 	case 0x8000:
 	case 0x9000:
+		// TODO(stefalie): Can't assert if the debugger is open and shows the memory view.
+		// assert(gb->ppu.stat.mode != GB_PPU_MODE_VRAM_SCAN);
 		return mem->vram[addr & 0x1FFF];
 	// Switchable RAM bank
 	case 0xA000:
@@ -337,6 +339,8 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			// See: https://gbdev.io/pandocs/Rendering.html
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{
+				// TODO(stefalie): Can't assert if the debugger is open and shows the memory view.
+				// assert(gb->ppu.stat.mode == GB_PPU_MODE_HBLANK || gb->ppu.stat.mode == GB_PPU_MODE_VBLANK);
 				return gb->memory.oam.bytes[addr & 0xFF];
 			}
 			else  // Empty
@@ -571,6 +575,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	// See: https://gbdev.io/pandocs/Rendering.html
 	case 0x8000:
 	case 0x9000:
+		assert(gb->ppu.stat.mode != GB_PPU_MODE_VRAM_SCAN);
 		mem->vram[addr & 0x1FFF] = value;
 		break;
 	// Switchable RAM bank
@@ -640,6 +645,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			// See: https://gbdev.io/pandocs/Rendering.html
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{
+				assert(gb->ppu.stat.mode == GB_PPU_MODE_HBLANK || gb->ppu.stat.mode == GB_PPU_MODE_VBLANK);
 				gb->memory.oam.bytes[addr & 0xFF] = value;
 			}
 			else
@@ -776,14 +782,13 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				// Src: $XX00-$XX9F   ;XX = $00 to $DF
 				// Dst: $FE00-$FE9F
 				//
+				// TODO(stefalie):
 				// Technically during DMA only HRAM is accessible.
 				// See: https://gbdev.io/pandocs/OAM_DMA_Transfer.html#oam-dma-transfer
-				// We simply ignore that here.
+				// We simply ignore that and don't verify that.
 				for (uint16_t i = 0; i < 0xA0; ++i)
 				{
-					// TODO: oam
 					gb->memory.oam.bytes[i] = gb_MemoryReadByte(gb, (value << 8u) + i);
-					// gb__MemoryWriteByte(gb, 0xFE00 + i, gb_MemoryReadByte(gb, (value << 8u) + i));
 				}
 				break;
 			}

@@ -529,7 +529,7 @@ struct Config
 		bool mag_filter_changed = true;
 		Speed speed_frame_multiplier = SPEED_DEFAULT;
 
-		bool skip_bios = true;
+		bool skip_bios = true;  // TODO
 		bool exec_next_step = false;
 
 		gb_PpuMode prev_lcd_mode;
@@ -1202,7 +1202,7 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 			ImGui::Begin(tab_name_ppu);
 			ImGui::Text("Registers:");
 			ImGui::Text("lcdc = 0x%02X", gb->ppu.lcdc.reg);
-			ImGui::Text("stat = 0x%02X", gb->ppu.stat.reg);
+			ImGui::Text("stat = 0x%02X, mode = %u", gb->ppu.stat.reg, gb->ppu.stat.mode);
 			ImGui::Text("scy = 0x%02X", gb->ppu.scy);
 			ImGui::Text("scx = 0x%02X", gb->ppu.scx);
 			ImGui::Text("ly = 0x%02X", gb->ppu.ly);
@@ -1778,11 +1778,11 @@ main(int argc, char *argv[])
 				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F11)
 				{
-					config.gui.stop_at_vblank = true;
+					config.gui.stop_at_vblank = !config.gui.stop_at_vblank;
 				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F12)
 				{
-					config.gui.stop_at_longjmp = true;
+					config.gui.stop_at_longjmp = !config.gui.stop_at_longjmp;
 				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE)
 				{
@@ -1867,6 +1867,18 @@ main(int argc, char *argv[])
 					has_updated_fb = true;
 				}
 
+				// Break when new frame is shown.
+				const bool vlbank_rising_edge = config.gui.prev_lcd_mode == GB_PPU_MODE_HBLANK &&
+						(gb_PpuMode)gb.ppu.stat.mode == GB_PPU_MODE_VBLANK;
+				config.gui.prev_lcd_mode = (gb_PpuMode)gb.ppu.stat.mode;
+
+				if (config.gui.stop_at_vblank && vlbank_rising_edge)
+				{
+					config.gui.pause = true;
+					config.debug.show = true;
+					goto exit;
+				}
+
 				// Breakpoints for debugging
 				for (size_t i = 0; i < num_breakpoints; ++i)
 				{
@@ -1875,19 +1887,6 @@ main(int argc, char *argv[])
 						config.gui.pause = true;
 						goto exit;
 					}
-				}
-
-				if (config.gui.stop_at_vblank)
-				{
-					gb_PpuMode curr_mode = (gb_PpuMode)gb.ppu.stat.mode;
-
-					if (config.gui.prev_lcd_mode == GB_PPU_MODE_HBLANK && curr_mode == GB_PPU_MODE_VBLANK)
-					{
-						config.gui.pause = true;
-						config.debug.show = true;
-					}
-
-					config.gui.prev_lcd_mode = curr_mode;
 				}
 			}
 		exit:;
