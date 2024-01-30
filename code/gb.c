@@ -11,7 +11,7 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define CLAMP(v, min, max) MIN(MAX(v, min), max)
 
-#define BLARGG_TEST_ENABLE 1
+#define BLARGG_TEST_CONSOLE_OUTPUT_ENABLE 1
 
 typedef struct gb__Palette
 {
@@ -103,7 +103,7 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes, bool skip_bio
 		return true;
 	}
 
-#if !BLARGG_TEST_ENABLE
+#if !BLARGG_TEST_CONSOLE_OUTPUT_ENABLE
 	// 0x80 is Color GameBoy
 	if (header->gbc == 0x80)
 	{
@@ -158,7 +158,7 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes, bool skip_bio
 	};
 
 	// Checksum test
-#if !BLARGG_TEST_ENABLE
+#if !BLARGG_TEST_CONSOLE_OUTPUT_ENABLE
 	uint16_t checksum = 0;
 	for (size_t i = 0; i < num_bytes; ++i)
 	{
@@ -585,7 +585,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 		{
 			if (mem->mbc_external_ram_enable)
 			{
-#if BLARGG_TEST_ENABLE == 0
+#if BLARGG_TEST_CONSOLE_OUTPUT_ENABLE == 0
 				const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
 				(void)ram_size;
 				assert(mem->mbc1.ram_bank == 0 && ram_size == 2 || ram_size == 3);
@@ -659,13 +659,19 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			// Serial port
 			else if (addr == 0xFF01)
 			{
-				// TODO: BLARGG?
+				// TODO(stefalie): Serial transfers are note implemented.
+				// Currently this is only used by Blargg tests.
 				gb->serial.sb = value;
 			}
 			else if (addr == 0xFF02)
 			{
-				// TODO: BLARGG?
-				gb->serial.sc = value;
+				// TODO(stefalie): Serial transfers are not implemented.
+				// Currently this is only used by Blargg tests.
+				gb->serial.sc = value & 0x81;
+				if (gb->serial.sc == 0x81)
+				{
+					gb->serial.enable_interrupt_timer = true;
+				}
 			}
 			// Timer
 			else if (addr == 0xFF04)
@@ -3134,6 +3140,20 @@ gb__UpdateClockAndTimer(gb_GameBoy *gb, size_t elapsed_m_cycles)
 				}
 			}
 		}
+
+		// TODO(stefalie): Serial transfer is not implemented.
+		// We pretend nothing is connect, read 0xFF from SB, and fire an interrupt.
+		if (gb->serial.interrupt_timer > 0)
+		{
+			gb->serial.interrupt_timer -= (int16_t)elapsed_m_cycles;
+			if (gb->serial.interrupt_timer <= 0)
+			{
+				gb->serial.sc &= 0x7F;
+				gb->serial.sb &= 0xFF;
+				gb->cpu.interrupt.if_flags.serial = 1;
+				gb->serial.interrupt_timer = 0;
+			}
+		}
 	}
 }
 
@@ -3552,7 +3572,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		num_cycles =
 				inst.is_extended ? gb__ExecuteExtendedInstruction(gb, inst) : gb__ExecuteBasicInstruction(gb, inst);
 
-#if BLARGG_TEST_ENABLE
+#if BLARGG_TEST_CONSOLE_OUTPUT_ENABLE
 		if (gb->serial.sc == 0x81)
 		{
 			char c = gb->serial.sb;
@@ -3577,6 +3597,16 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 
 	gb__UpdateClockAndTimer(gb, num_cycles);
 	gb__AdvancePpu(gb, num_cycles);
+
+	if (gb->serial.enable_interrupt_timer)
+	{
+		// This will trigger an interrupt 8 bit clocks (8192 Hz) later on.
+		// See page 31 of the GameBoy CPU manual.
+		// GB_MACHINE_M_FREQ / 8192 == 128 m cyles
+		gb->serial.interrupt_timer = 128 * 8;
+
+		gb->serial.enable_interrupt_timer = false;
+	}
 
 	return num_interrupt_cycles + num_cycles;
 }

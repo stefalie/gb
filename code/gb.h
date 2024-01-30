@@ -11,7 +11,7 @@
 #define GB_FRAMEBUFFER_WIDTH 160
 #define GB_FRAMEBUFFER_HEIGHT 144
 
-#define GB_MACHINE_FREQ 1048576
+#define GB_MACHINE_M_FREQ 1048576
 #define GB_MACHINE_CYCLES_PER_FRAME (70224 / 4)
 
 typedef enum gb_PpuMode
@@ -165,6 +165,9 @@ typedef struct gb_GameBoy
 
 	struct gb_SerialTransfer
 	{
+		int16_t interrupt_timer;
+		bool enable_interrupt_timer;
+
 		uint8_t sb;
 		uint8_t sc;
 	} serial;
