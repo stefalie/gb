@@ -725,7 +725,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					// Disable LCD
 					// See: https://www.reddit.com/r/Gameboy/comments/a1c8h0/comment/eap4f8c/
 					gb->ppu.ly = 0;
-					gb->ppu.stat.mode = 0;
+					gb->ppu.stat.mode = GB_PPU_MODE_HBLANK;
 					gb->ppu.mode_clock = 0;
 
 					// Clear framebuffer to color 0.
@@ -3436,7 +3436,7 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 	{
 		// See: https://www.reddit.com/r/Gameboy/comments/a1c8h0/comment/eap4f8c/
 		assert(gb->ppu.ly == 0);
-		assert(gb->ppu.stat.mode == 0);
+		assert(gb->ppu.stat.mode == GB_PPU_MODE_HBLANK);
 		assert(gb->ppu.mode_clock == 0);
 		return;
 	}
@@ -3557,7 +3557,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	}
 
 	const uint16_t num_interrupt_cycles = gb__HandleInterrupts(gb);
-	if (num_interrupt_cycles)
+	if (num_interrupt_cycles > 0)
 	{
 		gb__UpdateClockAndTimer(gb, num_interrupt_cycles);
 		gb__AdvancePpu(gb, num_interrupt_cycles);
@@ -3581,7 +3581,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		}
 #endif
 	}
-	else
+	else if (num_interrupt_cycles == 0)
 	{
 		// When the CPU is halted, we still need to let cycles "elapse" so that the
 		// timer progresses.

@@ -1789,7 +1789,7 @@ main(int argc, char *argv[])
 		// TODO: https://github.com/TylerGlaiel/FrameTimingControl/blob/master/frame_timer.cpp
 		const uint64_t curr_time = SDL_GetPerformanceCounter();
 		const double dt_in_s = (double)(curr_time - prev_time) / counter_freq;
-		const uint32_t elapsed_m_cycles = (uint32_t)(dt_in_s * GB_MACHINE_FREQ);
+		const uint32_t elapsed_m_cycles = (uint32_t)(dt_in_s * GB_MACHINE_M_FREQ);
 		prev_time = curr_time;
 
 		config.gui.show_gui_timeout_in_s -= (float)dt_in_s;
