@@ -532,6 +532,10 @@ struct Config
 		bool skip_bios = true;
 		bool exec_next_step = false;
 
+		gb_PpuMode prev_lcd_mode;
+		bool stop_at_vblank = false;
+
+		bool stop_at_longjmp = false;
 		// TODO(stefalie): We might also want to store the previous state of pause
 		// for the case that we only pause to open a modal popup. When we return
 		// from the popup, we should go back to the state it had before the popup.
@@ -804,13 +808,13 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 				{
 					config->gui.exec_next_step = true;
 				}
-				if (ImGui::MenuItem("Step Frame", "F11"))
+				if (ImGui::MenuItem("Stop at V-Blank", "F11", config->gui.stop_at_vblank))
 				{
-					// TODO
+					config->gui.stop_at_vblank = !config->gui.stop_at_vblank;
 				}
-				if (ImGui::MenuItem("Step to Next longjmp", "F12"))
+				if (ImGui::MenuItem("Stop at longjmp", "F12", config->gui.stop_at_longjmp))
 				{
-					// TODO
+					config->gui.stop_at_longjmp = !config->gui.stop_at_longjmp;
 				}
 				ImGui::EndMenu();
 			}
@@ -1034,7 +1038,8 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 	const char *tab_name_disassembly = "Disassembly at PC";
 	const char *tab_name_cpu = "CPU State";
 	const char *tab_name_ppu = "PPU State";
-	const char *tab_name_int_timer = "INT & Timer";
+	const char *tab_name_interrupt = "Interrupts";
+	const char *tab_name_timer = "Timer";
 	const char *tab_name_break = "Breakpoints";
 
 	{  // Dock
@@ -1075,11 +1080,11 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 			ImGuiID dock_bl_l = ImGui::DockBuilderSplitNode(dock_bl, ImGuiDir_Left, 0.5f, NULL, &dock_bl_r);
 
 			ImGuiID dock_tr;
-			ImGuiID dock_br = ImGui::DockBuilderSplitNode(dock_r, ImGuiDir_Down, 0.65f, NULL, &dock_tr);
+			ImGuiID dock_br = ImGui::DockBuilderSplitNode(dock_r, ImGuiDir_Down, 0.55f, NULL, &dock_tr);
 			ImGuiID dock_tr_t;
-			ImGuiID dock_tr_b = ImGui::DockBuilderSplitNode(dock_tr, ImGuiDir_Down, 0.5f, NULL, &dock_tr_t);
+			ImGuiID dock_tr_b = ImGui::DockBuilderSplitNode(dock_tr, ImGuiDir_Down, 0.40f, NULL, &dock_tr_t);
 			ImGuiID dock_br_t;
-			ImGuiID dock_br_b = ImGui::DockBuilderSplitNode(dock_br, ImGuiDir_Down, 0.5f, NULL, &dock_br_t);
+			ImGuiID dock_br_b = ImGui::DockBuilderSplitNode(dock_br, ImGuiDir_Down, 0.45f, NULL, &dock_br_t);
 
 			ImGui::DockBuilderDockWindow(tab_name_rom_view, dock_tl);
 			ImGui::DockBuilderDockWindow(tab_name_mem_view, dock_tl);
@@ -1089,7 +1094,8 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 			ImGui::DockBuilderDockWindow(tab_name_break, dock_tr_b);
 			ImGui::DockBuilderDockWindow(tab_name_ppu, dock_br_t);
 			ImGui::DockBuilderDockWindow(tab_name_cpu, dock_br_t);
-			ImGui::DockBuilderDockWindow(tab_name_int_timer, dock_br_b);
+			ImGui::DockBuilderDockWindow(tab_name_interrupt, dock_br_b);
+			ImGui::DockBuilderDockWindow(tab_name_timer, dock_br_b);
 			ImGui::DockBuilderFinish(dock);
 		}
 
@@ -1225,8 +1231,18 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 		}
 
 		{
+			ImGui::Begin(tab_name_timer);
+			ImGui::Text("Timer: %s, speed: %u", gb->timer.tac.enable ? "on" : "off", gb->timer.tac.clock_select);
+			ImGui::Text("div  = 0x%02X", gb->timer.div);
+			ImGui::Text("tima = 0x%02X", gb->timer.tima);
+			ImGui::Text("tma  = 0x%02X", gb->timer.tma);
+			ImGui::Text("tac  = 0x%02X", gb->timer.tac.reg);
+			ImGui::End();
+		}
+
+		{
 			const gb_GameBoy::gb_Cpu::gb_Interrupt *intr = &gb->cpu.interrupt;
-			ImGui::Begin(tab_name_int_timer);
+			ImGui::Begin(tab_name_interrupt);
 			ImGui::Text("Interrupts: %s", intr->ime ? "on" : "off");
 			ImGui::Text("          IE | IF");
 			ImGui::Text("VBLANK  =  %u |  %u", intr->ie_flags.vblank, intr->if_flags.vblank);
@@ -1234,12 +1250,6 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 			ImGui::Text("TIMER   =  %u |  %u", intr->ie_flags.timer, intr->if_flags.timer);
 			ImGui::Text("SERIAL  =  %u |  %u", intr->ie_flags.serial, intr->if_flags.serial);
 			ImGui::Text("JOYPAD  =  %u |  %u", intr->ie_flags.joypad, intr->if_flags.joypad);
-			ImGui::Separator();
-			ImGui::Text("Timer: %s, speed: %u", gb->timer.tac.enable ? "on" : "off", gb->timer.tac.clock_select);
-			ImGui::Text("div  = 0x%02X", gb->timer.div);
-			ImGui::Text("tima = 0x%02X", gb->timer.tima);
-			ImGui::Text("tma  = 0x%02X", gb->timer.tma);
-			ImGui::Text("tac  = 0x%02X", gb->timer.tac.reg);
 			ImGui::End();
 		}
 	}
@@ -1266,7 +1276,10 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 		ImGui::Begin(tab_name_cpu);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
-		ImGui::Begin(tab_name_int_timer);
+		ImGui::Begin(tab_name_timer);
+		ImGui::Text("%s", placeholder);
+		ImGui::End();
+		ImGui::Begin(tab_name_interrupt);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
 	}
@@ -1274,7 +1287,9 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 	{
 		ImGui::Begin(tab_name_options);
 		ImGui::Checkbox("Highlight current instruction", &config->debug.views_follow_pc);
-		ImGui::Checkbox("Single step mode (pause)", &config->gui.pause);
+		ImGui::Checkbox("Single step mode/Pause (space then step with F10)", &config->gui.pause);
+		ImGui::Checkbox("Stop at V-Blank (F11)", &config->gui.stop_at_vblank);
+		ImGui::Checkbox("Stop at longjmp (F12)", &config->gui.stop_at_longjmp);
 
 		// Compute average framerate.
 		static Uint64 frequency = SDL_GetPerformanceFrequency();
@@ -1761,6 +1776,14 @@ main(int argc, char *argv[])
 				{
 					config.gui.exec_next_step = true;
 				}
+				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F11)
+				{
+					config.gui.stop_at_vblank = true;
+				}
+				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F12)
+				{
+					config.gui.stop_at_longjmp = true;
+				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE)
 				{
 					config.gui.pause = !config.gui.pause;
@@ -1852,6 +1875,19 @@ main(int argc, char *argv[])
 						config.gui.pause = true;
 						goto exit;
 					}
+				}
+
+				if (config.gui.stop_at_vblank)
+				{
+					gb_PpuMode curr_mode = (gb_PpuMode)gb.ppu.stat.mode;
+
+					if (config.gui.prev_lcd_mode == GB_PPU_MODE_HBLANK && curr_mode == GB_PPU_MODE_VBLANK)
+					{
+						config.gui.pause = true;
+						config.debug.show = true;
+					}
+
+					config.gui.prev_lcd_mode = curr_mode;
 				}
 			}
 		exit:;
