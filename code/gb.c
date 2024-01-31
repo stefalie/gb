@@ -146,13 +146,13 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes, bool skip_bio
 		gb->memory.mbc_type = GB_MBC_TYPE_3;
 		break;
 	default:
-		// TODO: Filter out other types of cartridge flags such as RAM and BATTERY?
+		// TODO(stefalie): Filter out other types of cartridge flags such as RAM and BATTERY?
 		// That would allow us to assert that the RAM flag is set when RAM is accessed.
 		// Or what's easier is to simply that nobody ever uses RAM when the corresponding
 		// flag is not set.
 		// NOTE: External RAM only needs to be written to a save state if the BATTERY flag
 		// is set.
-		// TODO: Add support for MBC5? I think that implies that we should also support.
+		// TODO(stefalie): Add support for MBC5? I think that implies that we should also support.
 		// I'm not sure there are any games with MBC5 for DMG.
 		return true;
 	};
@@ -534,7 +534,6 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	// RAM bank selection
 	case 0x4000:
 	case 0x5000:
-		// assert(mem->mbc_type != GB_MBC_TYPE_ROM_ONLY);  // TODO: probably wrong
 		if (mem->mbc_type == GB_MBC_TYPE_1)
 		{
 			mem->mbc1.ram_bank = value;
@@ -552,7 +551,6 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			}
 			else
 			{
-				// TODO: probably not needed.
 				assert(false);
 			}
 		}
@@ -910,9 +908,9 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 	{
 		mem->mbc2.rom_bank = 1;
 	}
-	// TODO: Are MBC3 values correct if initialized to 0?
+	// TODO(stefalie): Are MBC3 values correct if initialized to 0?
 	// gbdev.io doesn't give default values.
-	// TODO: How to init RTC in MBC3?
+	// TODO(stefalie): How to init RTC in MBC3?
 
 	// (see page 18 of the GameBoy CPU Manual)
 	gb->cpu.a = 0x01;
@@ -3145,10 +3143,8 @@ gb__UpdateClockAndTimer(gb_GameBoy *gb, size_t elapsed_m_cycles)
 			}
 			assert(period_in_m_cyles >= 0);
 
-			// TODO: Is 'if' enough?
-			// TODO: this often fails in the debugger?
-			// This can potentially fail just after the clock_select was changed.
-			// assert(gb->timer.remaining_m_cycles < 2 * period_in_m_cyles);
+			// While instead of if because it could happen several times just after
+			// the clock_select was changed.
 			while (gb->timer.remaining_m_cycles >= period_in_m_cyles)
 			{
 				gb->timer.remaining_m_cycles -= (uint16_t)period_in_m_cyles;

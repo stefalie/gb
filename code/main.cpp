@@ -681,7 +681,6 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 						rom = LoadRomFromFile(config, gb, ofn.lpstrFile);
 					}
 				}
-				// TODO: Keep this menu element?
 				if (ImGui::MenuItem("Eject ROM", NULL, false, config->gui.has_active_rom))
 				{
 					config->gui.has_active_rom = false;
@@ -1381,7 +1380,7 @@ static const char* fragment_shader_source =
 		"	mag_sample_uv.y = 1.0 - mag_sample_uv.y;  // Image is upside down in tex memory.\n"
 		"	vec3 color = texture2D(gameboy_fb_tex, mag_sample_uv).rgb;\n"
 		"\n"
-		"	// TODO: Tone mapping etc.\n"
+		"	// TODO(stefalie): Tone mapping etc.\n"
 		"	gl_FragColor = vec4(color, 1.0);\n"
 		"}\n";
 
@@ -1722,7 +1721,7 @@ main(int argc, char *argv[])
 			case SDL_CONTROLLERAXISMOTION:
 				for (size_t i = 0; i < num_inputs; ++i)
 				{
-					// TODO: Test this, it might all be bogus.
+					// TODO: Test gamepad, it might all be bogus.
 					Input input = config.ini.inputs[i];
 					if (input.type == Input::TYPE_AXIS && event.caxis.axis == input.sdl.axis)
 					{
@@ -1809,7 +1808,8 @@ main(int argc, char *argv[])
 		}
 		ImGui::SetCurrentContext(config.handles.imgui);  // Reset (if changed)
 
-		// TODO: https://github.com/TylerGlaiel/FrameTimingControl/blob/master/frame_timer.cpp
+		// TODO(stefalie): Can this be done better/more precise?
+		// See https://github.com/TylerGlaiel/FrameTimingControl/blob/master/frame_timer.cpp
 		const uint64_t curr_time = SDL_GetPerformanceCounter();
 		const double dt_in_s = (double)(curr_time - prev_time) / counter_freq;
 		const uint32_t elapsed_m_cycles = (uint32_t)(dt_in_s * GB_MACHINE_M_FREQ);
