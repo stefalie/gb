@@ -268,7 +268,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	case 0x8000:
 	case 0x9000:
 		// TODO(stefalie): Can't assert if the debugger is open and shows the memory view.
-		// assert(gb->ppu.stat.mode != GB_PPU_MODE_VRAM_SCAN);
+		// assert(gb->ppu.stat.mode != GB_PPU_MODE_VRAM_SCAN || gb - ppu.lcdc.lcd_enable == 0);
 		return mem->vram[addr & 0x1FFF];
 	// Switchable RAM bank
 	case 0xA000:
@@ -340,7 +340,8 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{
 				// TODO(stefalie): Can't assert if the debugger is open and shows the memory view.
-				// assert(gb->ppu.stat.mode == GB_PPU_MODE_HBLANK || gb->ppu.stat.mode == GB_PPU_MODE_VBLANK);
+				// assert(gb->ppu.stat.mode == GB_PPU_MODE_HBLANK || gb->ppu.stat.mode == GB_PPU_MODE_VBLANK ||
+				//		gb->ppu.lcdc.lcd_enable == 0);
 				return gb->memory.oam.bytes[addr & 0xFF];
 			}
 			else  // Empty
@@ -575,7 +576,12 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 	// See: https://gbdev.io/pandocs/Rendering.html
 	case 0x8000:
 	case 0x9000:
-		assert(gb->ppu.stat.mode != GB_PPU_MODE_VRAM_SCAN);
+		// TODO(stefalie): Can't assert. Wario Land does such an access when first
+		// entering the world map. I'm not sure if my timing is wrong or a game bug.
+		// Not sure if it's better to ignore the write or let it write the value
+		// anyway (current status).
+		//
+		// assert(gb->ppu.stat.mode != GB_PPU_MODE_VRAM_SCAN || gb->ppu.lcdc.lcd_enable == 0);
 		mem->vram[addr & 0x1FFF] = value;
 		break;
 	// Switchable RAM bank
@@ -645,7 +651,8 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			// See: https://gbdev.io/pandocs/Rendering.html
 			if (addr < 0xFEA0)  // Sprite Attrib Memory (OAM)
 			{
-				assert(gb->ppu.stat.mode == GB_PPU_MODE_HBLANK || gb->ppu.stat.mode == GB_PPU_MODE_VBLANK);
+				assert(gb->ppu.stat.mode == GB_PPU_MODE_HBLANK || gb->ppu.stat.mode == GB_PPU_MODE_VBLANK ||
+						gb->ppu.lcdc.lcd_enable == 0);
 				gb->memory.oam.bytes[addr & 0xFF] = value;
 			}
 			else
