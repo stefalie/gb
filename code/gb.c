@@ -3387,10 +3387,16 @@ gb__RenderScanLine(gb_GameBoy *gb)
 
 					// Second half of 8x16 sprite is in the next tile
 					int tile_idx = sprite.tile_index;
-					if (in_tile_y >= 8)
+					if (sprite_height == 16)
 					{
-						in_tile_y -= 8;
-						++tile_idx;
+						// Double tile sprites always start on an even tile index.
+						tile_idx &= 0xFE;
+
+						if (in_tile_y >= 8)
+						{
+							in_tile_y -= 8;
+							tile_idx |= 0x01;
+						}
 					}
 
 					const gb__TileLine line =
