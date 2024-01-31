@@ -155,7 +155,7 @@ typedef struct gb_GameBoy
 			uint8_t selection_wire;
 			struct
 			{
-				uint8_t invalid : 4;  // The lower nibble of buttons/dpad shoudl be here.
+				uint8_t invalid : 4;  // The lower nibble of buttons/dpad should be here.
 				uint8_t dpad_select : 1;
 				uint8_t buttons_select : 1;
 				uint8_t _ : 2;
