@@ -571,31 +571,31 @@ struct Emulator
 	} handles;
 };
 
-static Rom
+static void
 LoadRomFromFile(Emulator *emu, gb_GameBoy *gb, const char *file_path)
 {
-	Rom rom = {};
+	Rom new_rom = {};
 
 	FILE *file = fopen(file_path, "rb");
 	if (file)
 	{
 		fseek(file, 0, SEEK_END);
-		rom.size = ftell(file);
+		new_rom.size = ftell(file);
 		fseek(file, 0, SEEK_SET);
 
-		rom.data = (uint8_t *)malloc(rom.size);
-		fread(rom.data, rom.size, 1, file);
+		new_rom.data = (uint8_t *)malloc(new_rom.size);
+		fread(new_rom.data, new_rom.size, 1, file);
 		fclose(file);
 	}
 
-	if (rom.data)
+	if (new_rom.data)
 	{
 		if (emu->rom.data)
 		{
 			free(emu->rom.data);
 			emu->rom = {};
 		}
-		emu->rom = rom;
+		emu->rom = new_rom;
 		if (gb_LoadRom(gb, emu->rom.data, emu->rom.size, emu->ini.skip_bios))
 		{
 			emu->gui.show_rom_load_error = true;
@@ -616,8 +616,6 @@ LoadRomFromFile(Emulator *emu, gb_GameBoy *gb, const char *file_path)
 	{
 		emu->gui.show_rom_load_error = true;
 	}
-
-	return rom;
 }
 
 // TODO(stefalie): Consider using only OpenGL 2.1 compatible functions, glCreateShaderProgram needs OpenGL 4.1.
@@ -685,7 +683,7 @@ GuiDraw(Emulator *emu, gb_GameBoy *gb)
 					ofn.Flags = OFN_FILEMUSTEXIST;
 					if (GetOpenFileNameA(&ofn))
 					{
-						emu->rom = LoadRomFromFile(emu, gb, ofn.lpstrFile);
+						LoadRomFromFile(emu, gb, ofn.lpstrFile);
 					}
 				}
 				if (ImGui::MenuItem("Eject ROM", NULL, false, emu->gui.has_active_rom))
@@ -1536,7 +1534,7 @@ main(int argc, char *argv[])
 	gb_Color *pixels = (gb_Color *)malloc(gb_MaxMagFramebufferSizeInBytes());
 	if (argc > 1)
 	{
-		emu.rom = LoadRomFromFile(&emu, &gb, argv[1]);
+		LoadRomFromFile(&emu, &gb, argv[1]);
 	}
 
 	// OpenGL setup. Leave matrices as identity.

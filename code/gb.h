@@ -231,7 +231,7 @@ typedef struct gb_GameBoy
 		{
 			gb_Sprite sprites[40];
 			uint8_t bytes[160];
-		} oam; // Sprite attribute memory
+		} oam;  // Sprite attribute memory
 
 		// Memory Bank Controller
 		gb_MbcType mbc_type;
