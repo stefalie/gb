@@ -749,9 +749,17 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			}
 			else if (addr == 0xFF41)
 			{
-				gb_PpuMode mode_read_only = gb->ppu.stat.mode;
-				gb->ppu.stat.reg = value;
-				gb->ppu.stat.mode = mode_read_only;
+				union gb_PpuStat *stat = &gb->ppu.stat;
+
+				gb_PpuMode mode_read_only = stat->mode;
+				stat->reg = value;
+				stat->mode = mode_read_only;
+
+				stat->coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
+				if (stat->interrupt_coincidence && stat->coincidence_flag)
+				{
+					gb->cpu.interrupt.if_flags.lcd_stat = 1;
+				}
 			}
 			else if (addr == 0xFF42)
 			{
@@ -3066,6 +3074,10 @@ gb__HandleInterrupts(gb_GameBoy *gb)
 			intr->if_flags.joypad = 0;
 			gb->cpu.pc = 0x60;
 		}
+		else
+		{
+			assert(false);
+		}
 	}
 	else if (gb->cpu.halt && !intr->ime && intr_pending.reg)
 	{
@@ -3470,8 +3482,8 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 
 			++gb->ppu.ly;
 			assert(gb->ppu.ly <= 144);
-			stat->coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
 
+			stat->coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
 			if (stat->interrupt_coincidence && stat->coincidence_flag)
 			{
 				gb->cpu.interrupt.if_flags.lcd_stat = 1;
@@ -3506,6 +3518,10 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			++gb->ppu.ly;
 			assert(gb->ppu.ly > 144 && gb->ppu.ly <= 154);
 			stat->coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
+			if (stat->interrupt_coincidence && stat->coincidence_flag)
+			{
+				gb->cpu.interrupt.if_flags.lcd_stat = 1;
+			}
 
 			if (gb->ppu.ly == 154)
 			{
