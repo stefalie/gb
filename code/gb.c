@@ -11,7 +11,7 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define CLAMP(v, min, max) MIN(MAX(v, min), max)
 
-#define BLARGG_TEST_CONSOLE_OUTPUT_ENABLE 1
+#define BLARGG_TEST_ENABLE 0
 
 typedef struct gb__Palette
 {
@@ -103,16 +103,9 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes, bool skip_bio
 		return true;
 	}
 
-#if !BLARGG_TEST_CONSOLE_OUTPUT_ENABLE
-	// 0x80 is Color GameBoy
-	if (header->gbc == 0x80)
-	{
-		return true;
-	}
-#endif
-
-	// 0x00 is GameBoy, 0x03 is Super GameBoy
-	if (header->sgb != 0x00)
+	// 0x80 is Color GameBoy but backwards compatible
+	// 0xC0 is Color GameBoy only
+	if (header->gbc == 0xC0)
 	{
 		return true;
 	}
@@ -158,7 +151,7 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes, bool skip_bio
 	};
 
 	// Checksum test
-#if !BLARGG_TEST_CONSOLE_OUTPUT_ENABLE
+#if !BLARGG_TEST_ENABLE
 	uint16_t checksum = 0;
 	for (size_t i = 0; i < num_bytes; ++i)
 	{
@@ -594,7 +587,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 		{
 			if (mem->mbc_external_ram_enable)
 			{
-#if BLARGG_TEST_CONSOLE_OUTPUT_ENABLE == 0
+#if BLARGG_TEST_ENABLE == 0
 				const uint8_t ram_size = gb__GetHeader(gb)->ram_size;
 				(void)ram_size;
 				assert(mem->mbc1.ram_bank == 0 && ram_size == 2 || ram_size == 3);
@@ -3602,7 +3595,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		num_cycles =
 				inst.is_extended ? gb__ExecuteExtendedInstruction(gb, inst) : gb__ExecuteBasicInstruction(gb, inst);
 
-#if BLARGG_TEST_CONSOLE_OUTPUT_ENABLE
+#if BLARGG_TEST_ENABLE
 		if (gb->serial.sc == 0x81)
 		{
 			char c = gb->serial.sb;

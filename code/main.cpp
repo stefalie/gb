@@ -219,6 +219,7 @@ struct Ini
 {
 	uint32_t window_width = window_default_scale_factor * GB_FRAMEBUFFER_WIDTH;
 	uint32_t window_height = window_default_scale_factor * GB_FRAMEBUFFER_HEIGHT;
+	bool skip_bios = false;
 
 	Stretch stretch = STRETCH_ASPECT_CORRECT;
 	gb_MagFilter mag_filter = GB_MAG_FILTER_NONE;
@@ -293,6 +294,10 @@ IniLoadOrInit(const char *ini_path)
 			else if (!strcmp(key, "window_height"))
 			{
 				ini.window_height = atoi(val);
+			}
+			else if (!strcmp(key, "skip_bios"))
+			{
+				ini.skip_bios = atoi(val);
 			}
 			else if (!strcmp(key, "stretch"))
 			{
@@ -408,6 +413,7 @@ IniSave(const char *ini_path, const Ini *ini)
 		fprintf(file, "[General]\n");
 		fprintf(file, "window_width=%i\n", ini->window_width);
 		fprintf(file, "window_height=%i\n", ini->window_height);
+		fprintf(file, "skip_bios=%i\n", ini->skip_bios ? 1 : 0);
 		for (size_t i = 0; i < num_stretch_options; ++i)
 		{
 			if (ini->stretch == stretch_options[i].type)
@@ -496,9 +502,7 @@ LoadGameState(gb_GameBoy *gb, const char *dir, int slot, Rom rom)
 	}
 }
 
-// TODO: rename Confg -> Emulator, config -> emu
-// This has become way more than just the config
-struct Config
+struct Emulator
 {
 	Ini ini;
 
@@ -507,6 +511,8 @@ struct Config
 	bool quit = false;
 
 	Input *modify_input = NULL;
+
+	char *save_dir_path = NULL;
 
 	struct Gui
 	{
@@ -529,7 +535,6 @@ struct Config
 		bool mag_filter_changed = true;
 		Speed speed_frame_multiplier = SPEED_DEFAULT;
 
-		bool skip_bios = true;  // TODO
 		bool exec_next_step = false;
 
 		gb_PpuMode prev_lcd_mode;
@@ -567,7 +572,7 @@ struct Config
 };
 
 static Rom
-LoadRomFromFile(Config *config, gb_GameBoy *gb, const char *file_path)
+LoadRomFromFile(Emulator *emu, gb_GameBoy *gb, const char *file_path)
 {
 	Rom rom = {};
 
@@ -585,29 +590,31 @@ LoadRomFromFile(Config *config, gb_GameBoy *gb, const char *file_path)
 
 	if (rom.data)
 	{
-		if (config->rom.data)
+		if (emu->rom.data)
 		{
-			free(config->rom.data);
-			config->rom = {};
+			free(emu->rom.data);
+			emu->rom = {};
 		}
-		config->rom = rom;
-		if (gb_LoadRom(gb, config->rom.data, config->rom.size, config->gui.skip_bios))
+		emu->rom = rom;
+		if (gb_LoadRom(gb, emu->rom.data, emu->rom.size, emu->ini.skip_bios))
 		{
-			config->gui.show_rom_load_error = true;
-			free(config->rom.data);
-			config->rom = {};
+			emu->gui.show_rom_load_error = true;
+			emu->gui.has_active_rom = false;
+			free(emu->rom.data);
+			emu->rom = {};
 		}
 		else
 		{
-			config->gui.has_active_rom = true;
-			config->gui.exec_next_step = false;
-			config->gui.reset_gui_timeout = true;
-			config->debug.elapsed_m_cycles = 0;
+			emu->gui.has_active_rom = true;
+			emu->gui.exec_next_step = false;
+			emu->gui.pause = false;
+			emu->gui.reset_gui_timeout = true;
+			emu->debug.elapsed_m_cycles = 0;
 		}
 	}
 	else
 	{
-		config->gui.show_rom_load_error = true;
+		emu->gui.show_rom_load_error = true;
 	}
 
 	return rom;
@@ -639,9 +646,9 @@ ImGuiOpenCenteredPopup(const char *name)
 }
 
 static void
-GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
+GuiDraw(Emulator *emu, gb_GameBoy *gb)
 {
-	ImGui::PushFont(config->handles.font);
+	ImGui::PushFont(emu->handles.font);
 
 	// The GUI/menu is shown if:
 	// - in pause mode
@@ -650,19 +657,19 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 	// - when mouse if moving
 	// When none of these conditions is fulfilled anymore, there is a short
 	// time period before the menu is hidden.
-	if (config->gui.pause || !config->gui.has_active_rom || config->gui.reset_gui_timeout)
+	if (emu->gui.pause || !emu->gui.has_active_rom || emu->gui.reset_gui_timeout)
 	{
-		config->gui.reset_gui_timeout = false;
-		config->gui.show_gui_timeout_in_s = 2.0f;
+		emu->gui.reset_gui_timeout = false;
+		emu->gui.show_gui_timeout_in_s = 2.0f;
 	}
 
-	if (config->gui.show_gui_timeout_in_s > 0.0f)
+	if (emu->gui.show_gui_timeout_in_s > 0.0f)
 	{
 		if (ImGui::BeginMainMenuBar())
 		{
 			if (ImGui::BeginMenu("File"))
 			{
-				config->gui.reset_gui_timeout = true;
+				emu->gui.reset_gui_timeout = true;
 
 				if (ImGui::MenuItem("Open ROM"))
 				{
@@ -678,43 +685,43 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 					ofn.Flags = OFN_FILEMUSTEXIST;
 					if (GetOpenFileNameA(&ofn))
 					{
-						rom = LoadRomFromFile(config, gb, ofn.lpstrFile);
+						emu->rom = LoadRomFromFile(emu, gb, ofn.lpstrFile);
 					}
 				}
-				if (ImGui::MenuItem("Eject ROM", NULL, false, config->gui.has_active_rom))
+				if (ImGui::MenuItem("Eject ROM", NULL, false, emu->gui.has_active_rom))
 				{
-					config->gui.has_active_rom = false;
-					free(config->rom.data);
-					config->rom = {};
+					emu->gui.has_active_rom = false;
+					free(emu->rom.data);
+					emu->rom = {};
 				}
 				ImGui::Separator();
 				if (ImGui::MenuItem("Exit", "Esc"))
 				{
-					config->gui.show_quit_popup = true;
+					emu->gui.show_quit_popup = true;
 				}
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("System"))
 			{
-				config->gui.reset_gui_timeout = true;
+				emu->gui.reset_gui_timeout = true;
 
 				if (ImGui::MenuItem("Reset"))
 				{
-					gb_Reset(gb, config->gui.skip_bios);
-					config->debug.elapsed_m_cycles = 0;
+					gb_Reset(gb, emu->ini.skip_bios);
+					emu->debug.elapsed_m_cycles = 0;
 				}
-				if (ImGui::MenuItem("Pause", "Space", config->gui.pause))
+				if (ImGui::MenuItem("Pause", "Space", emu->gui.pause))
 				{
-					config->gui.pause = !config->gui.pause;
+					emu->gui.pause = !emu->gui.pause;
 				}
 				ImGui::Separator();
-				if (ImGui::MenuItem("Save", "F5", false, config->gui.has_active_rom))
+				if (ImGui::MenuItem("Save", "F5", false, emu->gui.has_active_rom))
 				{
-					SaveGameState(gb, save_dir_path, config->gui.save_slot);
+					SaveGameState(gb, emu->save_dir_path, emu->gui.save_slot);
 				}
-				if (ImGui::MenuItem("Load", "F7", false, config->gui.has_active_rom))
+				if (ImGui::MenuItem("Load", "F7", false, emu->gui.has_active_rom))
 				{
-					LoadGameState(gb, save_dir_path, config->gui.save_slot, rom);
+					LoadGameState(gb, emu->save_dir_path, emu->gui.save_slot, emu->rom);
 				}
 				if (ImGui::BeginMenu("Save Slot"))
 				{
@@ -722,9 +729,9 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 					for (int i = 1; i <= 5; ++i)
 					{
 						slot_name[5] = '0' + (char)i;
-						if (ImGui::MenuItem(slot_name, NULL, config->gui.save_slot == i))
+						if (ImGui::MenuItem(slot_name, NULL, emu->gui.save_slot == i))
 						{
-							config->gui.save_slot = i;
+							emu->gui.save_slot = i;
 						}
 					}
 					ImGui::EndMenu();
@@ -733,7 +740,7 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 			}
 			if (ImGui::BeginMenu("Options"))
 			{
-				config->gui.reset_gui_timeout = true;
+				emu->gui.reset_gui_timeout = true;
 
 				if (ImGui::BeginMenu("Screen Size"))
 				{
@@ -741,22 +748,22 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 					for (size_t i = 0; i < num_stretch_options; ++i)
 					{
 						if (ImGui::MenuItem(
-									stretch_options[i].nice_name, NULL, config->ini.stretch == stretch_options[i].type))
+									stretch_options[i].nice_name, NULL, emu->ini.stretch == stretch_options[i].type))
 						{
-							config->ini.stretch = stretch_options[i].type;
+							emu->ini.stretch = stretch_options[i].type;
 						}
 					}
 					ImGui::Separator();
-					if (ImGui::MenuItem("Fullscreen", NULL, config->gui.fullscreen))
+					if (ImGui::MenuItem("Fullscreen", NULL, emu->gui.fullscreen))
 					{
-						config->gui.toggle_fullscreen = true;
+						emu->gui.toggle_fullscreen = true;
 					}
 					if (ImGui::MenuItem("Reset Win Size", NULL, false))
 					{
 						const float dpi_scale = DpiScale();
 						const int win_width = (int)(window_default_scale_factor * GB_FRAMEBUFFER_WIDTH * dpi_scale);
 						const int win_height = (int)(window_default_scale_factor * GB_FRAMEBUFFER_HEIGHT * dpi_scale);
-						SDL_SetWindowSize(config->handles.window, win_width, win_height);
+						SDL_SetWindowSize(emu->handles.window, win_width, win_height);
 					}
 					ImGui::EndMenu();
 				}
@@ -764,11 +771,10 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 				{
 					for (size_t i = 0; i < num_mag_options; ++i)
 					{
-						if (ImGui::MenuItem(
-									mag_options[i].nice_name, NULL, config->ini.mag_filter == mag_options[i].type))
+						if (ImGui::MenuItem(mag_options[i].nice_name, NULL, emu->ini.mag_filter == mag_options[i].type))
 						{
-							config->ini.mag_filter = mag_options[i].type;
-							config->gui.mag_filter_changed = true;
+							emu->ini.mag_filter = mag_options[i].type;
+							emu->gui.mag_filter_changed = true;
 						}
 					}
 					ImGui::EndMenu();
@@ -778,48 +784,48 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 					for (size_t i = 0; i < num_speed_options; ++i)
 					{
 						if (ImGui::MenuItem(speed_options[i].nice_name, NULL,
-									config->gui.speed_frame_multiplier == speed_options[i].type))
+									emu->gui.speed_frame_multiplier == speed_options[i].type))
 						{
-							config->gui.speed_frame_multiplier = speed_options[i].type;
+							emu->gui.speed_frame_multiplier = speed_options[i].type;
 						}
 					}
 					ImGui::EndMenu();
 				}
 				if (ImGui::MenuItem("Configure Input"))
 				{
-					config->gui.show_input_config_popup = true;
+					emu->gui.show_input_config_popup = true;
 				}
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Debug"))
 			{
-				config->gui.reset_gui_timeout = true;
+				emu->gui.reset_gui_timeout = true;
 
-				if (ImGui::MenuItem("Open Debugger", NULL, config->debug.show))
+				if (ImGui::MenuItem("Open Debugger", NULL, emu->debug.show))
 				{
-					config->debug.show = !config->debug.show;
+					emu->debug.show = !emu->debug.show;
 				}
-				if (ImGui::MenuItem("Skip BIOS", NULL, config->gui.skip_bios))
+				if (ImGui::MenuItem("Skip BIOS", NULL, emu->ini.skip_bios))
 				{
-					config->gui.skip_bios = !config->gui.skip_bios;
+					emu->ini.skip_bios = !emu->ini.skip_bios;
 				}
 				if (ImGui::MenuItem("Step Instruction", "F10"))
 				{
-					config->gui.exec_next_step = true;
+					emu->gui.exec_next_step = true;
 				}
-				if (ImGui::MenuItem("Stop at V-Blank", "F11", config->gui.stop_at_vblank))
+				if (ImGui::MenuItem("Stop at V-Blank", "F11", emu->gui.stop_at_vblank))
 				{
-					config->gui.stop_at_vblank = !config->gui.stop_at_vblank;
+					emu->gui.stop_at_vblank = !emu->gui.stop_at_vblank;
 				}
-				if (ImGui::MenuItem("Stop at longjmp", "F12", config->gui.stop_at_longjmp))
+				if (ImGui::MenuItem("Stop at longjmp", "F12", emu->gui.stop_at_longjmp))
 				{
-					config->gui.stop_at_longjmp = !config->gui.stop_at_longjmp;
+					emu->gui.stop_at_longjmp = !emu->gui.stop_at_longjmp;
 				}
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Help"))
 			{
-				config->gui.reset_gui_timeout = true;
+				emu->gui.reset_gui_timeout = true;
 
 				if (ImGui::MenuItem("Website"))
 				{
@@ -828,12 +834,12 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 				}
 				if (ImGui::MenuItem("About"))
 				{
-					config->gui.show_about_popup = true;
+					emu->gui.show_about_popup = true;
 				}
 				ImGui::EndMenu();
 			}
 
-			if (config->gui.pause)
+			if (emu->gui.pause)
 			{
 				ImGui::SameLine(ImGui::GetWindowWidth() - 250);
 				ImGui::Text("(paused)");
@@ -844,21 +850,21 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 
 	// The current (if any) pop-up will be closed if ESC is hit or the window
 	// is closed. This is applies for all pop-ups except the quit popup.
-	const bool close_current_popup = config->gui.pressed_escape || config->gui.show_quit_popup;
+	const bool close_current_popup = emu->gui.pressed_escape || emu->gui.show_quit_popup;
 
 	// Use the hit ESC key only to close the quit popup only if it wasn't used
 	// to close another pop-up.
-	const bool any_open_popups_except_quit = config->gui.show_about_popup || config->gui.show_input_config_popup ||
-			config->gui.show_rom_load_error /* || ...*/;
-	const bool esc_for_quit_popup = config->gui.pressed_escape && !any_open_popups_except_quit;
-	const bool close_quit_popup = config->gui.show_quit_popup && esc_for_quit_popup;
+	const bool any_open_popups_except_quit =
+			emu->gui.show_about_popup || emu->gui.show_input_config_popup || emu->gui.show_rom_load_error /* || ...*/;
+	const bool esc_for_quit_popup = emu->gui.pressed_escape && !any_open_popups_except_quit;
+	const bool close_quit_popup = emu->gui.show_quit_popup && esc_for_quit_popup;
 	if (esc_for_quit_popup)
 	{
 		// Activate quit popup if no active already.
-		config->gui.show_quit_popup = true;
+		emu->gui.show_quit_popup = true;
 	}
 
-	config->gui.pressed_escape = false;
+	emu->gui.pressed_escape = false;
 
 	// TODO(stefalie): Is this really the best/only way to handle popups?
 
@@ -866,17 +872,17 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 			ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 
 	// Input config popup
-	if (config->gui.show_input_config_popup)
+	if (emu->gui.show_input_config_popup)
 	{
 		ImGuiOpenCenteredPopup("Configure Input");
-		config->gui.pause = true;
+		emu->gui.pause = true;
 	}
 	if (ImGui::BeginPopupModal("Configure Input", NULL, popup_flags))
 	{
 		ImGui::Text("Click the buttons to change the input bindings.");
 
 		ImGui::Columns(3);
-		Ini *ini = &config->ini;
+		Ini *ini = &emu->ini;
 		char label[64];
 
 		ImGui::Text("");
@@ -901,7 +907,7 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 
 			snprintf(label, 64, "%s##modify_%i", InputSdlName(input), i);
 
-			const bool is_active = config->modify_input == input;
+			const bool is_active = emu->modify_input == input;
 			if (is_active)
 			{
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.72f, 0.41f, 0.57f, 0.62f));
@@ -909,7 +915,7 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 			}
 			if (ImGui::Button(label))
 			{
-				config->modify_input = is_active ? NULL : input;
+				emu->modify_input = is_active ? NULL : input;
 			}
 			if (is_active)
 			{
@@ -922,22 +928,22 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 
 		if (ImGui::Button("Done") || close_current_popup)
 		{
-			config->gui.show_input_config_popup = false;
+			emu->gui.show_input_config_popup = false;
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Reset"))
 		{
-			memcpy(config->ini.inputs, default_inputs, sizeof(default_inputs));
+			memcpy(emu->ini.inputs, default_inputs, sizeof(default_inputs));
 		}
 		ImGui::EndPopup();
 	}
 
 	// About popup
-	if (config->gui.show_about_popup)
+	if (emu->gui.show_about_popup)
 	{
 		ImGuiOpenCenteredPopup("About GB");
-		config->gui.pause = true;
+		emu->gui.pause = true;
 	}
 	if (ImGui::BeginPopupModal("About GB", NULL, popup_flags))
 	{
@@ -950,14 +956,14 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 		ImGui::Text("https://github.com/stefalie/gb");
 		if (ImGui::Button("Cancel") || close_current_popup)
 		{
-			config->gui.show_about_popup = false;
+			emu->gui.show_about_popup = false;
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
 	}
 
 	// Rom load error popup
-	if (config->gui.show_rom_load_error)
+	if (emu->gui.show_rom_load_error)
 	{
 		ImGuiOpenCenteredPopup("Error");
 	}
@@ -966,30 +972,30 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 		ImGui::Text("Failed to open ROM file.");
 		if (ImGui::Button("Ok") || close_current_popup)
 		{
-			config->gui.show_rom_load_error = false;
+			emu->gui.show_rom_load_error = false;
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
 	}
 
 	// Quit pop-up
-	if (config->gui.show_quit_popup)
+	if (emu->gui.show_quit_popup)
 	{
 		ImGuiOpenCenteredPopup("Quit");
-		config->gui.pause = true;
+		emu->gui.pause = true;
 	}
 	if (ImGui::BeginPopupModal("Quit", NULL, popup_flags))
 	{
 		ImGui::Text("Do you really want to quit GB?");
 		if (ImGui::Button("Quit"))
 		{
-			config->quit = true;
+			emu->quit = true;
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Cancel") || close_quit_popup)
 		{
-			config->gui.show_quit_popup = false;
+			emu->gui.show_quit_popup = false;
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
@@ -999,16 +1005,16 @@ GuiDraw(Config *config, gb_GameBoy *gb, const char *save_dir_path, Rom rom)
 }
 
 static void
-DebuggerDraw(Config *config, gb_GameBoy *gb)
+DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 {
-	ImGui::SetCurrentContext(config->handles.debug_imgui);
-	SDL_GL_MakeCurrent(config->handles.debug_window, config->handles.gl_context);
-	ImGui_ImplSDL2_InitForOpenGL(config->handles.debug_window, config->handles.gl_context);
+	ImGui::SetCurrentContext(emu->handles.debug_imgui);
+	SDL_GL_MakeCurrent(emu->handles.debug_window, emu->handles.gl_context);
+	ImGui_ImplSDL2_InitForOpenGL(emu->handles.debug_window, emu->handles.gl_context);
 
 	ImGui_ImplOpenGL2_NewFrame();
-	ImGui_ImplSDL2_NewFrame(config->handles.debug_window);
+	ImGui_ImplSDL2_NewFrame(emu->handles.debug_window);
 	ImGui::NewFrame();
-	ImGui::PushFont(config->handles.debug_font);
+	ImGui::PushFont(emu->handles.debug_font);
 
 	bool reset_dock = false;
 
@@ -1023,7 +1029,7 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 			}
 			if (ImGui::MenuItem("Exit"))
 			{
-				config->debug.show = false;
+				emu->debug.show = false;
 			}
 			ImGui::EndMenu();
 		}
@@ -1114,17 +1120,17 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 	}
 	ImGui::End();
 
-	if (config->gui.has_active_rom)
+	if (emu->gui.has_active_rom)
 	{
 		const uint16_t inst_num_bytes = gb_FetchInstruction(gb, gb->cpu.pc).num_operand_bytes + 1;
 
-		MemoryEditor *rom_view = &config->debug.rom_view;
+		MemoryEditor *rom_view = &emu->debug.rom_view;
 		ImGui::Begin(tab_name_rom_view);
-		rom_view->DrawContents(config->rom.data, config->rom.size);
+		rom_view->DrawContents(emu->rom.data, emu->rom.size);
 		ImGui::End();
 
-		MemoryEditor *mem_view = &config->debug.mem_view;
-		if (config->debug.views_follow_pc)
+		MemoryEditor *mem_view = &emu->debug.mem_view;
+		if (emu->debug.views_follow_pc)
 		{
 			mem_view->GotoAddrAndHighlight(gb->cpu.pc, gb->cpu.pc + inst_num_bytes);
 		}
@@ -1170,10 +1176,10 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 				}
 			}
 
-			glBindTexture(GL_TEXTURE_2D, config->debug.tile_sets_texture);
+			glBindTexture(GL_TEXTURE_2D, emu->debug.tile_sets_texture);
 			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, img);
 
-			ImGui::Image((void *)(uint64_t)config->debug.tile_sets_texture, ImVec2(7.0f * width, 7.0f * height));
+			ImGui::Image((void *)(uint64_t)emu->debug.tile_sets_texture, ImVec2(7.0f * width, 7.0f * height));
 			ImGui::End();
 		}
 
@@ -1285,10 +1291,10 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 
 	{
 		ImGui::Begin(tab_name_options);
-		ImGui::Checkbox("Highlight current instruction", &config->debug.views_follow_pc);
-		ImGui::Checkbox("Single step mode/Pause (space then step with F10)", &config->gui.pause);
-		ImGui::Checkbox("Stop at V-Blank (F11)", &config->gui.stop_at_vblank);
-		ImGui::Checkbox("Stop at longjmp (F12)", &config->gui.stop_at_longjmp);
+		ImGui::Checkbox("Highlight current instruction", &emu->debug.views_follow_pc);
+		ImGui::Checkbox("Single step mode/Pause (space then step with F10)", &emu->gui.pause);
+		ImGui::Checkbox("Stop at V-Blank (F11)", &emu->gui.stop_at_vblank);
+		ImGui::Checkbox("Stop at longjmp (F12)", &emu->gui.stop_at_longjmp);
 
 		// Compute average framerate.
 		static Uint64 frequency = SDL_GetPerformanceFrequency();
@@ -1303,7 +1309,7 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 		// This FPS counter includes rendering the debug window, which is likely the
 		// bottleneck.
 		ImGui::Text("Frame time: %.3f ms, FPS: %.1f", avg_dt_in_ms, 1000.0f / avg_dt_in_ms);
-		ImGui::Text("M cycles: %zu", config->debug.elapsed_m_cycles);
+		ImGui::Text("M cycles: %zu", emu->debug.elapsed_m_cycles);
 		prev_time = curr_time;
 
 		ImGui::End();
@@ -1320,17 +1326,17 @@ DebuggerDraw(Config *config, gb_GameBoy *gb)
 	ImGui::Render();
 
 	int fb_width, fb_height;
-	SDL_GL_GetDrawableSize(config->handles.debug_window, &fb_width, &fb_height);
+	SDL_GL_GetDrawableSize(emu->handles.debug_window, &fb_width, &fb_height);
 	glViewport(0, 0, fb_width, fb_height);
 	glClearColor(0.75f, 0.75f, 0.75f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 	ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
-	SDL_GL_SwapWindow(config->handles.debug_window);
+	SDL_GL_SwapWindow(emu->handles.debug_window);
 
 	// Switch contexts back.
-	ImGui::SetCurrentContext(config->handles.imgui);
-	SDL_GL_MakeCurrent(config->handles.window, config->handles.gl_context);
-	ImGui_ImplSDL2_InitForOpenGL(config->handles.window, config->handles.gl_context);
+	ImGui::SetCurrentContext(emu->handles.imgui);
+	SDL_GL_MakeCurrent(emu->handles.window, emu->handles.gl_context);
+	ImGui_ImplSDL2_InitForOpenGL(emu->handles.window, emu->handles.gl_context);
 }
 
 static uint8_t
@@ -1350,21 +1356,16 @@ DebuggerMemoryViewReadFunc(const uint8_t *data, size_t off)
 static const char* fragment_shader_source =
 		"#line " STRINGIFY(__LINE__) "\n"
 		"\n"
-		// TODO
-		//"uniform int i_time;\n"
 		"uniform ivec2 viewport_size;\n"
 		"uniform ivec2 viewport_pos;\n"
 		"uniform sampler2D gameboy_fb_tex;\n"
-		"// TODO(stefalie): Pass the size fo gameboy_fb_tex as uniform or accept 'textureSize(...)\n"
+		"// TODO(stefalie): Pass the size fo gameboy_fb_tex as uniform or accept that 'textureSize(...)\n"
 		"// not available below version 130' warning (or 'gl_FragColor not available above version 130').\n"
 		"\n"
 		"void main()\n"
 		"{\n"
 		"	vec2 scale = vec2(viewport_size) / vec2(textureSize(gameboy_fb_tex, 0));\n"
 		"\n"
-		// TODO
-		//"	float time = float(i_time) * 0.001;\n"
-		//"	scale = scale + ((cos((time + 8.0) / 3.7) + 1.0) / 2.0) * 1.0 * scale;\n"
 		"\n"
 		"	vec2 mag_coord = (gl_FragCoord.xy - vec2(viewport_pos)) / scale;\n"
 		"	mag_coord -= vec2(0.5);  // Temporarily remove the half texel offset.\n"
@@ -1385,7 +1386,7 @@ static const char* fragment_shader_source =
 		"}\n";
 
 static void
-UpdateGameTexture(gb_GameBoy *gb, Config *cfg, GLuint texture, gb_Color *pixels)
+UpdateGameTexture(gb_GameBoy *gb, Emulator *cfg, GLuint texture, gb_Color *pixels)
 {
 	const gb_Framebuffer fb = gb_MagFramebuffer(gb, cfg->ini.mag_filter, pixels);
 	glBindTexture(GL_TEXTURE_2D, texture);
@@ -1420,28 +1421,28 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
-	Config config;
-	config.debug.mem_view.ReadOnly = true;
-	config.debug.mem_view.ReadFn = &DebuggerMemoryViewReadFunc;
-	config.debug.rom_view.ReadOnly = true;
-	char *save_dir_path = SDL_GetPrefPath(NULL, "GB");
+	Emulator emu;
+	emu.debug.mem_view.ReadOnly = true;
+	emu.debug.mem_view.ReadFn = &DebuggerMemoryViewReadFunc;
+	emu.debug.rom_view.ReadOnly = true;
+	emu.save_dir_path = SDL_GetPrefPath(NULL, "GB");
 
 	// Load ini
 	const char *ini_name = "config.ini";
 	char ini_path[512];
-	assert(strlen(save_dir_path) + strlen(ini_name) + 1 < sizeof(ini_path));
-	strcpy(ini_path, save_dir_path);
+	assert(strlen(emu.save_dir_path) + strlen(ini_name) + 1 < sizeof(ini_path));
+	strcpy(ini_path, emu.save_dir_path);
 	strcat(ini_path, ini_name);
-	config.ini = IniLoadOrInit(ini_path);
+	emu.ini = IniLoadOrInit(ini_path);
 
 	const float dpi_scale = DpiScale();
 
 	{  // Main window
-		const int fb_width = (int)(config.ini.window_width * dpi_scale);
-		const int fb_height = (int)(config.ini.window_height * dpi_scale);
-		config.handles.window = SDL_CreateWindow("GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, fb_width,
-				fb_height, SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
-		if (!config.handles.window)
+		const int fb_width = (int)(emu.ini.window_width * dpi_scale);
+		const int fb_height = (int)(emu.ini.window_height * dpi_scale);
+		emu.handles.window = SDL_CreateWindow("GB", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, fb_width, fb_height,
+				SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
+		if (!emu.handles.window)
 		{
 			SDL_CheckError();
 			SDL_Quit();
@@ -1452,34 +1453,34 @@ main(int argc, char *argv[])
 	{  // Debugger window
 		const int fb_debug_width = (int)(1024 * dpi_scale);
 		const int fb_debug_height = (int)(768 * dpi_scale);
-		config.handles.debug_window = SDL_CreateWindow("GB Debugger", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+		emu.handles.debug_window = SDL_CreateWindow("GB Debugger", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 				fb_debug_width, fb_debug_height, SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
-		if (!config.handles.debug_window)
+		if (!emu.handles.debug_window)
 		{
-			SDL_DestroyWindow(config.handles.window);
+			SDL_DestroyWindow(emu.handles.window);
 			SDL_CheckError();
 			SDL_Quit();
 			exit(1);
 		}
-		SDL_HideWindow(config.handles.debug_window);
+		SDL_HideWindow(emu.handles.debug_window);
 	}
 
-	config.handles.gl_context = SDL_GL_CreateContext(config.handles.window);
-	SDL_GL_MakeCurrent(config.handles.window, config.handles.gl_context);
+	emu.handles.gl_context = SDL_GL_CreateContext(emu.handles.window);
+	SDL_GL_MakeCurrent(emu.handles.window, emu.handles.gl_context);
 	SDL_GL_SetSwapInterval(1);  // Enable V-sync
 
-	config.handles.controller = NULL;
+	emu.handles.controller = NULL;
 
 	// Setup ImGui for main window
 	const float main_window_scale = 1.8f * dpi_scale;
 	{
-		config.handles.imgui = ImGui::CreateContext();
-		ImGui::SetCurrentContext(config.handles.imgui);
+		emu.handles.imgui = ImGui::CreateContext();
+		ImGui::SetCurrentContext(emu.handles.imgui);
 
 		ImGui::GetStyle().ScaleAllSizes(main_window_scale);
 		ImGuiIO &io = ImGui::GetIO();
 		io.IniFilename = NULL;
-		ImGui_ImplSDL2_InitForOpenGL(config.handles.window, config.handles.gl_context);
+		ImGui_ImplSDL2_InitForOpenGL(emu.handles.window, emu.handles.gl_context);
 		ImGui_ImplOpenGL2_Init();
 		ImGui::StyleColorsClassic();
 		ImGui::GetStyle().FrameRounding = 4.0f * main_window_scale;
@@ -1489,29 +1490,29 @@ main(int argc, char *argv[])
 	// Setup ImGui for debugger window
 	const float debug_window_scale = 1.2f * dpi_scale;
 	{
-		SDL_GL_MakeCurrent(config.handles.debug_window, config.handles.gl_context);
+		SDL_GL_MakeCurrent(emu.handles.debug_window, emu.handles.gl_context);
 
 		// Both ImGui contexts need to share the FontAtlas. That's because the OpenGL2 backend
 		// has a 'static GLuint g_FontTexture'.
-		config.handles.debug_imgui = ImGui::CreateContext(ImGui::GetIO().Fonts);
-		ImGui::SetCurrentContext(config.handles.debug_imgui);
+		emu.handles.debug_imgui = ImGui::CreateContext(ImGui::GetIO().Fonts);
+		ImGui::SetCurrentContext(emu.handles.debug_imgui);
 
 		ImGui::GetStyle().ScaleAllSizes(debug_window_scale);
 		ImGuiIO &io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 		io.IniFilename = NULL;
-		ImGui_ImplSDL2_InitForOpenGL(config.handles.debug_window, config.handles.gl_context);
+		ImGui_ImplSDL2_InitForOpenGL(emu.handles.debug_window, emu.handles.gl_context);
 		ImGui_ImplOpenGL2_Init();
 		ImGui::StyleColorsClassic();
 		ImGui::GetStyle().FrameRounding = 4.0f * debug_window_scale;
 		ImGui::GetStyle().WindowRounding = 4.0f * debug_window_scale;
 
 		// Switch contexts back.
-		ImGui::SetCurrentContext(config.handles.imgui);
-		SDL_GL_MakeCurrent(config.handles.window, config.handles.gl_context);
+		ImGui::SetCurrentContext(emu.handles.imgui);
+		SDL_GL_MakeCurrent(emu.handles.window, emu.handles.gl_context);
 		// This is unfortunately necessary (at least with the OpenGL2 backend) as there
 		// is a 'static SDL_Window* g_Window'.
-		ImGui_ImplSDL2_InitForOpenGL(config.handles.window, config.handles.gl_context);
+		ImGui_ImplSDL2_InitForOpenGL(emu.handles.window, emu.handles.gl_context);
 	}
 
 	{  // ImGui fonts
@@ -1523,21 +1524,19 @@ main(int argc, char *argv[])
 		// from floating elements. It's not possible to do PushFont before doing NewFrame,
 		// that's why we choose the smaller debugger font as the default.
 		const float debug_font_size = 13.0f * debug_window_scale;
-		config.handles.debug_font = io.Fonts->AddFontFromMemoryCompressedTTF(
+		emu.handles.debug_font = io.Fonts->AddFontFromMemoryCompressedTTF(
 				dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, debug_font_size);
 
 		const float main_font_size = 13.0f * main_window_scale;
-		config.handles.font = io.Fonts->AddFontFromMemoryCompressedTTF(
+		emu.handles.font = io.Fonts->AddFontFromMemoryCompressedTTF(
 				dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, main_font_size);
 	}
-
-	Rom rom = {};
 
 	gb_GameBoy gb = {};
 	gb_Color *pixels = (gb_Color *)malloc(gb_MaxMagFramebufferSizeInBytes());
 	if (argc > 1)
 	{
-		rom = LoadRomFromFile(&config, &gb, argv[1]);
+		emu.rom = LoadRomFromFile(&emu, &gb, argv[1]);
 	}
 
 	// OpenGL setup. Leave matrices as identity.
@@ -1590,8 +1589,8 @@ main(int argc, char *argv[])
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glCheckError();
 
-		glGenTextures(1, &config.debug.tile_sets_texture);
-		glBindTexture(GL_TEXTURE_2D, config.debug.tile_sets_texture);
+		glGenTextures(1, &emu.debug.tile_sets_texture);
+		glBindTexture(GL_TEXTURE_2D, emu.debug.tile_sets_texture);
 		// The texture vertically stackes the 3 half tile sets.
 		// Each tile set is put in a rectangle of 16x8 tiles.
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 16 * 8, 3 * 8 * 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
@@ -1608,12 +1607,12 @@ main(int argc, char *argv[])
 	int64_t m_cycle_acc = 0;
 
 	// Main Loop
-	while (!config.quit)
+	while (!emu.quit)
 	{
 		// Make sure the right ImGui context gets the event.
-		if (SDL_GetWindowFlags(config.handles.debug_window) & SDL_WINDOW_INPUT_FOCUS)
+		if (SDL_GetWindowFlags(emu.handles.debug_window) & SDL_WINDOW_INPUT_FOCUS)
 		{
-			ImGui::SetCurrentContext(config.handles.debug_imgui);
+			ImGui::SetCurrentContext(emu.handles.debug_imgui);
 		}
 
 		// TODO(stefalie): Consider putting in separate procedure.
@@ -1632,36 +1631,34 @@ main(int argc, char *argv[])
 			//	continue;
 			// }
 
-			// TODO(stefalie): Deal with Ctrl+? combinations to open ROM files. etc.
-
 			// Highjack (certain) inputs when the input config is modified.
 			const int controller_axis_sensitivity_threshold = 20000;  // No idea if this value is generally ok?!
-			if (config.modify_input)
+			if (emu.modify_input)
 			{
 				bool event_captured = false;
 
-				if (event.type == SDL_KEYDOWN && config.modify_input->type == Input::TYPE_KEY &&
+				if (event.type == SDL_KEYDOWN && emu.modify_input->type == Input::TYPE_KEY &&
 						(event.key.keysym.sym != SDLK_ESCAPE)  // Don't allow assigning the ESC key.
 				)
 				{
-					config.modify_input->sdl.key = event.key.keysym.sym;
+					emu.modify_input->sdl.key = event.key.keysym.sym;
 					event_captured = true;
 				}
-				else if (event.type == SDL_CONTROLLERBUTTONDOWN && config.modify_input->type == Input::TYPE_BUTTON)
+				else if (event.type == SDL_CONTROLLERBUTTONDOWN && emu.modify_input->type == Input::TYPE_BUTTON)
 				{
-					config.modify_input->sdl.button = (SDL_GameControllerButton)event.cbutton.button;
+					emu.modify_input->sdl.button = (SDL_GameControllerButton)event.cbutton.button;
 					event_captured = true;
 				}
-				else if (event.type == SDL_CONTROLLERAXISMOTION && config.modify_input->type == Input::TYPE_AXIS &&
+				else if (event.type == SDL_CONTROLLERAXISMOTION && emu.modify_input->type == Input::TYPE_AXIS &&
 						(abs(event.caxis.value) > controller_axis_sensitivity_threshold))
 				{
-					config.modify_input->sdl.axis = (SDL_GameControllerAxis)event.caxis.axis;
+					emu.modify_input->sdl.axis = (SDL_GameControllerAxis)event.caxis.axis;
 					event_captured = true;
 				}
 
 				if (event_captured)
 				{
-					config.modify_input = NULL;
+					emu.modify_input = NULL;
 					continue;
 				}
 			}
@@ -1669,49 +1666,49 @@ main(int argc, char *argv[])
 			switch (event.type)
 			{
 			case SDL_QUIT:
-				config.gui.show_quit_popup = true;
+				emu.gui.show_quit_popup = true;
 				break;
 			case SDL_WINDOWEVENT:
 				if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED &&
-						SDL_GetWindowFromID(event.window.windowID) == config.handles.window)
+						SDL_GetWindowFromID(event.window.windowID) == emu.handles.window)
 				{
-					if (!config.gui.fullscreen)
+					if (!emu.gui.fullscreen)
 					{
 						// This can cause 1 pixel off rounding errors.
-						config.ini.window_width = (int)(event.window.data1 / dpi_scale);
-						config.ini.window_height = (int)(event.window.data2 / dpi_scale);
+						emu.ini.window_width = (int)(event.window.data1 / dpi_scale);
+						emu.ini.window_height = (int)(event.window.data2 / dpi_scale);
 					}
 				}
 				else if (event.window.event == SDL_WINDOWEVENT_CLOSE &&
-						SDL_GetWindowFromID(event.window.windowID) == config.handles.window)
+						SDL_GetWindowFromID(event.window.windowID) == emu.handles.window)
 				{
-					SDL_RaiseWindow(config.handles.window);  // Make sure window gets focuses when closed from taskbar.
-					config.gui.show_quit_popup = true;
+					SDL_RaiseWindow(emu.handles.window);  // Make sure window gets focuses when closed from taskbar.
+					emu.gui.show_quit_popup = true;
 				}
 				else if (event.window.event == SDL_WINDOWEVENT_CLOSE &&
-						SDL_GetWindowFromID(event.window.windowID) == config.handles.debug_window)
+						SDL_GetWindowFromID(event.window.windowID) == emu.handles.debug_window)
 				{
-					config.debug.show = false;
+					emu.debug.show = false;
 				}
 				break;
 			case SDL_CONTROLLERDEVICEADDED:
 				// TODO(stefalie): This allows only for 1 controller, the user should
 				// be able to chose.
-				if (!config.handles.controller)
+				if (!emu.handles.controller)
 				{
-					config.handles.controller = SDL_GameControllerOpen(event.cdevice.which);
+					emu.handles.controller = SDL_GameControllerOpen(event.cdevice.which);
 				}
 				break;
 			case SDL_CONTROLLERDEVICEREMOVED:
-				assert(config.handles.controller);
-				SDL_GameControllerClose(config.handles.controller);
-				config.handles.controller = NULL;
+				assert(emu.handles.controller);
+				SDL_GameControllerClose(emu.handles.controller);
+				emu.handles.controller = NULL;
 				break;
 			case SDL_CONTROLLERBUTTONDOWN:
 			case SDL_CONTROLLERBUTTONUP:
 				for (size_t i = 0; i < num_inputs; ++i)
 				{
-					Input input = config.ini.inputs[i];
+					Input input = emu.ini.inputs[i];
 					if (input.type == Input::TYPE_BUTTON && event.cbutton.button == input.sdl.button)
 					{
 						gb_SetInput(&gb, input.gb_input_type, event.type == SDL_CONTROLLERBUTTONDOWN);
@@ -1721,8 +1718,8 @@ main(int argc, char *argv[])
 			case SDL_CONTROLLERAXISMOTION:
 				for (size_t i = 0; i < num_inputs; ++i)
 				{
-					// TODO: Test gamepad, it might all be bogus.
-					Input input = config.ini.inputs[i];
+					// TODO(stefalie): Test gamepad, it might all be bogus.
+					Input input = emu.ini.inputs[i];
 					if (input.type == Input::TYPE_AXIS && event.caxis.axis == input.sdl.axis)
 					{
 						const bool is_pushed = abs(event.caxis.value) > controller_axis_sensitivity_threshold;
@@ -1753,45 +1750,45 @@ main(int argc, char *argv[])
 			case SDL_KEYUP:
 				if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)
 				{
-					if (SDL_GetWindowFlags(config.handles.window) & SDL_WINDOW_INPUT_FOCUS)
+					if (SDL_GetWindowFlags(emu.handles.window) & SDL_WINDOW_INPUT_FOCUS)
 					{
-						config.gui.pressed_escape = true;
+						emu.gui.pressed_escape = true;
 					}
 				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN &&
 						(SDL_GetModState() & KMOD_LALT))
 				{
-					config.gui.toggle_fullscreen = true;
+					emu.gui.toggle_fullscreen = true;
 				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F5)
 				{
-					SaveGameState(&gb, save_dir_path, config.gui.save_slot);
+					SaveGameState(&gb, emu.save_dir_path, emu.gui.save_slot);
 				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F7)
 				{
-					LoadGameState(&gb, save_dir_path, config.gui.save_slot, rom);
+					LoadGameState(&gb, emu.save_dir_path, emu.gui.save_slot, emu.rom);
 				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F10)
 				{
-					config.gui.exec_next_step = true;
+					emu.gui.exec_next_step = true;
 				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F11)
 				{
-					config.gui.stop_at_vblank = !config.gui.stop_at_vblank;
+					emu.gui.stop_at_vblank = !emu.gui.stop_at_vblank;
 				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F12)
 				{
-					config.gui.stop_at_longjmp = !config.gui.stop_at_longjmp;
+					emu.gui.stop_at_longjmp = !emu.gui.stop_at_longjmp;
 				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE)
 				{
-					config.gui.pause = !config.gui.pause;
+					emu.gui.pause = !emu.gui.pause;
 				}
 				else
 				{
 					for (size_t i = 0; i < num_inputs; ++i)
 					{
-						Input input = config.ini.inputs[i];
+						Input input = emu.ini.inputs[i];
 						if (input.type == Input::TYPE_KEY && event.key.keysym.sym == input.sdl.key)
 						{
 							gb_SetInput(&gb, input.gb_input_type, event.type == SDL_KEYDOWN);
@@ -1800,13 +1797,13 @@ main(int argc, char *argv[])
 				}
 				break;
 			case SDL_MOUSEMOTION:
-				config.gui.reset_gui_timeout = true;
+				emu.gui.reset_gui_timeout = true;
 				break;
 			case SDL_MOUSEBUTTONDOWN:
 				break;
 			}
 		}
-		ImGui::SetCurrentContext(config.handles.imgui);  // Reset (if changed)
+		ImGui::SetCurrentContext(emu.handles.imgui);  // Reset (if changed)
 
 		// TODO(stefalie): Can this be done better/more precise?
 		// See https://github.com/TylerGlaiel/FrameTimingControl/blob/master/frame_timer.cpp
@@ -1815,35 +1812,35 @@ main(int argc, char *argv[])
 		const uint32_t elapsed_m_cycles = (uint32_t)(dt_in_s * GB_MACHINE_M_FREQ);
 		prev_time = curr_time;
 
-		config.gui.show_gui_timeout_in_s -= (float)dt_in_s;
-		if (config.gui.show_gui_timeout_in_s < 0.0f)
+		emu.gui.show_gui_timeout_in_s -= (float)dt_in_s;
+		if (emu.gui.show_gui_timeout_in_s < 0.0f)
 		{
-			config.gui.show_gui_timeout_in_s = 0.0f;
+			emu.gui.show_gui_timeout_in_s = 0.0f;
 		}
 
 		// Run emulator
-		const bool is_running_debug_mode = config.gui.has_active_rom && config.gui.pause && config.gui.exec_next_step;
-		const bool is_running_normal_mode = config.gui.has_active_rom && !config.gui.pause;
+		const bool is_running_debug_mode = emu.gui.has_active_rom && emu.gui.pause && emu.gui.exec_next_step;
+		const bool is_running_normal_mode = emu.gui.has_active_rom && !emu.gui.pause;
 
 		if (is_running_debug_mode)
 		{
 			const size_t m_cycles = gb_ExecuteNextInstruction(&gb);
-			config.debug.elapsed_m_cycles += m_cycles;
+			emu.debug.elapsed_m_cycles += m_cycles;
 
 			if (gb_FramebufferUpdated(&gb))
 			{
-				UpdateGameTexture(&gb, &config, texture, pixels);
+				UpdateGameTexture(&gb, &emu, texture, pixels);
 			}
 		}
 		else if (is_running_normal_mode)
 		{
-			if (config.gui.speed_frame_multiplier == SPEED_HALF)
+			if (emu.gui.speed_frame_multiplier == SPEED_HALF)
 			{
 				m_cycle_acc += elapsed_m_cycles / 2;
 			}
 			else
 			{
-				m_cycle_acc += config.gui.speed_frame_multiplier * elapsed_m_cycles;
+				m_cycle_acc += emu.gui.speed_frame_multiplier * elapsed_m_cycles;
 			}
 
 			// Makes sure that we run the magnification filter and texture update
@@ -1859,23 +1856,23 @@ main(int argc, char *argv[])
 				const size_t emulated_m_cycles = gb_ExecuteNextInstruction(&gb);
 				assert(emulated_m_cycles > 0);
 				m_cycle_acc -= emulated_m_cycles;
-				config.debug.elapsed_m_cycles += emulated_m_cycles;
+				emu.debug.elapsed_m_cycles += emulated_m_cycles;
 
 				if (gb_FramebufferUpdated(&gb) && !has_updated_fb)
 				{
-					UpdateGameTexture(&gb, &config, texture, pixels);
+					UpdateGameTexture(&gb, &emu, texture, pixels);
 					has_updated_fb = true;
 				}
 
 				// Break when new frame is shown.
-				const bool vlbank_rising_edge = config.gui.prev_lcd_mode == GB_PPU_MODE_HBLANK &&
+				const bool vlbank_rising_edge = emu.gui.prev_lcd_mode == GB_PPU_MODE_HBLANK &&
 						(gb_PpuMode)gb.ppu.stat.mode == GB_PPU_MODE_VBLANK;
-				config.gui.prev_lcd_mode = (gb_PpuMode)gb.ppu.stat.mode;
+				emu.gui.prev_lcd_mode = (gb_PpuMode)gb.ppu.stat.mode;
 
-				if (config.gui.stop_at_vblank && vlbank_rising_edge)
+				if (emu.gui.stop_at_vblank && vlbank_rising_edge)
 				{
-					config.gui.pause = true;
-					config.debug.show = true;
+					emu.gui.pause = true;
+					emu.debug.show = true;
 					goto exit;
 				}
 
@@ -1884,29 +1881,29 @@ main(int argc, char *argv[])
 				{
 					if (breakpoints[i].enable && gb.cpu.pc == breakpoints[i].address)
 					{
-						config.gui.pause = true;
+						emu.gui.pause = true;
 						goto exit;
 					}
 				}
 			}
 		exit:;
 		}
-		config.gui.exec_next_step = false;
+		emu.gui.exec_next_step = false;
 
 		// OpenGL drawing
 		int fb_width, fb_height;
-		SDL_GL_GetDrawableSize(config.handles.window, &fb_width, &fb_height);
+		SDL_GL_GetDrawableSize(emu.handles.window, &fb_width, &fb_height);
 		glViewport(0, 0, fb_width, fb_height);
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
-		if (config.gui.has_active_rom)
+		if (emu.gui.has_active_rom)
 		{
 			int x = 0;
 			int y = 0;
 			int w = fb_width;
 			int h = fb_height;
 
-			if (config.ini.stretch == STRETCH_ASPECT_CORRECT)
+			if (emu.ini.stretch == STRETCH_ASPECT_CORRECT)
 			{
 				const float default_aspect_ratio = (float)GB_FRAMEBUFFER_WIDTH / GB_FRAMEBUFFER_HEIGHT;
 				const float aspect_ratio = (float)fb_width / fb_height;
@@ -1923,7 +1920,7 @@ main(int argc, char *argv[])
 				}
 				glViewport(x, y, w, h);
 			}
-			else if (config.ini.stretch == STRETCH_INTEGRAL_SCALE)
+			else if (emu.ini.stretch == STRETCH_INTEGRAL_SCALE)
 			{
 				// We could filter with GL_NEAREST for this, but meh.
 				const int scale_x = fb_width / GB_FRAMEBUFFER_WIDTH;
@@ -1941,7 +1938,6 @@ main(int argc, char *argv[])
 			glUniform2i(viewport_size_loc, w, h);
 			glUniform2i(viewport_pos_loc, x, y);
 			glUniform1i(gb_fb_tex_loc, 0);  // Tex unit 0
-			// glUniform1i(glGetUniformLocation(shader_program, "i_time"), tick);  // TODO
 			glRects(-1, -1, 1, 1);
 			glUseProgram(0);
 			glCheckError();
@@ -1949,23 +1945,23 @@ main(int argc, char *argv[])
 
 		// ImGui
 		ImGui_ImplOpenGL2_NewFrame();
-		ImGui_ImplSDL2_NewFrame(config.handles.window);
+		ImGui_ImplSDL2_NewFrame(emu.handles.window);
 		ImGui::NewFrame();
-		GuiDraw(&config, &gb, save_dir_path, rom);
+		GuiDraw(&emu, &gb);
 		ImGui::Render();
 		ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
 
-		SDL_GL_SwapWindow(config.handles.window);
+		SDL_GL_SwapWindow(emu.handles.window);
 
-		if (config.gui.toggle_fullscreen)
+		if (emu.gui.toggle_fullscreen)
 		{
-			config.gui.toggle_fullscreen = false;
-			config.gui.fullscreen = !config.gui.fullscreen;
-			if (config.gui.fullscreen)
+			emu.gui.toggle_fullscreen = false;
+			emu.gui.fullscreen = !emu.gui.fullscreen;
+			if (emu.gui.fullscreen)
 			{
 				// TODO(stefalie): Consider using SDL_WINDOW_FULLSCREEN instead.
 				// When switching to fullscreen with
-				// SDL_SetWindowFullscreen(config.handles.window, SDL_WINDOW_FULLSCREEN);
+				// SDL_SetWindowFullscreen(emu.handles.window, SDL_WINDOW_FULLSCREEN);
 				// then the fullscreen resolution depends on the window's size
 				// before going fullscreen.
 				//
@@ -1975,27 +1971,27 @@ main(int argc, char *argv[])
 				// Also see: https://discourse.libsdl.org/t/correct-way-to-swap-from-window-to-fullscreen/24270
 				//
 				// For now, we just use a fullscreen window. Makes toggling faster.
-				SDL_SetWindowFullscreen(config.handles.window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+				SDL_SetWindowFullscreen(emu.handles.window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 			}
 			else
 			{
-				SDL_SetWindowFullscreen(config.handles.window, 0);
+				SDL_SetWindowFullscreen(emu.handles.window, 0);
 			}
 		}
 
-		if (config.debug.show)
+		if (emu.debug.show)
 		{
-			if (SDL_GetWindowFlags(config.handles.debug_window) & SDL_WINDOW_HIDDEN)
+			if (SDL_GetWindowFlags(emu.handles.debug_window) & SDL_WINDOW_HIDDEN)
 			{
-				SDL_ShowWindow(config.handles.debug_window);
+				SDL_ShowWindow(emu.handles.debug_window);
 			}
-			DebuggerDraw(&config, &gb);
+			DebuggerDraw(&emu, &gb);
 		}
 		else
 		{
-			if (SDL_GetWindowFlags(config.handles.debug_window) & SDL_WINDOW_SHOWN)
+			if (SDL_GetWindowFlags(emu.handles.debug_window) & SDL_WINDOW_SHOWN)
 			{
-				SDL_HideWindow(config.handles.debug_window);
+				SDL_HideWindow(emu.handles.debug_window);
 			}
 		}
 	}
@@ -2004,26 +2000,26 @@ main(int argc, char *argv[])
 
 	ImGui_ImplOpenGL2_Shutdown();
 	ImGui_ImplSDL2_Shutdown();
-	ImGui::DestroyContext(config.handles.imgui);
-	ImGui::DestroyContext(config.handles.debug_imgui);
+	ImGui::DestroyContext(emu.handles.imgui);
+	ImGui::DestroyContext(emu.handles.debug_imgui);
 
-	IniSave(ini_path, &config.ini);
+	IniSave(ini_path, &emu.ini);
 
 	// Cleanup
 	free(pixels);
-	if (config.rom.data)
+	if (emu.rom.data)
 	{
-		free(config.rom.data);
+		free(emu.rom.data);
 	}
-	SDL_free(save_dir_path);
+	SDL_free(emu.save_dir_path);
 
-	if (config.handles.controller)
+	if (emu.handles.controller)
 	{
-		SDL_GameControllerClose(config.handles.controller);
+		SDL_GameControllerClose(emu.handles.controller);
 	}
-	SDL_GL_DeleteContext(config.handles.gl_context);
-	SDL_DestroyWindow(config.handles.debug_window);
-	SDL_DestroyWindow(config.handles.window);
+	SDL_GL_DeleteContext(emu.handles.gl_context);
+	SDL_DestroyWindow(emu.handles.debug_window);
+	SDL_DestroyWindow(emu.handles.window);
 
 	SDL_Quit();
 
