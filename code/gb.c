@@ -3648,48 +3648,62 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 void
 gb_SetInput(gb_GameBoy *gb, gb_Input input, bool down)
 {
+	struct gb_Joypad *pad = &gb->joypad;
 	uint8_t *reg = NULL;
 	uint8_t bit = 0;
 	switch (input)
 	{
 	case GB_INPUT_BUTTON_A:
-		reg = &gb->joypad.buttons;
+		reg = &pad->buttons;
 		bit = 0x01;
 		break;
 	case GB_INPUT_BUTTON_B:
-		reg = &gb->joypad.buttons;
+		reg = &pad->buttons;
 		bit = 0x02;
 		break;
 	case GB_INPUT_BUTTON_SELECT:
-		reg = &gb->joypad.buttons;
+		reg = &pad->buttons;
 		bit = 0x04;
 		break;
 	case GB_INPUT_BUTTON_START:
-		reg = &gb->joypad.buttons;
+		reg = &pad->buttons;
 		bit = 0x08;
 		break;
 	case GB_INPUT_ARROW_RIGHT:
-		reg = &gb->joypad.dpad;
+		reg = &pad->dpad;
 		bit = 0x01;
 		break;
 	case GB_INPUT_ARROW_LEFT:
-		reg = &gb->joypad.dpad;
+		reg = &pad->dpad;
 		bit = 0x02;
 		break;
 	case GB_INPUT_ARROW_UP:
-		reg = &gb->joypad.dpad;
+		reg = &pad->dpad;
 		bit = 0x04;
 		break;
 	case GB_INPUT_ARROW_DOWN:
-		reg = &gb->joypad.dpad;
+		reg = &pad->dpad;
 		bit = 0x08;
 		break;
 	}
 
 	if (down)
 	{
+		const bool any_input_low_prev =
+				(pad->buttons_select == 0 && pad->buttons != 0xF) || (pad->dpad_select == 0 && pad->dpad != 0xF);
+
 		*reg &= ~bit;
-		gb->cpu.interrupt.if_flags.joypad = 1;
+
+		const bool any_input_low_now =
+				(pad->buttons_select == 0 && pad->buttons != 0xF) || (pad->dpad_select == 0 && pad->dpad != 0xF);
+
+		// See 7.3 in The Cycle-Accurate Game Boy Docs.
+		//
+		// Check for falling edge of input lines.
+		if (any_input_low_now && !any_input_low_prev)
+		{
+			gb->cpu.interrupt.if_flags.joypad = 1;
+		}
 	}
 	else
 	{
