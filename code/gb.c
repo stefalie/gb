@@ -13,24 +13,13 @@
 
 #define BLARGG_TEST_ENABLE 0
 
-typedef struct gb__Palette
-{
-	gb_Color colors[4];
-} gb__Palette;
-
-gb__Palette
-gb__DefaultPalette(void)
-{
-	// Color scheme from https://gbdev.io/pandocs/Tile_Data.html
-	return (gb__Palette){
-		.colors = {
-			{ .r = 0xE0, .g = 0xF8, .b = 0xD0 },
-			{ .r = 0x88, .g = 0xC0, .b = 0x70 },
-			{ .r = 0x34, .g = 0x68, .b = 0x56 },
-			{ .r = 0x08, .g = 0x18, .b = 0x20 },
-		},
-	};
-}
+// Color scheme from https://gbdev.io/pandocs/Tile_Data.html
+static const gb_Color gb__DefaultPalette[4] = {
+	{ .r = 0xE0, .g = 0xF8, .b = 0xD0 },
+	{ .r = 0x88, .g = 0xC0, .b = 0x70 },
+	{ .r = 0x34, .g = 0x68, .b = 0x56 },
+	{ .r = 0x08, .g = 0x18, .b = 0x20 },
+};
 
 #define ROM_HEADER_START_ADDRESS 0x0100
 typedef struct gb__RomHeader
@@ -735,12 +724,11 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					// Clear framebuffer to color 0.
 					// TODO(stefalie): It should be an even "whiter" color.
 					// See: https://gbdev.io/pandocs/LCDC.html#lcdc7--lcd-enable.
-					const gb__Palette default_pal = gb__DefaultPalette();
 					for (size_t y = 0; y < GB_FRAMEBUFFER_HEIGHT; ++y)
 					{
 						for (size_t x = 0; x < GB_FRAMEBUFFER_WIDTH; ++x)
 						{
-							gb->display.pixels[GB_FRAMEBUFFER_WIDTH * y + x] = default_pal.colors[0];
+							gb->display.pixels[GB_FRAMEBUFFER_WIDTH * y + x] = gb__DefaultPalette[0];
 						}
 					}
 				}
@@ -3170,36 +3158,37 @@ gb__UpdateClockAndTimer(gb_GameBoy *gb, size_t elapsed_m_cycles)
 	}
 }
 
-// Adapted from: Ericson, 2005, Real-Time Collision Detection, pages 316-317
-static uint16_t
-gb__Part1By1(uint16_t n)
+typedef union gb__TileLine
 {
-	// n = --------76543210 : Bits initially
-	// n = ----7654----3210 : After (1)
-	// n = --76--54--32--10 : After (2)
-	// n = -7-6-5-4-3-2-1-0 : After (3)
-	n = (n ^ (n << 4)) & 0x0f0f0f0f;  // (1)
-	n = (n ^ (n << 2)) & 0x33333333;  // (2)
-	n = (n ^ (n << 1)) & 0x55555555;  // (3)
-	return n;
-}
-
-static uint16_t
-gb__Morton2(uint16_t line1, uint16_t line2)
-{
-	return (gb__Part1By1(line2) << 1) + gb__Part1By1(line1);
-}
-
-typedef struct gb__TileLine
-{
-	gb_Color pixels[8];
+	uint64_t line;
+	uint8_t pixels[8];
 } gb__TileLine;
+
+static gb__TileLine
+gb__Interleave(uint64_t mem_line1, uint64_t mem_line2)
+{
+	// mem_line1 = -------- -------- -------- -------- -------- -------- -------- 76543210
+	// mem_line2 = -------- -------- -------- -------- -------- -------- -------- FEDCBA98
+	//
+	// n         = 76543210 FEDCBA98 -------- -------- -------- -------- -------- -------- : After (1)
+	// n         = ----3210 ----BA98 -------- -------- ----7654 ----FEDC -------- -------- : After (2)
+	// n         = ------10 ------98 ------32 ------BA ------54 ------DC ------76 ------FE : After (3)
+	// n         = ------80 ------91 ------A2 ------B3 ------C4 ------D5 ------E6 ------F7 : After (3)
+
+	uint64_t n = (mem_line2 << 48) + (mem_line1 << 56);  // (1)
+	n = (n ^ (n >> 36)) & 0x0F0F00000F0F0000;  // (2)
+	n = (n ^ (n >> 18)) & 0x0303030303030303;  // (3)
+	n = (n & 0x0100010001000100) + ((n & 0x0200020002000200) >> 9) +  // (4)
+			(n & 0x0002000200020002) + ((n & 0x0001000100010001) << 9);
+
+	return (gb__TileLine){ .line = n };
+}
 
 // TODO(stefalie): The set_index corresponds to what is suggested here:
 // https://imrannazar.com/series/gameboy-emulation-in-javascript/graphics
 // I'm not sure anymore if that is a good idea and if that is common convention.
 gb__TileLine
-gb__GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_index, gb__Palette palette)
+gb__GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_index)
 {
 	assert(set_index == 0 || set_index == 1);
 	assert(line_index < 8);
@@ -3216,22 +3205,15 @@ gb__GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_in
 	assert(vram_offset < 0x17FF);
 	assert((vram_offset & 1u) == 0);
 
-	const uint16_t tile_line = gb__Morton2(gb->memory.vram[vram_offset], gb->memory.vram[vram_offset + 1]);
-
-	// TODO(stefalie): There must be some SIMD/SWAR way to do this.
-	gb__TileLine result;
-	for (size_t i = 0; i < 8; ++i)
-	{
-		const size_t color_id = (tile_line >> ((7u - i) << 1u)) & 0x03;
-		result.pixels[i] = palette.colors[color_id];
-		if (color_id == 0)
-		{
-			result.pixels[i].transparent = 1;
-		}
-	}
-	return result;
+	const gb__TileLine tile_line = gb__Interleave(gb->memory.vram[vram_offset], gb->memory.vram[vram_offset + 1]);
+	return tile_line;
 }
 
+
+// TODO(stefalie): This is simplified.
+// Rendering background, window, and sprites is interleaved using
+// a 2-byte shift register. For details, see:
+// https://www.youtube.com/watch?v=HyzD8pNlpwI
 static void
 gb__RenderScanLine(gb_GameBoy *gb)
 {
@@ -3239,17 +3221,20 @@ gb__RenderScanLine(gb_GameBoy *gb)
 
 	const union gb_PpuLcdc *lcdc = &gb->ppu.lcdc;
 
-	const gb__Palette default_pal = gb__DefaultPalette();
-	const gb__Palette pal = {
-		.colors = {
-			default_pal.colors[(gb->ppu.bgp >> 0u) & 0x03],
-			default_pal.colors[(gb->ppu.bgp >> 2u) & 0x03],
-			default_pal.colors[(gb->ppu.bgp >> 4u) & 0x03],
-			default_pal.colors[(gb->ppu.bgp >> 6u) & 0x03],
-		},
+	const uint8_t bgp_map[4] = {
+		(gb->ppu.bgp >> 0u) & 0x03,
+		(gb->ppu.bgp >> 2u) & 0x03,
+		(gb->ppu.bgp >> 4u) & 0x03,
+		(gb->ppu.bgp >> 6u) & 0x03,
 	};
 
 	const size_t tileset_idx = lcdc->bg_and_win_tileset_select;
+
+	// Values in [0, 3] per pixel.
+	uint8_t scan_line[GB_FRAMEBUFFER_WIDTH] = { 0 };
+
+	// Apply palette and remember that "transparent", i.e., 0-valued, pixels.
+	bool transparent[GB_FRAMEBUFFER_WIDTH];
 
 	// Background
 	if (lcdc->bg_and_win_enable)
@@ -3270,11 +3255,13 @@ gb__RenderScanLine(gb_GameBoy *gb)
 			const uint8_t tile_idx_raw = gb->memory.vram[map_offset];
 			const int tile_idx = tileset_idx == 0 ? (int8_t)tile_idx_raw : tile_idx_raw;
 
-			gb__TileLine line = gb__GetTileLine(gb, tileset_idx, tile_idx, in_tile_y, pal);
+			gb__TileLine line = gb__GetTileLine(gb, tileset_idx, tile_idx, in_tile_y);
 
 			for (size_t in_tile_x = x & 7u; in_tile_x < 8 && fb_x < GB_FRAMEBUFFER_WIDTH; ++fb_x, ++in_tile_x)
 			{
-				gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + fb_x] = line.pixels[in_tile_x];
+				const uint8_t pixel = line.pixels[in_tile_x];
+				transparent[fb_x] = pixel == 0;
+				scan_line[fb_x] = bgp_map[pixel];
 			}
 		}
 	}
@@ -3306,11 +3293,13 @@ gb__RenderScanLine(gb_GameBoy *gb)
 				const uint8_t tile_idx_raw = gb->memory.vram[map_offset];
 				const int tile_idx = tileset_idx == 0 ? (int8_t)tile_idx_raw : tile_idx_raw;
 
-				gb__TileLine line = gb__GetTileLine(gb, tileset_idx, tile_idx, in_tile_y, pal);
+				gb__TileLine line = gb__GetTileLine(gb, tileset_idx, tile_idx, in_tile_y);
 
 				for (size_t in_tile_x = x & 7u; in_tile_x < 8 && fb_x < GB_FRAMEBUFFER_WIDTH; ++fb_x, ++in_tile_x)
 				{
-					gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + fb_x] = line.pixels[in_tile_x];
+					const uint8_t pixel = line.pixels[in_tile_x];
+					transparent[fb_x] = pixel == 0;
+					scan_line[fb_x] = bgp_map[pixel];
 				}
 			}
 		}
@@ -3319,21 +3308,17 @@ gb__RenderScanLine(gb_GameBoy *gb)
 	// Sprites
 	if (lcdc->sprite_enable)
 	{
-		const gb__Palette obp0 = {
-			.colors = {
-				default_pal.colors[(gb->ppu.obp0 >> 0u) & 0x03],
-				default_pal.colors[(gb->ppu.obp0 >> 2u) & 0x03],
-				default_pal.colors[(gb->ppu.obp0 >> 4u) & 0x03],
-				default_pal.colors[(gb->ppu.obp0 >> 6u) & 0x03],
-			},
+		const uint8_t obp0_map[4] = {
+			(gb->ppu.obp0 >> 0u) & 0x03,
+			(gb->ppu.obp0 >> 2u) & 0x03,
+			(gb->ppu.obp0 >> 4u) & 0x03,
+			(gb->ppu.obp0 >> 6u) & 0x03,
 		};
-		const gb__Palette obp1 = {
-			.colors = {
-				default_pal.colors[(gb->ppu.obp1 >> 0u) & 0x03],
-				default_pal.colors[(gb->ppu.obp1 >> 2u) & 0x03],
-				default_pal.colors[(gb->ppu.obp1 >> 4u) & 0x03],
-				default_pal.colors[(gb->ppu.obp1 >> 6u) & 0x03],
-			},
+		const uint8_t obp1_map[4] = {
+			(gb->ppu.obp1 >> 0u) & 0x03,
+			(gb->ppu.obp1 >> 2u) & 0x03,
+			(gb->ppu.obp1 >> 4u) & 0x03,
+			(gb->ppu.obp1 >> 6u) & 0x03,
 		};
 
 		const gb_Sprite *sprites = gb->memory.oam.sprites;
@@ -3371,10 +3356,10 @@ gb__RenderScanLine(gb_GameBoy *gb)
 		//
 		// Whenever a sprite affects a pixel (even if it is behind the
 		// background), no other sprites will affect the same pixel.
-		// We use mask to track this, 1 bit per scanline pixel.
+		// We use mask to track this.
 		//
 		// See: https://gbdev.io/pandocs/OAM.html
-		uint8_t masked_pixels[160 / 8] = { 0 };
+		bool masked[GB_FRAMEBUFFER_WIDTH] = { 0 };
 
 		for (size_t i = 0; i < num_scanned_sprites; ++i)
 		{
@@ -3407,8 +3392,8 @@ gb__RenderScanLine(gb_GameBoy *gb)
 						}
 					}
 
-					const gb__TileLine line =
-							gb__GetTileLine(gb, 1, tile_idx, in_tile_y, sprite.dmg_palette == 0 ? obp0 : obp1);
+					const gb__TileLine line = gb__GetTileLine(gb, 1, tile_idx, in_tile_y);
+					const uint8_t *pal_map = sprite.dmg_palette == 0 ? obp0_map : obp1_map;
 
 					for (int in_tile_x = 0; in_tile_x < 8; ++in_tile_x)
 					{
@@ -3416,22 +3401,15 @@ gb__RenderScanLine(gb_GameBoy *gb)
 
 						if (fb_x >= 0 && fb_x < GB_FRAMEBUFFER_WIDTH)
 						{
-							const gb_Color sprite_pixel = line.pixels[in_tile_x];
+							const uint8_t sprite_pixel = line.pixels[in_tile_x];
 
-							if (sprite_pixel.transparent == 0)
+							if (sprite_pixel != 0)  // Not transparent
 							{
-								const size_t fb_pixel_coord = GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + fb_x;
-								const gb_Color bg_pixel = gb->display.pixels[fb_pixel_coord];
-
-								const int mask_idx = fb_x >> 3u;
-								const int mask_byte_mask = 1u << (fb_x & 0x07);
-								const bool is_masked = (masked_pixels[mask_idx] & mask_byte_mask) != 0;
-								masked_pixels[mask_idx] |= mask_byte_mask;
-
-								if (!is_masked && (bg_pixel.transparent == 1 || sprite.priority == 0))
+								if (!masked[fb_x] && (transparent[fb_x] || sprite.priority == 0))
 								{
-									gb->display.pixels[fb_pixel_coord] = sprite_pixel;
+									scan_line[fb_x] = pal_map[sprite_pixel];
 								}
+								masked[fb_x] = true;
 							}
 						}
 					}
@@ -3440,11 +3418,10 @@ gb__RenderScanLine(gb_GameBoy *gb)
 		}
 	}
 
-	// Make sure all framebuffer pixels are marked as non-transparent.
-	// Otherwise the magnification filter might run into trouble.
-	for (size_t fb_x = 0; fb_x < 160; ++fb_x)
+	// Convert values [0, 3] to colors
+	for (size_t fb_x = 0; fb_x < GB_FRAMEBUFFER_WIDTH; ++fb_x)
 	{
-		gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + fb_x].transparent = 0;
+		gb->display.pixels[GB_FRAMEBUFFER_WIDTH * gb->ppu.ly + fb_x] = gb__DefaultPalette[scan_line[fb_x]];
 	}
 }
 
@@ -3706,11 +3683,13 @@ gb_GetTile(gb_GameBoy *gb, size_t set_index, int tile_index)
 {
 	gb_Tile result;
 
-	const gb__Palette default_pal = gb__DefaultPalette();
 	for (int y = 0; y < 8; ++y)
 	{
-		gb__TileLine line = gb__GetTileLine(gb, set_index, tile_index, y, default_pal);
-		memcpy(result.pixels[y], line.pixels, sizeof(line.pixels));
+		gb__TileLine tile_line = gb__GetTileLine(gb, set_index, tile_index, y);
+		for (size_t i = 0; i < 8; ++i)
+		{
+			result.pixels[y][i] = gb__DefaultPalette[tile_line.pixels[i]];
+		}
 	}
 
 	return result;

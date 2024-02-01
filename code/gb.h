@@ -33,7 +33,7 @@ typedef union gb_Color
 		uint8_t r;
 		uint8_t g;
 		uint8_t b;
-		uint8_t transparent;  // Used internally for resolving sprites.
+		uint8_t _;  // Padding
 	};
 	uint32_t as_u32;
 } gb_Color;
