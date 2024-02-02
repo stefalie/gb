@@ -75,6 +75,16 @@ gb__GetHeader(const gb_GameBoy *gb)
 	return (gb__RomHeader *)&(gb->rom.data[ROM_HEADER_START_ADDRESS]);
 }
 
+static inline bool
+gb__StatInterruptLine(union gb_PpuStat *stat)
+{
+	const bool line_high = (stat->interrupt_coincidence && stat->coincidence_flag) ||
+			(stat->interrupt_mode_hblank && stat->mode == GB_PPU_MODE_HBLANK) ||
+			(stat->interrupt_mode_vblank && stat->mode == GB_PPU_MODE_VBLANK) ||
+			(stat->interrupt_mode_oam_scan && stat->mode == GB_PPU_MODE_OAM_SCAN);
+	return line_high;
+}
+
 bool
 gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes, bool skip_bios)
 {
@@ -736,13 +746,14 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			else if (addr == 0xFF41)
 			{
 				union gb_PpuStat *stat = &gb->ppu.stat;
+				const bool irq_line_was_low = !gb__StatInterruptLine(stat);
 
 				gb_PpuMode mode_read_only = stat->mode;
 				stat->reg = value;
 				stat->mode = mode_read_only;
 
 				stat->coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
-				if (stat->interrupt_coincidence && stat->coincidence_flag)
+				if (stat->interrupt_coincidence && stat->coincidence_flag && irq_line_was_low)
 				{
 					gb->cpu.interrupt.if_flags.lcd_stat = 1;
 				}
@@ -906,6 +917,7 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 	// no$gmb seems to start in mode 1 with LY == 0.
 	// This shouldn't really matter, should it?
 	gb->ppu.stat.coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
+	gb->ppu.stat._ = 1;
 
 	gb->joypad.buttons = 0x0F;
 	gb->joypad.dpad = 0x0F;
@@ -3439,6 +3451,7 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 	gb->ppu.mode_clock += 4 * elapsed_m_cycles;
 
 	union gb_PpuStat *stat = &gb->ppu.stat;
+	const bool irq_line_was_low = !gb__StatInterruptLine(stat);
 
 	switch (stat->mode)
 	{
@@ -3448,33 +3461,18 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			gb->ppu.mode_clock -= 204;
 
 			++gb->ppu.ly;
-			assert(gb->ppu.ly <= 144);
-
 			stat->coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
-			if (stat->interrupt_coincidence && stat->coincidence_flag)
-			{
-				gb->cpu.interrupt.if_flags.lcd_stat = 1;
-			}
+			assert(gb->ppu.ly <= 144);
 
 			if (gb->ppu.ly == 144)
 			{
 				stat->mode = GB_PPU_MODE_VBLANK;
 				gb->cpu.interrupt.if_flags.vblank = 1;
-
-				if (stat->interrupt_mode_vblank)
-				{
-					gb->cpu.interrupt.if_flags.lcd_stat = 1;
-				}
 				gb->display.updated = true;
 			}
 			else
 			{
 				stat->mode = GB_PPU_MODE_OAM_SCAN;
-
-				if (stat->interrupt_mode_oam_scan)
-				{
-					gb->cpu.interrupt.if_flags.lcd_stat = 1;
-				}
 			}
 		}
 		break;
@@ -3484,22 +3482,13 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			gb->ppu.mode_clock -= 456;
 			++gb->ppu.ly;
 			assert(gb->ppu.ly > 144 && gb->ppu.ly <= 154);
-			stat->coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
-			if (stat->interrupt_coincidence && stat->coincidence_flag)
-			{
-				gb->cpu.interrupt.if_flags.lcd_stat = 1;
-			}
 
 			if (gb->ppu.ly == 154)
 			{
 				gb->ppu.ly = 0;
 				stat->mode = GB_PPU_MODE_OAM_SCAN;
-
-				if (stat->interrupt_mode_oam_scan)
-				{
-					gb->cpu.interrupt.if_flags.lcd_stat = 1;
-				}
 			}
+			stat->coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
 		}
 		break;
 	case GB_PPU_MODE_OAM_SCAN:
@@ -3515,16 +3504,16 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			gb->ppu.mode_clock -= 172;
 			stat->mode = GB_PPU_MODE_HBLANK;
 
-			if (stat->interrupt_mode_hblank)
-			{
-				gb->cpu.interrupt.if_flags.lcd_stat = 1;
-			}
-
 			// This is vastly simplified. Ideally the LCD should get updated after
 			// every T cycle. See: https://gbdev.io/pandocs/Rendering.html
 			gb__RenderScanLine(gb);
 		}
 		break;
+	}
+
+	if (irq_line_was_low && gb__StatInterruptLine(stat))
+	{
+		gb->cpu.interrupt.if_flags.lcd_stat = 1;
 	}
 
 	assert(stat->mode != GB_PPU_MODE_HBLANK || gb->ppu.mode_clock < 204);
