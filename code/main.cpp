@@ -554,6 +554,9 @@ struct Emulator
 		MemoryEditor mem_view;
 		bool views_follow_pc = true;
 		GLuint tile_sets_texture = 0;
+		GLuint tilemap_texture = 0;
+		int tilemap_index = 0;
+		int tilemap_addr_mode = 0;
 		size_t elapsed_m_cycles = 0;
 	} debug;
 
@@ -1036,6 +1039,7 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 
 	const char *tab_name_rom_view = "ROM View";
 	const char *tab_name_mem_view = "Memory View";
+	const char *tab_name_tilemap = "Tilemap";
 	const char *tab_name_tiles = "Tiles";
 	const char *tab_name_options = "Options and Info";
 	const char *tab_name_disassembly = "Disassembly at PC";
@@ -1078,9 +1082,7 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 			ImGuiID dock_l = ImGui::DockBuilderSplitNode(dock, ImGuiDir_Left, 0.55f, NULL, &dock_r);
 
 			ImGuiID dock_tl;
-			ImGuiID dock_bl = ImGui::DockBuilderSplitNode(dock_l, ImGuiDir_Down, 0.4f, NULL, &dock_tl);
-			ImGuiID dock_bl_r;
-			ImGuiID dock_bl_l = ImGui::DockBuilderSplitNode(dock_bl, ImGuiDir_Left, 0.5f, NULL, &dock_bl_r);
+			ImGuiID dock_bl = ImGui::DockBuilderSplitNode(dock_l, ImGuiDir_Down, 0.6f, NULL, &dock_tl);
 
 			ImGuiID dock_tr;
 			ImGuiID dock_br = ImGui::DockBuilderSplitNode(dock_r, ImGuiDir_Down, 0.55f, NULL, &dock_tr);
@@ -1091,7 +1093,8 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 
 			ImGui::DockBuilderDockWindow(tab_name_rom_view, dock_tl);
 			ImGui::DockBuilderDockWindow(tab_name_mem_view, dock_tl);
-			ImGui::DockBuilderDockWindow(tab_name_tiles, dock_bl_l);
+			ImGui::DockBuilderDockWindow(tab_name_tilemap, dock_bl);
+			ImGui::DockBuilderDockWindow(tab_name_tiles, dock_bl);
 			ImGui::DockBuilderDockWindow(tab_name_options, dock_tr_t);
 			ImGui::DockBuilderDockWindow(tab_name_disassembly, dock_tr_b);
 			ImGui::DockBuilderDockWindow(tab_name_break, dock_tr_b);
@@ -1141,6 +1144,46 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 		ImGui::End();
 
 		{
+			ImGui::Begin(tab_name_tilemap);
+
+			const char *tilemap_options[] = {
+				"0 (0x9800-0x9BFF)",
+				"1 (0x9C00-0x9FFF)",
+			};
+			const char *addr_modes[] = {
+				"0 (base 0x9800 via uint8)",
+				"1 (base 0x9000 via int8)",
+			};
+			ImGui::Combo("Tilemap", &emu->debug.tilemap_index, tilemap_options, IM_ARRAYSIZE(tilemap_options));
+			ImGui::Combo("Addressing Mode", &emu->debug.tilemap_addr_mode, addr_modes, IM_ARRAYSIZE(addr_modes));
+
+			const int dim_tiles = 32;
+			const int dim = dim_tiles * 8;
+			gb_Color img[dim][dim];
+
+			for (int ty = 0; ty < dim_tiles; ++ty)
+			{
+				for (int tx = 0; tx < dim_tiles; ++tx)
+				{
+					gb_Tile tile = gb_GetMapTile(gb, (uint8_t)emu->debug.tilemap_index, (uint8_t)emu->debug.tilemap_addr_mode, tx, ty);
+
+					// For each line of current tile.
+					for (int y = 0; y < 8; ++y)
+					{
+						memcpy(&img[ty * 8 + y][tx * 8], tile.pixels[y], sizeof(tile.pixels[y]));
+					}
+				}
+			}
+
+			glBindTexture(GL_TEXTURE_2D, emu->debug.tilemap_texture);
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, dim, dim, GL_RGBA, GL_UNSIGNED_BYTE, img);
+
+			ImGui::Image((void *)(uint64_t)emu->debug.tilemap_texture, ImVec2(4.25f * dim, 4.25f * dim));
+
+			ImGui::End();
+		}
+
+		{
 			ImGui::Begin(tab_name_tiles);
 
 			const int num_tiles_per_row = 16;
@@ -1151,20 +1194,13 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 
 			// For each tile
 			gb_Tile tile;
-			for (int ty = 0; ty < num_tiles_per_col; ++ty)
+			for (size_t ty = 0; ty < num_tiles_per_col; ++ty)
 			{
-				for (int tx = 0; tx < num_tiles_per_row; ++tx)
+				for (size_t tx = 0; tx < num_tiles_per_row; ++tx)
 				{
-					int tile_idx = ty * num_tiles_per_row + tx;
-					if (ty < num_tiles_per_col / 3 * 2)
-					{
-						tile = gb_GetTile(gb, 1, tile_idx);
-					}
-					else
-					{
-						tile_idx -= 256;
-						tile = gb_GetTile(gb, 0, tile_idx);
-					}
+					uint8_t tile_idx = (uint8_t)(ty * num_tiles_per_row + tx);
+					uint8_t address_mode = ty < num_tiles_per_col / 3;
+					tile = gb_GetTile(gb, address_mode, tile_idx);
 
 					// For each line of current tile.
 					for (int y = 0; y < 8; ++y)
@@ -1264,6 +1300,9 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
 		ImGui::Begin(tab_name_mem_view);
+		ImGui::Text("%s", placeholder);
+		ImGui::End();
+		ImGui::Begin(tab_name_tilemap);
 		ImGui::Text("%s", placeholder);
 		ImGui::End();
 		ImGui::Begin(tab_name_tiles);
@@ -1592,6 +1631,15 @@ main(int argc, char *argv[])
 		// The texture vertically stackes the 3 half tile sets.
 		// Each tile set is put in a rectangle of 16x8 tiles.
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 16 * 8, 3 * 8 * 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glCheckError();
+
+		glGenTextures(1, &emu.debug.tilemap_texture);
+		glBindTexture(GL_TEXTURE_2D, emu.debug.tilemap_texture);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 32 * 8, 32 * 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);

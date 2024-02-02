@@ -184,7 +184,7 @@ typedef struct gb_GameBoy
 				uint8_t sprite_enable : 1;
 				uint8_t sprite_size : 1;  // 0 -> 8x8, 1 -> 8x16
 				uint8_t bg_tilemap_select : 1;  // 0 -> 0x9800-0x9BFF, 1 -> 0x9C00-0x9FFF
-				uint8_t bg_and_win_tileset_select : 1;  // 0 -> 0x8800-0x97FF, 1 -> 0x8000-0x8FFF
+				uint8_t bg_and_win_addr_mode : 1;  // 0 -> 0x8800-0x97FF, 1 -> 0x8000-0x8FFF
 				uint8_t win_enable : 1;
 				uint8_t win_tilemap_select : 1;  // 0 -> 0x9800-0x9BFF, 1 -> 0x9C00-0x9FFF
 				uint8_t lcd_enable : 1;
@@ -373,7 +373,10 @@ typedef struct gb_Tile
 } gb_Tile;
 
 gb_Tile
-gb_GetTile(gb_GameBoy *gb, size_t set_index, int tile_index);
+gb_GetTile(gb_GameBoy *gb, uint8_t address_mode, uint8_t tile_index);
+
+gb_Tile
+gb_GetMapTile(gb_GameBoy *gb, uint8_t map_index, uint8_t address_mode, size_t tile_x, size_t tile_y);
 
 // Returns true if a new frame has been fully rendered.
 // Use this to check if the emulator's texture should be updated.

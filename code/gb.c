@@ -250,7 +250,7 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	case 0x8000:
 	case 0x9000:
 		// TODO(stefalie): Can't assert if the debugger is open and shows the memory view.
-		// assert(gb->ppu.stat.mode != GB_PPU_MODE_VRAM_SCAN || gb - ppu.lcdc.lcd_enable == 0);
+		// assert(gb->ppu.stat.mode != GB_PPU_MODE_VRAM_SCAN || gb->ppu.lcdc.lcd_enable == 0);
 		return mem->vram[addr & 0x1FFF];
 	// Switchable RAM bank
 	case 0xA000:
@@ -3184,23 +3184,19 @@ gb__Interleave(uint64_t mem_line1, uint64_t mem_line2)
 	return (gb__TileLine){ .line = n };
 }
 
-// TODO(stefalie): The set_index corresponds to what is suggested here:
-// https://imrannazar.com/series/gameboy-emulation-in-javascript/graphics
-// I'm not sure anymore if that is a good idea and if that is common convention.
-gb__TileLine
-gb__GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_index)
+static gb__TileLine
+gb__GetTileLine(gb_GameBoy *gb, uint8_t address_mode, uint8_t tile_index, uint8_t line_index)
 {
-	assert(set_index == 0 || set_index == 1);
+	assert(address_mode == 0 || address_mode == 1);
 	assert(line_index < 8);
-	assert((tile_index >= 0 && tile_index < 256) || set_index == 0);
-	assert((tile_index >= -128 && tile_index < 128) || set_index == 1);
 
-	const size_t set_offset = set_index == 0 ? 0x1000 : 0x0;
+	const int signed_tile_idx = address_mode == 0 ? (int8_t)tile_index : tile_index;
 
+	const size_t set_offset = address_mode == 0 ? 0x1000 : 0x0;
 	size_t vram_offset = set_offset;
 
 	// A tile uses 16 bytes (2 bytes per line for 8x8 pixels).
-	vram_offset += tile_index << 4;
+	vram_offset += signed_tile_idx << 4;
 	vram_offset += line_index << 1;
 	assert(vram_offset < 0x17FF);
 	assert((vram_offset & 1u) == 0);
@@ -3209,6 +3205,17 @@ gb__GetTileLine(gb_GameBoy *gb, size_t set_index, int tile_index, size_t line_in
 	return tile_line;
 }
 
+static inline gb__TileLine
+gb__GetMapTileLine(
+		gb_GameBoy *gb, uint8_t map_index, uint8_t address_mode, uint8_t tile_x, uint8_t tile_y, uint8_t line_index)
+{
+	const size_t vram_offset = map_index ? 0x1C00 : 0x1800;
+	const size_t map_offset = vram_offset + (tile_y << 5u) + tile_x;
+	const uint8_t tile_idx = gb->memory.vram[map_offset];
+
+	gb__TileLine line = gb__GetTileLine(gb, address_mode, tile_idx, line_index);
+	return line;
+}
 
 // TODO(stefalie): This is simplified.
 // Rendering background, window, and sprites is interleaved using
@@ -3228,7 +3235,7 @@ gb__RenderScanLine(gb_GameBoy *gb)
 		(gb->ppu.bgp >> 6u) & 0x03,
 	};
 
-	const size_t tileset_idx = lcdc->bg_and_win_tileset_select;
+	const uint8_t address_mode = lcdc->bg_and_win_addr_mode;
 
 	// Values in [0, 3] per pixel.
 	uint8_t scan_line[GB_FRAMEBUFFER_WIDTH] = { 0 };
@@ -3239,23 +3246,17 @@ gb__RenderScanLine(gb_GameBoy *gb)
 	// Background
 	if (lcdc->bg_and_win_enable)
 	{
-		const size_t vram_offset = lcdc->bg_tilemap_select ? 0x1C00 : 0x1800;
-
-		const uint8_t y = gb->ppu.scy + gb->ppu.ly;
-		const size_t tile_y = y >> 3u;
-		const size_t in_tile_y = y & 7u;
+		uint8_t y = gb->ppu.scy + gb->ppu.ly;
+		uint8_t tile_y = y >> 3u;
+		uint8_t in_tile_y = y & 7u;
 
 		uint8_t fb_x = 0;
 		while (fb_x < GB_FRAMEBUFFER_WIDTH)
 		{
-			const uint8_t x = gb->ppu.scx + fb_x;
-			const size_t tile_x = x >> 3u;
-
-			const size_t map_offset = vram_offset + (tile_y << 5u) + tile_x;
-			const uint8_t tile_idx_raw = gb->memory.vram[map_offset];
-			const int tile_idx = tileset_idx == 0 ? (int8_t)tile_idx_raw : tile_idx_raw;
-
-			gb__TileLine line = gb__GetTileLine(gb, tileset_idx, tile_idx, in_tile_y);
+			uint8_t x = gb->ppu.scx + fb_x;
+			uint8_t tile_x = x >> 3u;
+			gb__TileLine line =
+					gb__GetMapTileLine(gb, lcdc->bg_tilemap_select, address_mode, tile_x, tile_y, in_tile_y);
 
 			for (size_t in_tile_x = x & 7u; in_tile_x < 8 && fb_x < GB_FRAMEBUFFER_WIDTH; ++fb_x, ++in_tile_x)
 			{
@@ -3275,25 +3276,18 @@ gb__RenderScanLine(gb_GameBoy *gb)
 		if (gb->ppu.ly >= gb->ppu.wy)
 		{
 			assert(gb->ppu.wy < 144);
-
-			const size_t vram_offset = lcdc->win_tilemap_select ? 0x1C00 : 0x1800;
-
-			const size_t y = gb->ppu.ly - gb->ppu.wy;
-			const size_t tile_y = y >> 3u;
-			const size_t in_tile_y = y & 7u;
+			uint8_t y = gb->ppu.ly - gb->ppu.wy;
+			uint8_t tile_y = y >> 3u;
+			uint8_t in_tile_y = y & 7u;
 
 			size_t fb_x = MAX(0, (int)gb->ppu.wx - 7);
 			while (fb_x < GB_FRAMEBUFFER_WIDTH)
 			{
-				const size_t x = 7 - gb->ppu.wx + fb_x;  // fb_x = x + wx - 7
+				uint8_t x = (uint8_t)(7 - gb->ppu.wx + fb_x);  // fb_x = x + wx - 7
 				assert(x < GB_FRAMEBUFFER_WIDTH + 7);
-				const size_t tile_x = x >> 3u;
-
-				const size_t map_offset = vram_offset + (tile_y << 5u) + tile_x;
-				const uint8_t tile_idx_raw = gb->memory.vram[map_offset];
-				const int tile_idx = tileset_idx == 0 ? (int8_t)tile_idx_raw : tile_idx_raw;
-
-				gb__TileLine line = gb__GetTileLine(gb, tileset_idx, tile_idx, in_tile_y);
+				uint8_t tile_x = x >> 3u;
+				gb__TileLine line =
+						gb__GetMapTileLine(gb, lcdc->win_tilemap_select, address_mode, tile_x, tile_y, in_tile_y);
 
 				for (size_t in_tile_x = x & 7u; in_tile_x < 8 && fb_x < GB_FRAMEBUFFER_WIDTH; ++fb_x, ++in_tile_x)
 				{
@@ -3379,7 +3373,7 @@ gb__RenderScanLine(gb_GameBoy *gb)
 					assert(in_tile_y < sprite_height);
 
 					// Second half of 8x16 sprite is in the next tile
-					int tile_idx = sprite.tile_index;
+					uint8_t tile_idx = sprite.tile_index;
 					if (sprite_height == 16)
 					{
 						// Double tile sprites always start on an even tile index.
@@ -3392,7 +3386,7 @@ gb__RenderScanLine(gb_GameBoy *gb)
 						}
 					}
 
-					const gb__TileLine line = gb__GetTileLine(gb, 1, tile_idx, in_tile_y);
+					const gb__TileLine line = gb__GetTileLine(gb, 1, tile_idx, (uint8_t)in_tile_y);
 					const uint8_t *pal_map = sprite.dmg_palette == 0 ? obp0_map : obp1_map;
 
 					for (int in_tile_x = 0; in_tile_x < 8; ++in_tile_x)
@@ -3561,6 +3555,12 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	{
 		gb__UpdateClockAndTimer(gb, num_interrupt_cycles);
 		gb__AdvancePpu(gb, num_interrupt_cycles);
+
+		// TODO(steafalie): Returning here makes this procedure's name inaccurate
+		// because no instruction has been executed yet. But if we don't return
+		// here, breakpoints on the interrupt routine addresses are skipped.
+		// Rename this to something with "adance"?
+		return num_interrupt_cycles;
 	}
 
 	uint16_t num_cycles = 0;
@@ -3608,7 +3608,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		gb->serial.enable_interrupt_timer = false;
 	}
 
-	return num_interrupt_cycles + num_cycles;
+	return num_cycles;
 }
 
 void
@@ -3679,13 +3679,31 @@ gb_SetInput(gb_GameBoy *gb, gb_Input input, bool down)
 }
 
 gb_Tile
-gb_GetTile(gb_GameBoy *gb, size_t set_index, int tile_index)
+gb_GetTile(gb_GameBoy *gb, uint8_t address_mode, uint8_t tile_index)
 {
 	gb_Tile result;
 
 	for (int y = 0; y < 8; ++y)
 	{
-		gb__TileLine tile_line = gb__GetTileLine(gb, set_index, tile_index, y);
+		gb__TileLine tile_line = gb__GetTileLine(gb, address_mode, tile_index, (uint8_t)y);
+		for (size_t i = 0; i < 8; ++i)
+		{
+			result.pixels[y][i] = gb__DefaultPalette[tile_line.pixels[i]];
+		}
+	}
+
+	return result;
+}
+
+gb_Tile
+gb_GetMapTile(gb_GameBoy *gb, uint8_t map_index, uint8_t address_mode, size_t tile_x, size_t tile_y)
+{
+	gb_Tile result;
+
+	for (int y = 0; y < 8; ++y)
+	{
+		gb__TileLine tile_line =
+				gb__GetMapTileLine(gb, map_index, address_mode, (uint8_t)tile_x, (uint8_t)tile_y, (uint8_t)y);
 		for (size_t i = 0; i < 8; ++i)
 		{
 			result.pixels[y][i] = gb__DefaultPalette[tile_line.pixels[i]];
