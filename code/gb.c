@@ -75,13 +75,15 @@ gb__GetHeader(const gb_GameBoy *gb)
 	return (gb__RomHeader *)&(gb->rom.data[ROM_HEADER_START_ADDRESS]);
 }
 
+// TODO(stefalie): Does stat blocking happen even if the LCD was previously disabled?
 static inline bool
-gb__StatInterruptLine(union gb_PpuStat *stat)
+gb__StatInterruptLine(struct gb_Ppu *ppu)
 {
-	const bool line_high = (stat->interrupt_coincidence && stat->coincidence_flag) ||
-			(stat->interrupt_mode_hblank && stat->mode == GB_PPU_MODE_HBLANK) ||
-			(stat->interrupt_mode_vblank && stat->mode == GB_PPU_MODE_VBLANK) ||
-			(stat->interrupt_mode_oam_scan && stat->mode == GB_PPU_MODE_OAM_SCAN);
+	bool line_high = ppu->lcdc.lcd_enable &&
+			((ppu->stat.interrupt_coincidence && ppu->stat.coincidence_flag) ||
+					(ppu->stat.interrupt_mode_hblank && ppu->stat.mode == GB_PPU_MODE_HBLANK) ||
+					(ppu->stat.interrupt_mode_vblank && ppu->stat.mode == GB_PPU_MODE_VBLANK) ||
+					(ppu->stat.interrupt_mode_oam_scan && ppu->stat.mode == GB_PPU_MODE_OAM_SCAN));
 	return line_high;
 }
 
@@ -468,6 +470,14 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	}
 }
 
+// Because I forget updating the coincidence flag ...
+static inline void
+gb__SetLy(struct gb_Ppu *ppu, uint8_t ly)
+{
+	ppu->ly = ly;
+	ppu->stat.coincidence_flag = ppu->ly == ppu->lyc;
+}
+
 uint16_t
 gb_MemoryReadWord(const gb_GameBoy *gb, uint16_t addr)
 {
@@ -727,7 +737,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				{
 					// Disable LCD
 					// See: https://www.reddit.com/r/Gameboy/comments/a1c8h0/comment/eap4f8c/
-					gb->ppu.ly = 0;
+					gb__SetLy(&gb->ppu, 0);
 					gb->ppu.stat.mode = GB_PPU_MODE_HBLANK;
 					gb->ppu.mode_clock = 0;
 
@@ -742,18 +752,27 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 						}
 					}
 				}
+				else if (prev_lcd_enable == 0 && gb->ppu.lcdc.lcd_enable == 1)
+				{
+					if (gb__StatInterruptLine(&gb->ppu))
+					{
+						gb->cpu.interrupt.if_flags.lcd_stat = 1;
+					}
+				}
 			}
 			else if (addr == 0xFF41)
 			{
 				union gb_PpuStat *stat = &gb->ppu.stat;
-				const bool irq_line_was_low = !gb__StatInterruptLine(stat);
+				const bool irq_line_was_low = !gb__StatInterruptLine(&gb->ppu);
 
 				gb_PpuMode mode_read_only = stat->mode;
+				uint8_t coincidence_flag_read_only = stat->coincidence_flag;
+
 				stat->reg = value;
 				stat->mode = mode_read_only;
+				stat->coincidence_flag = coincidence_flag_read_only;
 
-				stat->coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
-				if (stat->interrupt_coincidence && stat->coincidence_flag && irq_line_was_low)
+				if (irq_line_was_low && gb__StatInterruptLine(&gb->ppu))
 				{
 					gb->cpu.interrupt.if_flags.lcd_stat = 1;
 				}
@@ -773,9 +792,8 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				//
 				// According to the GameBoy CPU Manual, writing LY resets it to 0.
 				// (Shouldn't that also reset the mode of the PPU then)?
-				// gb->ppu.ly = 0;
-				//
-				// Let's trust gbdev.io and do nothing.
+				// That's untrue, see:
+				// See: https://www.reddit.com/r/Gameboy/comments/a1c8h0/comment/eap4f8c/
 			}
 			else if (addr == 0xFF45)
 			{
@@ -916,7 +934,7 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 	// the GameBoy start in when skipping the BIOS?
 	// no$gmb seems to start in mode 1 with LY == 0.
 	// This shouldn't really matter, should it?
-	gb->ppu.stat.coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
+	gb__SetLy(&gb->ppu, 0);
 	gb->ppu.stat._ = 1;
 
 	gb->joypad.buttons = 0x0F;
@@ -3451,7 +3469,7 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 	gb->ppu.mode_clock += 4 * elapsed_m_cycles;
 
 	union gb_PpuStat *stat = &gb->ppu.stat;
-	const bool irq_line_was_low = !gb__StatInterruptLine(stat);
+	const bool irq_line_was_low = !gb__StatInterruptLine(&gb->ppu);
 
 	switch (stat->mode)
 	{
@@ -3460,8 +3478,7 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 		{
 			gb->ppu.mode_clock -= 204;
 
-			++gb->ppu.ly;
-			stat->coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
+			gb__SetLy(&gb->ppu, gb->ppu.ly + 1);
 			assert(gb->ppu.ly <= 144);
 
 			if (gb->ppu.ly == 144)
@@ -3480,15 +3497,14 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 		if (gb->ppu.mode_clock >= 456)
 		{
 			gb->ppu.mode_clock -= 456;
-			++gb->ppu.ly;
+			gb__SetLy(&gb->ppu, gb->ppu.ly + 1);
 			assert(gb->ppu.ly > 144 && gb->ppu.ly <= 154);
 
 			if (gb->ppu.ly == 154)
 			{
-				gb->ppu.ly = 0;
+				gb__SetLy(&gb->ppu, 0);
 				stat->mode = GB_PPU_MODE_OAM_SCAN;
 			}
-			stat->coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
 		}
 		break;
 	case GB_PPU_MODE_OAM_SCAN:
@@ -3511,7 +3527,7 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 		break;
 	}
 
-	if (irq_line_was_low && gb__StatInterruptLine(stat))
+	if (irq_line_was_low && gb__StatInterruptLine(&gb->ppu))
 	{
 		gb->cpu.interrupt.if_flags.lcd_stat = 1;
 	}
