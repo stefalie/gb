@@ -1165,7 +1165,8 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 			{
 				for (int tx = 0; tx < dim_tiles; ++tx)
 				{
-					gb_Tile tile = gb_GetMapTile(gb, (uint8_t)emu->debug.tilemap_index, (uint8_t)emu->debug.tilemap_addr_mode, tx, ty);
+					gb_Tile tile = gb_GetMapTile(
+							gb, (uint8_t)emu->debug.tilemap_index, (uint8_t)emu->debug.tilemap_addr_mode, tx, ty);
 
 					// For each line of current tile.
 					for (int y = 0; y < 8; ++y)
@@ -1239,18 +1240,34 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 
 		{
 			ImGui::Begin(tab_name_ppu);
+			ImGui::Text("Clock acc (m-cyles): %u", gb->ppu.mode_clock / 4);
 			ImGui::Text("Registers:");
-			ImGui::Text("lcdc = 0x%02X", gb->ppu.lcdc.reg);
-			ImGui::Text("stat = 0x%02X, mode = %u", gb->ppu.stat.reg, gb->ppu.stat.mode);
-			ImGui::Text("scy = 0x%02X", gb->ppu.scy);
-			ImGui::Text("scx = 0x%02X", gb->ppu.scx);
-			ImGui::Text("ly = 0x%02X", gb->ppu.ly);
-			ImGui::Text("lyc = 0x%02X", gb->ppu.lyc);
-			ImGui::Text("bgp = 0x%02X", gb->ppu.bgp);
-			ImGui::Text("obp0 = 0x%02X", gb->ppu.obp0);
-			ImGui::Text("obp1 = 0x%02X", gb->ppu.obp1);
-			ImGui::Text("wy = 0x%02X", gb->ppu.wy);
-			ImGui::Text("wx = 0x%02X", gb->ppu.wx);
+			ImGui::Text("lcdc 0xFF40 = 0x%02X", gb->ppu.lcdc.reg);
+			ImGui::Text("\tBG/Win enable    = %u", gb->ppu.lcdc.bg_and_win_enable);
+			ImGui::Text("\tOBJ              = %u", gb->ppu.lcdc.sprite_enable);
+			ImGui::Text("\tOBJ size         = %u (%s)", gb->ppu.lcdc.sprite_size, gb->ppu.lcdc.sprite_size ? "8x16" : "8x8");
+			ImGui::Text("\tBG tilemap       = %u (%s)", gb->ppu.lcdc.bg_tilemap_select, gb->ppu.lcdc.bg_tilemap_select ? "0x9C00-0x9FFF" : "0x9800-0x9BFF");
+			ImGui::Text("\tBG/Win addr mode = %u (%s)", gb->ppu.lcdc.bg_and_win_addr_mode, gb->ppu.lcdc.bg_and_win_addr_mode ? "base 0x9000 via int8" : "base 0x9800 via uint8");
+			ImGui::Text("\tBG enable        = %u", gb->ppu.lcdc.win_enable);
+			ImGui::Text("\tWin tilemap      = %u (%s)", gb->ppu.lcdc.win_tilemap_select, gb->ppu.lcdc.win_tilemap_select ? "0x9C00-0x9FFF" : "0x9800-0x9BFF");
+			ImGui::Text("\tLCD enable       = %u", gb->ppu.lcdc.lcd_enable);
+			ImGui::Text("stat 0xFF41 = 0x%02X", gb->ppu.stat.reg, gb->ppu.stat.mode);
+			ImGui::Text("\tmode                = %u", gb->ppu.stat.mode);
+			ImGui::Text("\tly == lyc           = %u", gb->ppu.stat.coincidence_flag);
+			ImGui::Text("\thblank (mode 0) int = %u", gb->ppu.stat.interrupt_mode_hblank);
+			ImGui::Text("\tvblank (mode 1) int = %u", gb->ppu.stat.interrupt_mode_vblank);
+			ImGui::Text("\toam (mode 2) int    = %u", gb->ppu.stat.interrupt_mode_oam_scan);
+			ImGui::Text("\tly == lyc int       = %u", gb->ppu.stat.coincidence_flag);
+			ImGui::Text("scy  0xFF42 = 0x%02X (%3u)", gb->ppu.scy, gb->ppu.scy);
+			ImGui::Text("scx  0xFF43 = 0x%02X (%3u)", gb->ppu.scx, gb->ppu.scx);
+			ImGui::Text("ly   0xFF44 = 0x%02X (%3u)", gb->ppu.ly, gb->ppu.ly);
+			ImGui::Text("lyc  0xFF45 = 0x%02X (%3u)", gb->ppu.lyc, gb->ppu.lyc);
+			ImGui::Text("dma  0xFF46");
+			ImGui::Text("bgp  0xFF47 = 0x%02X", gb->ppu.bgp);
+			ImGui::Text("obp0 0xFF48 = 0x%02X", gb->ppu.obp0);
+			ImGui::Text("obp1 0xFF49 = 0x%02X", gb->ppu.obp1);
+			ImGui::Text("wy   0xFF4B = 0x%02X (%3u)", gb->ppu.wy, gb->ppu.wy);
+			ImGui::Text("wx   0xFF4B = 0x%02X (%3u)", gb->ppu.wx, gb->ppu.wx);
 			ImGui::End();
 		}
 

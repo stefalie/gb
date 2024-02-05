@@ -77,7 +77,7 @@ gb__GetHeader(const gb_GameBoy *gb)
 
 // TODO(stefalie): Does stat blocking happen even if the LCD was previously disabled?
 static inline bool
-gb__StatInterruptLine(struct gb_Ppu *ppu)
+gb__StatInterruptLine2(struct gb_Ppu *ppu)
 {
 	bool line_high = ppu->lcdc.lcd_enable &&
 			((ppu->stat.interrupt_coincidence && ppu->stat.coincidence_flag) ||
@@ -85,6 +85,31 @@ gb__StatInterruptLine(struct gb_Ppu *ppu)
 					(ppu->stat.interrupt_mode_vblank && ppu->stat.mode == GB_PPU_MODE_VBLANK) ||
 					(ppu->stat.interrupt_mode_oam_scan && ppu->stat.mode == GB_PPU_MODE_OAM_SCAN));
 	return line_high;
+}
+
+static inline void
+gb__CompareLyToLyc(gb_GameBoy *gb)
+{
+	struct gb_Ppu *ppu = &gb->ppu;
+
+	if (ppu->lcdc.lcd_enable)
+	{
+		ppu->stat.coincidence_flag = ppu->ly == ppu->lyc;
+
+		if (ppu->stat.coincidence_flag && ppu->stat.interrupt_coincidence)
+		{
+			if (!ppu->int48_signal.reg)
+			{
+				gb->cpu.interrupt.if_flags.lcd_stat = 1;
+			}
+			// TODO LY: VBA has this inside the above if. I think it should be here.
+			ppu->int48_signal.ly_lyc_coincidence = 1;
+		}
+		else
+		{
+			ppu->int48_signal.ly_lyc_coincidence = 0;
+		}
+	}
 }
 
 bool
@@ -470,13 +495,15 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 	}
 }
 
-// Because I forget updating the coincidence flag ...
-static inline void
-gb__SetLy(struct gb_Ppu *ppu, uint8_t ly)
-{
-	ppu->ly = ly;
-	ppu->stat.coincidence_flag = ppu->ly == ppu->lyc;
-}
+// Just because I forget updating the coincidence flag ...
+// static inline void
+// gb__SetLy(struct gb_Ppu *ppu, uint8_t ly)
+//{
+//	ppu->ly = ly;
+//	ppu->stat.coincidence_flag = ppu->ly == ppu->lyc;
+//	// This is wrong
+//	// ppu->int48_signal.ly_lyc_coincidence = ppu->stat.coincidence_flag;
+//}
 
 uint16_t
 gb_MemoryReadWord(const gb_GameBoy *gb, uint16_t addr)
@@ -731,15 +758,20 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			// Display
 			else if (addr == 0xFF40)
 			{
-				const uint8_t prev_lcd_enable = gb->ppu.lcdc.lcd_enable;
-				gb->ppu.lcdc.reg = value;
-				if (prev_lcd_enable == 1 && gb->ppu.lcdc.lcd_enable == 0)
+				struct gb_Ppu *ppu = &gb->ppu;
+
+				const uint8_t prev_lcd_enable = ppu->lcdc.lcd_enable;
+				ppu->lcdc.reg = value;
+				if (prev_lcd_enable == 1 && ppu->lcdc.lcd_enable == 0)
 				{
 					// Disable LCD
 					// See: https://www.reddit.com/r/Gameboy/comments/a1c8h0/comment/eap4f8c/
-					gb__SetLy(&gb->ppu, 0);
-					gb->ppu.stat.mode = GB_PPU_MODE_HBLANK;
-					gb->ppu.mode_clock = 0;
+					// gb__SetLy(&gb->ppu, 0);
+					ppu->ly = 0;
+					ppu->stat.coincidence_flag = ppu->ly == ppu->lyc;
+					ppu->stat.mode = GB_PPU_MODE_HBLANK;  // VBA does this, conflicts with the link above.
+					ppu->int48_signal.reg = 0;
+					ppu->mode_clock = 0;
 
 					// Clear framebuffer to color 0.
 					// TODO(stefalie): It should be an even "whiter" color.
@@ -752,18 +784,28 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 						}
 					}
 				}
-				else if (prev_lcd_enable == 0 && gb->ppu.lcdc.lcd_enable == 1)
+				else if (prev_lcd_enable == 0 && ppu->lcdc.lcd_enable == 1)
 				{
-					if (gb__StatInterruptLine(&gb->ppu))
+					ppu->stat.mode = GB_PPU_MODE_OAM_SCAN;
+					assert(ppu->ly == 0);
+					assert(ppu->int48_signal.reg == 0);
+					if (ppu->stat.interrupt_mode_oam_scan)
 					{
+						// TODO LY: can we nother interrupt stat line thtat takes into account
+						// lcd_enable?
+						assert(gb__StatInterruptLine2(ppu));  // TODO LY: rem?
+						assert(!ppu->int48_signal.reg);
 						gb->cpu.interrupt.if_flags.lcd_stat = 1;
+						ppu->int48_signal.mode_oam_scan = 1;
 					}
+					gb__CompareLyToLyc(gb);
+					// TODO LY: gb__StatInterruptLine should have the same effect, no?
 				}
 			}
 			else if (addr == 0xFF41)
 			{
 				union gb_PpuStat *stat = &gb->ppu.stat;
-				const bool irq_line_was_low = !gb__StatInterruptLine(&gb->ppu);
+				assert((bool)gb->ppu.int48_signal.reg == gb__StatInterruptLine2(&gb->ppu));
 
 				gb_PpuMode mode_read_only = stat->mode;
 				uint8_t coincidence_flag_read_only = stat->coincidence_flag;
@@ -772,10 +814,62 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				stat->mode = mode_read_only;
 				stat->coincidence_flag = coincidence_flag_read_only;
 
-				if (irq_line_was_low && gb__StatInterruptLine(&gb->ppu))
+				// Spurious STAT interrupt bug. STAT becomes 0xFF for 1 cycle.
+				// See:
+				// https://www.devrs.com/gb/files/faqs.html#GBBugs
+				// https://gbdev.io/pandocs/STAT.html
+				// The various sources disagree on when exactly it thappens.
+				if ((stat->mode == GB_PPU_MODE_HBLANK || stat->mode == GB_PPU_MODE_VBLANK) || gb->ppu.ly == gb->ppu.lyc)
 				{
-					gb->cpu.interrupt.if_flags.lcd_stat = 1;
+					if (gb->ppu.int48_signal.reg == 0)
+					{
+						gb->cpu.interrupt.if_flags.lcd_stat = 1;
+					}
 				}
+
+				// NOTE: Compared to calling gb__StatInterruptLine2 twice, once at the start to
+				// query the old signal and again after writing STAT, this is slightly different.
+				// This potentiall allows the signal to go to low and then to rise it again
+				// immeditately. If you query the state with gb__StatInterruptLine2, it might
+				// just stay high. Does it matter? I doubt it. VBA does it this way.
+				// TODO LY: Is this correct? Or is calling gb__StatInterruptLine2 twice enough?
+				// TODO LY: do I really need all the lines?
+				gb->ppu.int48_signal.mode_hblank &= stat->interrupt_mode_hblank;
+				gb->ppu.int48_signal.mode_vblank &= stat->interrupt_mode_vblank;
+				gb->ppu.int48_signal.mode_oam_scan &= stat->interrupt_mode_oam_scan;
+				gb->ppu.int48_signal.ly_lyc_coincidence &= stat->interrupt_coincidence;
+
+				if (gb->ppu.lcdc.lcd_enable)
+				{
+					if (stat->interrupt_mode_hblank && stat->mode == GB_PPU_MODE_HBLANK)
+					{
+						if (gb->ppu.int48_signal.reg == 0)
+						{
+							gb->cpu.interrupt.if_flags.lcd_stat = 1;
+						}
+						gb->ppu.int48_signal.mode_hblank = true;
+					}
+					if (stat->interrupt_mode_vblank && stat->mode == GB_PPU_MODE_VBLANK)
+					{
+						if (gb->ppu.int48_signal.reg == 0)
+						{
+							gb->cpu.interrupt.if_flags.lcd_stat = 1;
+						}
+						gb->ppu.int48_signal.mode_vblank = true;
+					}
+					if (stat->interrupt_mode_oam_scan && stat->mode == GB_PPU_MODE_OAM_SCAN)
+					{
+						if (gb->ppu.int48_signal.reg == 0)
+						{
+							gb->cpu.interrupt.if_flags.lcd_stat = 1;
+						}
+						// TODO LY: VBA does not set this. Why?
+						gb->ppu.int48_signal.mode_oam_scan = true;
+					}
+
+					gb__CompareLyToLyc(gb);
+				}
+				assert((bool)gb->ppu.int48_signal.reg == gb__StatInterruptLine2(&gb->ppu));
 			}
 			else if (addr == 0xFF42)
 			{
@@ -797,7 +891,11 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			}
 			else if (addr == 0xFF45)
 			{
-				gb->ppu.lyc = value;
+				if (gb->ppu.lyc != value)
+				{
+					gb->ppu.lyc = value;
+					gb__CompareLyToLyc(gb);
+				}
 			}
 			else if (addr == 0xFF46)
 			{
@@ -809,6 +907,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				// Technically during DMA only HRAM is accessible.
 				// See: https://gbdev.io/pandocs/OAM_DMA_Transfer.html#oam-dma-transfer
 				// We simply ignore that and don't verify that.
+				// We also ignore that DMA is not instantaneous.
 				for (uint16_t i = 0; i < 0xA0; ++i)
 				{
 					gb->memory.oam.bytes[i] = gb_MemoryReadByte(gb, (value << 8u) + i);
@@ -934,7 +1033,10 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 	// the GameBoy start in when skipping the BIOS?
 	// no$gmb seems to start in mode 1 with LY == 0.
 	// This shouldn't really matter, should it?
-	gb__SetLy(&gb->ppu, 0);
+	// VBA starts in mode 2.
+	gb->ppu.stat.mode = GB_PPU_MODE_OAM_SCAN;
+	// gb__SetLy(&gb->ppu, 0); // TODO LY
+	gb->ppu.stat.coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
 	gb->ppu.stat._ = 1;
 
 	gb->joypad.buttons = 0x0F;
@@ -3452,12 +3554,16 @@ gb__RenderScanLine(gb_GameBoy *gb)
 static void
 gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 {
-	if (gb->ppu.lcdc.lcd_enable == 0)
+	struct gb_Ppu *ppu = &gb->ppu;
+	union gb_PpuStat *stat = &ppu->stat;
+	union gb_Int48Signal *int48_signal = &ppu->int48_signal;
+
+	if (ppu->lcdc.lcd_enable == 0)
 	{
 		// See: https://www.reddit.com/r/Gameboy/comments/a1c8h0/comment/eap4f8c/
-		assert(gb->ppu.ly == 0);
-		assert(gb->ppu.stat.mode == GB_PPU_MODE_HBLANK);
-		assert(gb->ppu.mode_clock == 0);
+		assert(ppu->ly == 0);
+		assert(ppu->stat.mode == GB_PPU_MODE_HBLANK);
+		assert(ppu->mode_clock == 0);
 		return;
 	}
 
@@ -3466,59 +3572,129 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 	// but the screen will stay blank during the first frame."
 	// From: https://gbdev.io/pandocs/LCDC.html
 
-	gb->ppu.mode_clock += 4 * elapsed_m_cycles;
+	ppu->mode_clock += 4 * elapsed_m_cycles;
 
-	union gb_PpuStat *stat = &gb->ppu.stat;
-	const bool irq_line_was_low = !gb__StatInterruptLine(&gb->ppu);
+	// TODO: ly
+	// const bool irq_line_was_low = !gb__StatInterruptLine(&ppu->;
 
 	switch (stat->mode)
 	{
 	case GB_PPU_MODE_HBLANK:
-		if (gb->ppu.mode_clock >= 204)
+		assert(int48_signal->mode_vblank == 0);
+		assert(int48_signal->mode_oam_scan == 0);
+		if (ppu->mode_clock >= 204)
 		{
-			gb->ppu.mode_clock -= 204;
+			ppu->mode_clock -= 204;
 
-			gb__SetLy(&gb->ppu, gb->ppu.ly + 1);
-			assert(gb->ppu.ly <= 144);
+			// TODO(stefalie): This is rather inprecise. We should separately update
+			// LY. At line 0 it takes longer before the LY update comes, at line 153
+			// it comes much faster.
+			// For details see: https://gameboy.mongenel.com/dmg/istat98.txt
+			++ppu->ly;
+			gb__CompareLyToLyc(gb);
+			assert(ppu->ly <= 144);
 
-			if (gb->ppu.ly == 144)
+			if (ppu->ly == 144)
 			{
 				stat->mode = GB_PPU_MODE_VBLANK;
 				gb->cpu.interrupt.if_flags.vblank = 1;
 				gb->display.updated = true;
+
+				if (stat->interrupt_mode_vblank)
+				{
+					if (!int48_signal->reg)
+					{
+						gb->cpu.interrupt.if_flags.lcd_stat = 1;
+					}
+					int48_signal->mode_vblank = 1;
+				}
+				int48_signal->mode_hblank = 0;
 			}
 			else
 			{
 				stat->mode = GB_PPU_MODE_OAM_SCAN;
-			}
-		}
-		break;
-	case GB_PPU_MODE_VBLANK:
-		if (gb->ppu.mode_clock >= 456)
-		{
-			gb->ppu.mode_clock -= 456;
-			gb__SetLy(&gb->ppu, gb->ppu.ly + 1);
-			assert(gb->ppu.ly > 144 && gb->ppu.ly <= 154);
 
-			if (gb->ppu.ly == 154)
-			{
-				gb__SetLy(&gb->ppu, 0);
-				stat->mode = GB_PPU_MODE_OAM_SCAN;
+				if (stat->interrupt_mode_oam_scan)
+				{
+					if (!int48_signal->reg)
+					{
+						gb->cpu.interrupt.if_flags.lcd_stat = 1;
+					}
+					int48_signal->mode_oam_scan = 1;
+				}
+				int48_signal->mode_hblank = 0;
 			}
 		}
 		break;
-	case GB_PPU_MODE_OAM_SCAN:
-		if (gb->ppu.mode_clock >= 80)
+	case GB_PPU_MODE_VBLANK: {
+		assert(int48_signal->mode_oam_scan == 0);
+		assert(int48_signal->mode_hblank == 0);
+
+		const bool last_line_ly_update = ppu->ly == 153 && ppu->mode_clock >= 56;
+		if (last_line_ly_update)
 		{
-			gb->ppu.mode_clock -= 80;
+			// At line 153 the LY update comes a lot earlier than on other lines.
+			// LY == 0 will therefore take that much longer.
+			// See: https://gameboy.mongenel.com/dmg/istat98.txt
+			ppu->ly = 0;
+			gb__CompareLyToLyc(gb);
+		}
+		if (ppu->mode_clock >= 456)
+		{
+			ppu->mode_clock -= 456;
+			if (ppu->ly != 0)
+			{
+				++ppu->ly;
+				gb__CompareLyToLyc(gb);
+				assert(ppu->ly > 144 && ppu->ly <= 153);
+			}
+
+			if (ppu->ly == 0)  // LY already advanced to line 0.
+			{
+				stat->mode = GB_PPU_MODE_OAM_SCAN;
+
+				if (stat->interrupt_mode_oam_scan)
+				{
+					if (!int48_signal->reg)
+					{
+						gb->cpu.interrupt.if_flags.lcd_stat = 1;
+					}
+					int48_signal->mode_oam_scan = 1;
+				}
+
+				int48_signal->mode_vblank = 0;
+			}
+		}
+		break;
+	}
+	case GB_PPU_MODE_OAM_SCAN:
+		assert(int48_signal->mode_hblank == 0);
+		assert(int48_signal->mode_vblank == 0);
+		if (ppu->mode_clock >= 80)
+		{
+			ppu->mode_clock -= 80;
 			stat->mode = GB_PPU_MODE_VRAM_SCAN;
+
+			int48_signal->mode_oam_scan = 0;
 		}
 		break;
 	case GB_PPU_MODE_VRAM_SCAN:
-		if (gb->ppu.mode_clock >= 172)
+		assert(int48_signal->mode_hblank == 0);
+		assert(int48_signal->mode_vblank == 0);
+		assert(int48_signal->mode_oam_scan == 0);
+		if (ppu->mode_clock >= 172)
 		{
-			gb->ppu.mode_clock -= 172;
+			ppu->mode_clock -= 172;
 			stat->mode = GB_PPU_MODE_HBLANK;
+
+			if (stat->interrupt_mode_hblank)
+			{
+				if (!int48_signal->reg)
+				{
+					gb->cpu.interrupt.if_flags.lcd_stat = 1;
+				}
+				int48_signal->mode_hblank = 1;
+			}
 
 			// This is vastly simplified. Ideally the LCD should get updated after
 			// every T cycle. See: https://gbdev.io/pandocs/Rendering.html
@@ -3527,15 +3703,16 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 		break;
 	}
 
-	if (irq_line_was_low && gb__StatInterruptLine(&gb->ppu))
-	{
-		gb->cpu.interrupt.if_flags.lcd_stat = 1;
-	}
+	// TODO LY
+	// if (irq_line_was_low && gb__StatInterruptLine(&ppu->)
+	//{
+	//	gb->cpu.interrupt.if_flags.lcd_stat = 1;
+	//}
 
-	assert(stat->mode != GB_PPU_MODE_HBLANK || gb->ppu.mode_clock < 204);
-	assert(stat->mode != GB_PPU_MODE_VBLANK || gb->ppu.mode_clock < 456);
-	assert(stat->mode != GB_PPU_MODE_OAM_SCAN || gb->ppu.mode_clock < 80);
-	assert(stat->mode != GB_PPU_MODE_VRAM_SCAN || gb->ppu.mode_clock < 172);
+	assert(stat->mode != GB_PPU_MODE_HBLANK || ppu->mode_clock < 204);
+	assert(stat->mode != GB_PPU_MODE_VBLANK || ppu->mode_clock < 456);
+	assert(stat->mode != GB_PPU_MODE_OAM_SCAN || ppu->mode_clock < 80);
+	assert(stat->mode != GB_PPU_MODE_VRAM_SCAN || ppu->mode_clock < 172);
 }
 
 size_t
@@ -3555,27 +3732,30 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		gb->timer.t_clock = 0xABCC;
 	}
 
-	const uint16_t num_interrupt_cycles = gb__HandleInterrupts(gb);
-	if (num_interrupt_cycles > 0)
-	{
-		gb__UpdateClockAndTimer(gb, num_interrupt_cycles);
-		gb__AdvancePpu(gb, num_interrupt_cycles);
-
-		// TODO(steafalie): Returning here makes this procedure's name inaccurate
-		// because no instruction has been executed yet. But if we don't return
-		// here, breakpoints on the interrupt routine addresses are skipped.
-		// Rename this to something with "adance"?
-		return num_interrupt_cycles;
-	}
-
 	uint16_t num_cycles = 0;
 	if (!gb->cpu.halt)
 	{
 		const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
 		gb->cpu.pc += gb_InstructionSize(inst);
 
+		gb__InstructionInfo info = inst.is_extended ? gb__extended_instruction_infos[inst.opcode] :
+													  gb__basic_instruction_infos[inst.opcode];
+		bool know_num_cyles_upfront = info.min_num_machine_cycles != (uint8_t)-1;
+		if (know_num_cyles_upfront)
+		{
+			// gb__UpdateClockAndTimer(gb, info.min_num_machine_cycles);
+			gb__AdvancePpu(gb, info.min_num_machine_cycles);
+		}
+
 		num_cycles =
 				inst.is_extended ? gb__ExecuteExtendedInstruction(gb, inst) : gb__ExecuteBasicInstruction(gb, inst);
+
+		if (!know_num_cyles_upfront)
+		{
+			// gb__UpdateClockAndTimer(gb, num_cycles);
+			gb__AdvancePpu(gb, num_cycles);
+		}
+		gb__UpdateClockAndTimer(gb, num_cycles);
 
 #if BLARGG_TEST_ENABLE
 		if (gb->serial.sc == 0x81)
@@ -3586,12 +3766,13 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		}
 #endif
 	}
-	else if (num_interrupt_cycles == 0)
+
+	const uint16_t num_interrupt_cycles = gb__HandleInterrupts(gb);
+	if (num_interrupt_cycles > 0)
 	{
-		// When the CPU is halted, we still need to let cycles "elapse" so that the
-		// timer progresses.
-		// TODO(stefalie): Take bigger steps when just advancing the timer? 4 m cycles instead?
-		num_cycles = 1;
+		gb__UpdateClockAndTimer(gb, num_interrupt_cycles);
+		gb__AdvancePpu(gb, num_interrupt_cycles);
+		num_cycles += num_interrupt_cycles;
 	}
 
 	if (gb->cpu.interrupt.ime_after_next_inst)
@@ -3600,8 +3781,15 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		gb->cpu.interrupt.ime_after_next_inst = false;
 	}
 
-	gb__UpdateClockAndTimer(gb, num_cycles);
-	gb__AdvancePpu(gb, num_cycles);
+	if (num_cycles == 0)
+	{
+		// When the CPU is halted, we still need to let cycles "elapse" so that the
+		// timer progresses.
+		// TODO(stefalie): Take bigger steps when just advancing the timer? 4 m cycles instead?
+		num_cycles = 1;
+		gb__UpdateClockAndTimer(gb, num_cycles);
+		gb__AdvancePpu(gb, num_cycles);
+	}
 
 	if (gb->serial.enable_interrupt_timer)
 	{
@@ -3613,6 +3801,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		gb->serial.enable_interrupt_timer = false;
 	}
 
+	assert(num_cycles > 0);
 	return num_cycles;
 }
 

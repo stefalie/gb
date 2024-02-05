@@ -176,6 +176,21 @@ typedef struct gb_GameBoy
 	{
 		uint16_t mode_clock;
 
+		// Not a physical register. Used to keep track of which interrupt lines for
+		// the LCD STAT interrupt are active.
+		union gb_Int48Signal
+		{
+			struct
+			{
+				uint8_t mode_hblank : 1;
+				uint8_t mode_vblank : 1;
+				uint8_t mode_oam_scan : 1;
+				uint8_t ly_lyc_coincidence : 1;
+				uint8_t _ : 4;
+			};
+			uint8_t reg;
+		} int48_signal;
+
 		union gb_PpuLcdc
 		{
 			struct
@@ -197,7 +212,7 @@ typedef struct gb_GameBoy
 			struct
 			{
 				uint8_t mode : 2;  // A value of 'gb_PpuMode' (but can't use it as type).
-				uint8_t coincidence_flag : 1;
+				uint8_t coincidence_flag : 1;  // TOOD:ren 
 				uint8_t interrupt_mode_hblank : 1;
 				uint8_t interrupt_mode_vblank : 1;
 				uint8_t interrupt_mode_oam_scan : 1;
