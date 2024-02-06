@@ -13,8 +13,16 @@
 
 #define BLARGG_TEST_ENABLE 0
 
-// Color scheme from https://gbdev.io/pandocs/Tile_Data.html
+// Palette from bgb
 static const gb_Color gb__DefaultPalette[4] = {
+	{ .r = 0xE8, .g = 0xFC, .b = 0xCC },
+	{ .r = 0xAC, .g = 0xD4, .b = 0x90 },
+	{ .r = 0x54, .g = 0x8C, .b = 0x70 },
+	{ .r = 0x14, .g = 0x2C, .b = 0x38 },
+};
+// TODO(stefalie): This is currently unused.
+// Color scheme from https://gbdev.io/pandocs/Tile_Data.html
+static const gb_Color gb__GbDevIoPalette[4] = {
 	{ .r = 0xE0, .g = 0xF8, .b = 0xD0 },
 	{ .r = 0x88, .g = 0xC0, .b = 0x70 },
 	{ .r = 0x34, .g = 0x68, .b = 0x56 },
