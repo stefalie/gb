@@ -830,7 +830,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				// NOTE: Compared to calling gb__StatInterruptLine2 twice, once at the start to
 				// query the old signal and again after writing STAT, this is slightly different.
 				// This potentiall allows the signal to go to low and then to rise it again
-				// immeditately. If you query the state with gb__StatInterruptLine2, it might
+				// immediately. If you query the state with gb__StatInterruptLine2, it might
 				// just stay high. Does it matter? I doubt it. VBA does it this way.
 				// TODO LY: Is this correct? Or is calling gb__StatInterruptLine2 twice enough?
 				// TODO LY: do I really need all the lines?
@@ -838,6 +838,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				gb->ppu.int48_signal.mode_vblank &= stat->interrupt_mode_vblank;
 				gb->ppu.int48_signal.mode_oam_scan &= stat->interrupt_mode_oam_scan;
 				gb->ppu.int48_signal.ly_lyc_coincidence &= stat->interrupt_coincidence;
+				// TODO LY: I don't think this is necessary.
 
 				if (gb->ppu.lcdc.lcd_enable)
 				{
