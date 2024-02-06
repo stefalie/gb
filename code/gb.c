@@ -1083,7 +1083,8 @@ typedef struct
 {
 	char *name;
 	uint8_t num_operand_bytes;
-	uint8_t min_num_machine_cycles;  // -1 if depending
+	uint8_t num_machine_cycles_wo_branch;
+	uint8_t num_machine_cycles_with_branch;  // 0 if no branch
 } gb__InstructionInfo;
 
 static const gb__InstructionInfo gb__basic_instruction_infos[256] = {
@@ -1123,7 +1124,7 @@ static const gb__InstructionInfo gb__basic_instruction_infos[256] = {
 	[0x1E] = { "LD E, u8", 1, 2 },
 	[0x1F] = { "RRA", 0, 1 },
 
-	[0x20] = { "JR NZ, i8", 1, (uint8_t)-1 },
+	[0x20] = { "JR NZ, i8", 1, 2, 3 },
 	[0x21] = { "LD HL, u16", 2, 3 },
 	[0x22] = { "LD (HL+), A", 0, 2 },
 	[0x23] = { "INC HL", 0, 2 },
@@ -1132,7 +1133,7 @@ static const gb__InstructionInfo gb__basic_instruction_infos[256] = {
 	[0x26] = { "LD H, u8", 1, 2 },
 	[0x27] = { "DAA", 0, 1 },
 
-	[0x28] = { "JR Z, i8", 1, (uint8_t)-1 },
+	[0x28] = { "JR Z, i8", 1, 2, 3 },
 	[0x29] = { "ADD HL, HL", 0, 2 },
 	[0x2A] = { "LD A, (HL+)", 0, 2 },
 	[0x2B] = { "DEC HL", 0, 2 },
@@ -1141,7 +1142,7 @@ static const gb__InstructionInfo gb__basic_instruction_infos[256] = {
 	[0x2E] = { "LD L, u8", 1, 2 },
 	[0x2F] = { "CPL", 0, 1 },
 
-	[0x30] = { "JR NC, i8", 1, (uint8_t)-1 },
+	[0x30] = { "JR NC, i8", 1, 2, 3 },
 	[0x31] = { "LD SP, u16", 2, 3 },
 	[0x32] = { "LD (HL-), A", 0, 2 },
 	[0x33] = { "INC SP", 0, 2 },
@@ -1150,7 +1151,7 @@ static const gb__InstructionInfo gb__basic_instruction_infos[256] = {
 	[0x36] = { "LD (HL), u8", 1, 3 },
 	[0x37] = { "SCF", 0, 1 },
 
-	[0x38] = { "JR C, i8", 1, (uint8_t)-1 },
+	[0x38] = { "JR C, i8", 1, 2, 3 },
 	[0x39] = { "ADD HL, SP", 0, 2 },
 	[0x3A] = { "LD A, (HL-)", 0, 2 },
 	[0x3B] = { "DEC SP", 0, 2 },
@@ -1303,36 +1304,36 @@ static const gb__InstructionInfo gb__basic_instruction_infos[256] = {
 	[0xBE] = { "CP A, (HL)", 0, 2 },
 	[0xBF] = { "CP A, A", 0, 1 },
 
-	[0xC0] = { "RET NZ", 0, (uint8_t)-1 },
+	[0xC0] = { "RET NZ", 0, 2, 5 },
 	[0xC1] = { "POP BC", 0, 3 },
-	[0xC2] = { "JP NZ, u16", 2, (uint8_t)-1 },
+	[0xC2] = { "JP NZ, u16", 2, 3, 4 },
 	[0xC3] = { "JP u16", 2, 4 },
-	[0xC4] = { "CALL NZ, u16", 2, (uint8_t)-1 },
+	[0xC4] = { "CALL NZ, u16", 2, 3, 6 },
 	[0xC5] = { "PUSH BC", 0, 4 },
 	[0xC6] = { "ADD A, u8", 1, 2 },
 	[0xC7] = { "RST 00h", 0, 4 },
 
-	[0xC8] = { "RET Z", 0, (uint8_t)-1 },
+	[0xC8] = { "RET Z", 0, 2, 5 },
 	[0xC9] = { "RET", 0, 4 },
-	[0xCA] = { "JP Z, u16", 2, (uint8_t)-1 },
+	[0xCA] = { "JP Z, u16", 2, 3, 4 },
 	[0xCB] = { "PREFIX", 0, 0 },  // Num cycles is 0 here because it's taken from the extended instruction table.
-	[0xCC] = { "CALL Z, u16", 2, (uint8_t)-1 },
+	[0xCC] = { "CALL Z, u16", 2, 3, 6 },
 	[0xCD] = { "CALL u16", 2, 6 },
 	[0xCE] = { "ADC A, u8", 1, 2 },
 	[0xCF] = { "RST 08h", 0, 4 },
 
-	[0xD0] = { "RET NC", 0, (uint8_t)-1 },
+	[0xD0] = { "RET NC", 0, 2, 5 },
 	[0xD1] = { "POP DE", 0, 3 },
-	[0xD2] = { "JP NC, u16", 2, (uint8_t)-1 },
-	[0xD4] = { "CALL NC, u16", 2, (uint8_t)-1 },
+	[0xD2] = { "JP NC, u16", 2, 3, 4 },
+	[0xD4] = { "CALL NC, u16", 2, 3, 6 },
 	[0xD5] = { "PUSH DE", 0, 4 },
 	[0xD6] = { "SUB A, u8", 1, 2 },
 	[0xD7] = { "RST 10h", 0, 4 },
 
-	[0xD8] = { "RET C", 0, (uint8_t)-1 },
+	[0xD8] = { "RET C", 0, 2, 5 },
 	[0xD9] = { "RETI", 0, 4 },
-	[0xDA] = { "JP C, u16", 2, (uint8_t)-1 },
-	[0xDC] = { "CALL C, u16", 2, (uint8_t)-1 },
+	[0xDA] = { "JP C, u16", 2, 3, 4 },
+	[0xDC] = { "CALL C, u16", 2, 3, 6 },
 	[0xDE] = { "SBC A, u8", 1, 2 },
 	[0xDF] = { "RST 18h", 0, 4 },
 
@@ -1892,7 +1893,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 	assert(gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) != extended_inst_prefix ||
 			gb_MemoryReadByte(gb, gb->cpu.pc - gb_InstructionSize(inst)) - 1 == extended_inst_prefix);
 
-	uint16_t result = gb__basic_instruction_infos[inst.opcode].min_num_machine_cycles;
+	bool branch = false;
 
 	switch (inst.opcode)
 	{
@@ -2001,11 +2002,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		if (gb->cpu.flags.zero == 0)
 		{
 			gb->cpu.pc += (int8_t)inst.operand_byte;
-			result = 3;
-		}
-		else
-		{
-			result = 2;
+			branch = true;
 		}
 		break;
 	case 0x21:  // LD HL, u16
@@ -2064,11 +2061,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		if (gb->cpu.flags.zero == 1)
 		{
 			gb->cpu.pc += (int8_t)inst.operand_byte;
-			result = 3;
-		}
-		else
-		{
-			result = 2;
+			branch = true;
 		}
 		break;
 	case 0x29:  // ADD HL, HL
@@ -2099,11 +2092,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		if (gb->cpu.flags.carry == 0)
 		{
 			gb->cpu.pc += (int8_t)inst.operand_byte;
-			result = 3;
-		}
-		else
-		{
-			result = 2;
+			branch = true;
 		}
 		break;
 	case 0x31:  // LD SP, u16
@@ -2141,11 +2130,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		if (gb->cpu.flags.carry == 1)
 		{
 			gb->cpu.pc += (int8_t)inst.operand_byte;
-			result = 3;
-		}
-		else
-		{
-			result = 2;
+			branch = true;
 		}
 		break;
 	case 0x39:  // ADD HL, SP
@@ -2377,11 +2362,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		if (gb->cpu.flags.zero == 0)
 		{
 			gb->cpu.pc = gb__PopWordToStack(gb);
-			result = 5;
-		}
-		else
-		{
-			result = 2;
+			branch = true;
 		}
 		break;
 	case 0xC1:  // POP BC
@@ -2391,11 +2372,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		if (gb->cpu.flags.zero == 0)
 		{
 			gb->cpu.pc = inst.operand_word;
-			result = 4;
-		}
-		else
-		{
-			result = 3;
+			branch = true;
 		}
 		break;
 	case 0xC3:  // JP u16
@@ -2406,11 +2383,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		{
 			gb__PushWordToStack(gb, gb->cpu.pc);
 			gb->cpu.pc = inst.operand_word;
-			result = 6;
-		}
-		else
-		{
-			result = 3;
+			branch = true;
 		}
 		break;
 	case 0xC5:  // PUSH BC
@@ -2428,11 +2401,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		if (gb->cpu.flags.zero == 1)
 		{
 			gb->cpu.pc = gb__PopWordToStack(gb);
-			result = 5;
-		}
-		else
-		{
-			result = 2;
+			branch = true;
 		}
 		break;
 	case 0xC9:  // RET
@@ -2442,11 +2411,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		if (gb->cpu.flags.zero == 1)
 		{
 			gb->cpu.pc = inst.operand_word;
-			result = 4;
-		}
-		else
-		{
-			result = 3;
+			branch = true;
 		}
 		break;
 	case 0xCB:  // PREFIX
@@ -2458,11 +2423,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		{
 			gb__PushWordToStack(gb, gb->cpu.pc);
 			gb->cpu.pc = inst.operand_word;
-			result = 6;
-		}
-		else
-		{
-			result = 3;
+			branch = true;
 		}
 		break;
 	case 0xCD:  // CALL u16
@@ -2483,11 +2444,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		if (gb->cpu.flags.carry == 0)
 		{
 			gb->cpu.pc = gb__PopWordToStack(gb);
-			result = 5;
-		}
-		else
-		{
-			result = 2;
+			branch = true;
 		}
 		break;
 	case 0xD1:  // POP DE
@@ -2497,11 +2454,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		if (gb->cpu.flags.carry == 0)
 		{
 			gb->cpu.pc = inst.operand_word;
-			result = 4;
-		}
-		else
-		{
-			result = 3;
+			branch = true;
 		}
 		break;
 	case 0xD4:  // CALL NC, u16
@@ -2509,11 +2462,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		{
 			gb__PushWordToStack(gb, gb->cpu.pc);
 			gb->cpu.pc = inst.operand_word;
-			result = 6;
-		}
-		else
-		{
-			result = 3;
+			branch = true;
 		}
 		break;
 	case 0xD5:  // PUSH DE
@@ -2531,11 +2480,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		if (gb->cpu.flags.carry == 1)
 		{
 			gb->cpu.pc = gb__PopWordToStack(gb);
-			result = 5;
-		}
-		else
-		{
-			result = 2;
+			branch = true;
 		}
 		break;
 	case 0xD9:  // RETI
@@ -2546,11 +2491,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		if (gb->cpu.flags.carry == 1)
 		{
 			gb->cpu.pc = inst.operand_word;
-			result = 4;
-		}
-		else
-		{
-			result = 3;
+			branch = true;
 		}
 		break;
 	case 0xDC:  // CALL C, u16
@@ -2558,11 +2499,7 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		{
 			gb__PushWordToStack(gb, gb->cpu.pc);
 			gb->cpu.pc = inst.operand_word;
-			result = 6;
-		}
-		else
-		{
-			result = 3;
+			branch = true;
 		}
 		break;
 	case 0xDE:  // SBC A, u8
@@ -2692,6 +2629,8 @@ gb__ExecuteBasicInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		break;
 	}
 
+	gb__InstructionInfo info = gb__basic_instruction_infos[inst.opcode];
+	uint16_t result = branch ? info.num_machine_cycles_with_branch : info.num_machine_cycles_wo_branch;
 	return result;
 }
 
@@ -3138,7 +3077,9 @@ gb__ExecuteExtendedInstruction(gb_GameBoy *gb, gb_Instruction inst)
 		break;
 	}
 
-	return gb__extended_instruction_infos[inst.opcode].min_num_machine_cycles;
+	gb__InstructionInfo info = gb__extended_instruction_infos[inst.opcode];
+	assert(info.num_machine_cycles_with_branch == 0);
+	return info.num_machine_cycles_wo_branch;
 }
 
 static uint16_t
@@ -3745,20 +3686,18 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 
 		gb__InstructionInfo info = inst.is_extended ? gb__extended_instruction_infos[inst.opcode] :
 													  gb__basic_instruction_infos[inst.opcode];
-		bool know_num_cyles_upfront = info.min_num_machine_cycles != (uint8_t)-1;
-		if (know_num_cyles_upfront)
-		{
-			// gb__UpdateClockAndTimer(gb, info.min_num_machine_cycles);
-			gb__AdvancePpu(gb, info.min_num_machine_cycles);
-		}
+		// TODO LY: clock?
+		// gb__UpdateClockAndTimer(gb, info.num_machine_cycles);
+		gb__AdvancePpu(gb, info.num_machine_cycles_wo_branch);
 
 		num_cycles =
 				inst.is_extended ? gb__ExecuteExtendedInstruction(gb, inst) : gb__ExecuteBasicInstruction(gb, inst);
 
-		if (!know_num_cyles_upfront)
+		if (num_cycles > info.num_machine_cycles_wo_branch)
 		{
+			// TODO LY: clock?
 			// gb__UpdateClockAndTimer(gb, num_cycles);
-			gb__AdvancePpu(gb, num_cycles);
+			gb__AdvancePpu(gb, num_cycles - info.num_machine_cycles_wo_branch);
 		}
 		gb__UpdateClockAndTimer(gb, num_cycles);
 
