@@ -3551,6 +3551,11 @@ gb__RenderScanLine(gb_GameBoy *gb)
 	}
 }
 
+#define MODE_HBLANK_LENGTH 204
+#define MODE_OAM_SCAN_LENGTH 80
+#define MODE_VRAM_SCAN_LENGTH 172
+#define MODE_VBLANK_LINE_LENGTH 456
+
 static void
 gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 {
@@ -3582,9 +3587,9 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 	case GB_PPU_MODE_HBLANK:
 		assert(int48_signal->mode_vblank == 0);
 		assert(int48_signal->mode_oam_scan == 0);
-		if (ppu->mode_clock >= 204)
+		if (ppu->mode_clock >= MODE_HBLANK_LENGTH)
 		{
-			ppu->mode_clock -= 204;
+			ppu->mode_clock -= MODE_HBLANK_LENGTH;
 
 			// TODO(stefalie): This is rather inprecise. We should separately update
 			// LY. At line 0 it takes longer before the LY update comes, at line 153
@@ -3639,9 +3644,9 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			ppu->ly = 0;
 			gb__CompareLyToLyc(gb);
 		}
-		if (ppu->mode_clock >= 456)
+		if (ppu->mode_clock >= MODE_VBLANK_LINE_LENGTH)
 		{
-			ppu->mode_clock -= 456;
+			ppu->mode_clock -= MODE_VBLANK_LINE_LENGTH;
 			if (ppu->ly != 0)
 			{
 				++ppu->ly;
@@ -3670,9 +3675,9 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 	case GB_PPU_MODE_OAM_SCAN:
 		assert(int48_signal->mode_hblank == 0);
 		assert(int48_signal->mode_vblank == 0);
-		if (ppu->mode_clock >= 80)
+		if (ppu->mode_clock >= MODE_OAM_SCAN_LENGTH)
 		{
-			ppu->mode_clock -= 80;
+			ppu->mode_clock -= MODE_OAM_SCAN_LENGTH;
 			stat->mode = GB_PPU_MODE_VRAM_SCAN;
 
 			int48_signal->mode_oam_scan = 0;
@@ -3682,9 +3687,9 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 		assert(int48_signal->mode_hblank == 0);
 		assert(int48_signal->mode_vblank == 0);
 		assert(int48_signal->mode_oam_scan == 0);
-		if (ppu->mode_clock >= 172)
+		if (ppu->mode_clock >= MODE_VRAM_SCAN_LENGTH)
 		{
-			ppu->mode_clock -= 172;
+			ppu->mode_clock -= MODE_VRAM_SCAN_LENGTH;
 			stat->mode = GB_PPU_MODE_HBLANK;
 
 			if (stat->interrupt_mode_hblank)
@@ -3709,10 +3714,10 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 	//	gb->cpu.interrupt.if_flags.lcd_stat = 1;
 	//}
 
-	assert(stat->mode != GB_PPU_MODE_HBLANK || ppu->mode_clock < 204);
-	assert(stat->mode != GB_PPU_MODE_VBLANK || ppu->mode_clock < 456);
-	assert(stat->mode != GB_PPU_MODE_OAM_SCAN || ppu->mode_clock < 80);
-	assert(stat->mode != GB_PPU_MODE_VRAM_SCAN || ppu->mode_clock < 172);
+	assert(stat->mode != GB_PPU_MODE_HBLANK || ppu->mode_clock < MODE_HBLANK_LENGTH);
+	assert(stat->mode != GB_PPU_MODE_VBLANK || ppu->mode_clock < MODE_VBLANK_LINE_LENGTH);
+	assert(stat->mode != GB_PPU_MODE_OAM_SCAN || ppu->mode_clock < MODE_OAM_SCAN_LENGTH);
+	assert(stat->mode != GB_PPU_MODE_VRAM_SCAN || ppu->mode_clock < MODE_VRAM_SCAN_LENGTH);
 }
 
 size_t
