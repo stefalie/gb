@@ -3555,6 +3555,10 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 		{
 			ppu->mode_clock -= MODE_OAM_SCAN_LENGTH;
 			stat->mode = GB_PPU_MODE_VRAM_SCAN;
+
+			// This is vastly simplified. Ideally the LCD should get updated after
+			// every T cycle. See: https://gbdev.io/pandocs/Rendering.html
+			gb__RenderScanLine(gb);
 		}
 		break;
 	case GB_PPU_MODE_VRAM_SCAN:
@@ -3571,9 +3575,15 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				gb->cpu.interrupt.if_flags.lcd_stat = 1;
 			}
 
-			// This is vastly simplified. Ideally the LCD should get updated after
-			// every T cycle. See: https://gbdev.io/pandocs/Rendering.html
-			gb__RenderScanLine(gb);
+			// NOTE: By rendering full scan lines at a time instead of pushing out
+			// pixels at every clock tick we have the problem that it's not clear
+			// when the best time to render the scan line is.
+			// We have either the beginning or the end of the VRAM scan mode. I
+			// decided to go with the beginning (therefore the call to gb__RenderScanLine
+			// is in the GB_PPU_MODE_OAM_SCAN case). This fixes a subtle bug in Castelian
+			// where the siwtch from rendering the score board to the background happens
+			// one line to early and causes flickering.
+			// gb__RenderScanLine(gb);
 		}
 		break;
 	}
