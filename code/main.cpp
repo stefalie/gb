@@ -540,7 +540,6 @@ struct Emulator
 		gb_PpuMode prev_lcd_mode;
 		bool stop_at_vblank = false;
 
-		bool stop_at_longjmp = false;
 		// TODO(stefalie): We might also want to store the previous state of pause
 		// for the case that we only pause to open a modal popup. When we return
 		// from the popup, we should go back to the state it had before the popup.
@@ -818,10 +817,10 @@ GuiDraw(Emulator *emu, gb_GameBoy *gb)
 				{
 					emu->gui.stop_at_vblank = !emu->gui.stop_at_vblank;
 				}
-				if (ImGui::MenuItem("Stop at longjmp", "F12", emu->gui.stop_at_longjmp))
-				{
-					emu->gui.stop_at_longjmp = !emu->gui.stop_at_longjmp;
-				}
+				// TODO(stefalie): Add debug option to stop at long jumps (JP, CALL, RET, RETI,
+				// interrupts (maybe as a separate option)). This requires looking at the zero/carry
+				// while PC is on an instruction with a conditional jump.
+				// if (ImGui::MenuItem("Stop at longjmp", "F12", emu->gui.stop_at_longjmp))
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Help"))
@@ -1085,9 +1084,9 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 			ImGuiID dock_bl = ImGui::DockBuilderSplitNode(dock_l, ImGuiDir_Down, 0.6f, NULL, &dock_tl);
 
 			ImGuiID dock_tr;
-			ImGuiID dock_br = ImGui::DockBuilderSplitNode(dock_r, ImGuiDir_Down, 0.55f, NULL, &dock_tr);
+			ImGuiID dock_br = ImGui::DockBuilderSplitNode(dock_r, ImGuiDir_Down, 0.6f, NULL, &dock_tr);
 			ImGuiID dock_tr_t;
-			ImGuiID dock_tr_b = ImGui::DockBuilderSplitNode(dock_tr, ImGuiDir_Down, 0.40f, NULL, &dock_tr_t);
+			ImGuiID dock_tr_b = ImGui::DockBuilderSplitNode(dock_tr, ImGuiDir_Down, 0.45f, NULL, &dock_tr_t);
 			ImGuiID dock_br_t;
 			ImGuiID dock_br_b = ImGui::DockBuilderSplitNode(dock_br, ImGuiDir_Down, 0.45f, NULL, &dock_br_t);
 
@@ -1243,33 +1242,49 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 			ImGui::Text("Clock acc (m-cyles): %u", gb->ppu.mode_clock / 4);
 			ImGui::Text("Registers:");
 			ImGui::Text("lcdc 0xFF40 = 0x%02X", gb->ppu.lcdc.reg);
-			ImGui::Text("\tBG/Win enable    = %u", gb->ppu.lcdc.bg_and_win_enable);
-			ImGui::Text("\tOBJ              = %u", gb->ppu.lcdc.sprite_enable);
-			ImGui::Text("\tOBJ size         = %u (%s)", gb->ppu.lcdc.sprite_size,
-					gb->ppu.lcdc.sprite_size ? "8x16" : "8x8");
-			ImGui::Text("\tBG tilemap       = %u (%s)", gb->ppu.lcdc.bg_tilemap_select,
-					gb->ppu.lcdc.bg_tilemap_select ? "0x9C00-0x9FFF" : "0x9800-0x9BFF");
-			ImGui::Text("\tBG/Win addr mode = %u (%s)", gb->ppu.lcdc.bg_and_win_addr_mode,
-					gb->ppu.lcdc.bg_and_win_addr_mode ? "base 0x9000 via int8" : "base 0x9800 via uint8");
-			ImGui::Text("\tBG enable        = %u", gb->ppu.lcdc.win_enable);
-			ImGui::Text("\tWin tilemap      = %u (%s)", gb->ppu.lcdc.win_tilemap_select,
-					gb->ppu.lcdc.win_tilemap_select ? "0x9C00-0x9FFF" : "0x9800-0x9BFF");
-			ImGui::Text("\tLCD enable       = %u", gb->ppu.lcdc.lcd_enable);
-			ImGui::Text("stat 0xFF41 = 0x%02X", gb->ppu.stat.reg, gb->ppu.stat.mode);
-			ImGui::Text("\tmode                = %u", gb->ppu.stat.mode);
-			ImGui::Text("\tly == lyc           = %u", gb->ppu.stat.coincidence_flag);
-			ImGui::Text("\thblank (mode 0) int = %u", gb->ppu.stat.interrupt_mode_hblank);
-			ImGui::Text("\tvblank (mode 1) int = %u", gb->ppu.stat.interrupt_mode_vblank);
-			ImGui::Text("\toam (mode 2) int    = %u", gb->ppu.stat.interrupt_mode_oam_scan);
-			ImGui::Text("\tly == lyc int       = %u", gb->ppu.stat.coincidence_flag);
+			if (ImGui::CollapsingHeader("lcdc details"))
+			{
+				ImGui::Text("\tBG/Win enable    = %u", gb->ppu.lcdc.bg_and_win_enable);
+				ImGui::Text("\tOBJ              = %u", gb->ppu.lcdc.sprite_enable);
+				ImGui::Text("\tOBJ size         = %u (%s)", gb->ppu.lcdc.sprite_size,
+						gb->ppu.lcdc.sprite_size ? "8x16" : "8x8");
+				ImGui::Text("\tBG tilemap       = %u (%s)", gb->ppu.lcdc.bg_tilemap_select,
+						gb->ppu.lcdc.bg_tilemap_select ? "0x9C00-0x9FFF" : "0x9800-0x9BFF");
+				ImGui::Text("\tBG/Win addr mode = %u (%s)", gb->ppu.lcdc.bg_and_win_addr_mode,
+						gb->ppu.lcdc.bg_and_win_addr_mode ? "base 0x9000 via int8" : "base 0x9800 via uint8");
+				ImGui::Text("\tBG enable        = %u", gb->ppu.lcdc.win_enable);
+				ImGui::Text("\tWin tilemap      = %u (%s)", gb->ppu.lcdc.win_tilemap_select,
+						gb->ppu.lcdc.win_tilemap_select ? "0x9C00-0x9FFF" : "0x9800-0x9BFF");
+				ImGui::Text("\tLCD enable       = %u", gb->ppu.lcdc.lcd_enable);
+			}
+			ImGui::Text("stat 0xFF41 = 0x%02X", gb->ppu.stat.reg);
+			if (ImGui::CollapsingHeader("stat details"))
+			{
+				const char *mode_names[] = {
+					"hblank",
+					"vblank",
+					" oam scan",
+					"vram scan",
+				};
+				ImGui::Text("\tmode                = %u (%s)", gb->ppu.stat.mode, mode_names[gb->ppu.stat.mode]);
+				ImGui::Text("\tly == lyc           = %u", gb->ppu.stat.coincidence_flag);
+				ImGui::Text("\thblank (mode 0) int = %u", gb->ppu.stat.interrupt_mode_hblank);
+				ImGui::Text("\tvblank (mode 1) int = %u", gb->ppu.stat.interrupt_mode_vblank);
+				ImGui::Text("\toam (mode 2) int    = %u", gb->ppu.stat.interrupt_mode_oam_scan);
+				ImGui::Text("\tly == lyc int       = %u", gb->ppu.stat.coincidence_flag);
+			}
 			ImGui::Text("scy  0xFF42 = 0x%02X (%3u)", gb->ppu.scy, gb->ppu.scy);
 			ImGui::Text("scx  0xFF43 = 0x%02X (%3u)", gb->ppu.scx, gb->ppu.scx);
 			ImGui::Text("ly   0xFF44 = 0x%02X (%3u)", gb->ppu.ly, gb->ppu.ly);
+			ImGui::Text("ly win      = 0x%02X (%3u)", gb->ppu.ly_win_internal, gb->ppu.ly_win_internal);
 			ImGui::Text("lyc  0xFF45 = 0x%02X (%3u)", gb->ppu.lyc, gb->ppu.lyc);
 			ImGui::Text("dma  0xFF46");
-			ImGui::Text("bgp  0xFF47 = 0x%02X", gb->ppu.bgp);
-			ImGui::Text("obp0 0xFF48 = 0x%02X", gb->ppu.obp0);
-			ImGui::Text("obp1 0xFF49 = 0x%02X", gb->ppu.obp1);
+			ImGui::Text("bgp  0xFF47 = 0x%02X (%u %u %u %u)", gb->ppu.bgp, gb->ppu.bgp & 3u, (gb->ppu.bgp >> 2u) & 3u,
+					(gb->ppu.bgp >> 4u) & 3u, (gb->ppu.bgp >> 6u) & 3u);
+			ImGui::Text("obp0 0xFF48 = 0x%02X (%u %u %u %u)", gb->ppu.obp0, gb->ppu.obp0 & 3u,
+					(gb->ppu.obp0 >> 2u) & 3u, (gb->ppu.obp0 >> 4u) & 3u, (gb->ppu.obp0 >> 6u) & 3u);
+			ImGui::Text("obp1 0xFF49 = 0x%02X (%u %u %u %u)", gb->ppu.obp1, gb->ppu.obp1 & 3u,
+					(gb->ppu.obp1 >> 2u) & 3u, (gb->ppu.obp1 >> 4u) & 3u, (gb->ppu.obp1 >> 6u) & 3u);
 			ImGui::Text("wy   0xFF4B = 0x%02X (%3u)", gb->ppu.wy, gb->ppu.wy);
 			ImGui::Text("wx   0xFF4B = 0x%02X (%3u)", gb->ppu.wx, gb->ppu.wx);
 			ImGui::End();
@@ -1277,6 +1292,7 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 
 		{
 			ImGui::Begin(tab_name_cpu);
+			ImGui::Text("Halt: %s\tStop: %s", gb->cpu.halt ? "on " : "off", gb->cpu.stop ? "on" : "off");
 			ImGui::Text("Registers:");
 			ImGui::Text("a = 0x%02X\tf = 0x%02X\taf = 0x%04X\n", gb->cpu.a, gb->cpu.f, gb->cpu.af);
 			ImGui::Text("b = 0x%02X\tc = 0x%02X\tbc = 0x%04X\n", gb->cpu.b, gb->cpu.c, gb->cpu.bc);
@@ -1352,7 +1368,6 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 		ImGui::Checkbox("Highlight current instruction", &emu->debug.views_follow_pc);
 		ImGui::Checkbox("Single step mode/Pause (space then step with F10)", &emu->gui.pause);
 		ImGui::Checkbox("Stop at V-Blank (F11)", &emu->gui.stop_at_vblank);
-		ImGui::Checkbox("Stop at longjmp (F12)", &emu->gui.stop_at_longjmp);
 
 		// Compute average framerate.
 		static Uint64 frequency = SDL_GetPerformanceFrequency();
@@ -1843,10 +1858,6 @@ main(int argc, char *argv[])
 				{
 					emu.gui.stop_at_vblank = !emu.gui.stop_at_vblank;
 				}
-				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F12)
-				{
-					emu.gui.stop_at_longjmp = !emu.gui.stop_at_longjmp;
-				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE)
 				{
 					emu.gui.pause = !emu.gui.pause;
@@ -1920,6 +1931,21 @@ main(int argc, char *argv[])
 
 			while (m_cycle_acc > 0)
 			{
+				const size_t emulated_m_cycles = gb_ExecuteNextInstruction(&gb);
+				assert(emulated_m_cycles > 0);
+				m_cycle_acc -= emulated_m_cycles;
+				emu.debug.elapsed_m_cycles += emulated_m_cycles;
+
+				if (gb_FramebufferUpdated(&gb) && !has_updated_fb)
+				{
+					UpdateGameTexture(&gb, &emu, texture, pixels);
+					has_updated_fb = true;
+				}
+
+				// TODO(stefalie): If there is a breakpoint on 0x0100 and the BIOS
+				// is skipped, we unfortunately won't stop. But if moved above,
+				// gb_ExecuteNextInstruction we can't ever progress with 'space'.
+				//
 				// Breakpoints for debugging
 				if (emu.debug.show)
 				{
@@ -1931,17 +1957,6 @@ main(int argc, char *argv[])
 							goto exit;
 						}
 					}
-				}
-
-				const size_t emulated_m_cycles = gb_ExecuteNextInstruction(&gb);
-				assert(emulated_m_cycles > 0);
-				m_cycle_acc -= emulated_m_cycles;
-				emu.debug.elapsed_m_cycles += emulated_m_cycles;
-
-				if (gb_FramebufferUpdated(&gb) && !has_updated_fb)
-				{
-					UpdateGameTexture(&gb, &emu, texture, pixels);
-					has_updated_fb = true;
 				}
 
 				// Break when new frame is shown.

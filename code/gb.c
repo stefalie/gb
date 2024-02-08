@@ -418,13 +418,13 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 			else if ((addr >= 0xFF10 && addr <= 0xFF14) || (addr >= 0xFF16 && addr <= 0xFF1E) ||
 					(addr >= 0xFF20 && addr <= 0xFF26))
 			{
-				// TODO
+				// TODO SND
 				return gb->sound.nr[addr - 0xFF10];
 			}
 			// Wave pattern
 			else if (addr >= 0xFF30 && addr <= 0xFF3F)
 			{
-				// TODO
+				// TODO SND
 				return gb->sound.w[addr - 0xFF30];
 			}
 			// Display
@@ -742,13 +742,13 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			else if ((addr >= 0xFF10 && addr <= 0xFF14) || (addr >= 0xFF16 && addr <= 0xFF1E) ||
 					(addr >= 0xFF20 && addr <= 0xFF26))
 			{
-				// TODO
+				// TODO SND
 				gb->sound.nr[addr - 0xFF10] = value;
 			}
 			// Wave pattern
 			else if (addr >= 0xFF30 && addr <= 0xFF3F)
 			{
-				// TODO
+				// TODO SND
 				gb->sound.w[addr - 0xFF30] = value;
 			}
 			// Display
@@ -763,6 +763,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					// Disable LCD
 					// See: https://www.reddit.com/r/Gameboy/comments/a1c8h0/comment/eap4f8c/
 					gb->ppu.ly = 0;
+					gb->ppu.ly_win_internal = 0;
 					gb->ppu.stat.coincidence_flag = gb->ppu.ly == gb->ppu.lyc;
 					ppu->stat.mode = GB_PPU_MODE_HBLANK;  // NOTE: VBA does this, conflicts with the link above.
 					ppu->mode_clock = 0;
@@ -1000,8 +1001,6 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 
 	gb->joypad.buttons = 0x0F;
 	gb->joypad.dpad = 0x0F;
-	// TODO
-	// gb->joypad.selection_wire = 0x30;
 	gb->joypad.dpad_select = 1;
 	gb->joypad.buttons_select = 1;
 	gb->joypad._ = 0x3;
@@ -3303,13 +3302,19 @@ gb__RenderScanLine(gb_GameBoy *gb)
 	// Window
 	if (lcdc->win_enable && lcdc->bg_and_win_enable)
 	{
-		// TODO(stefalie): It seems that the window should use its own, seperate "ly".
-		// See: https://gbdev.io/pandocs/Tile_Maps.html
+		// NOTE: This uses a separate, window internal "LY". See:
+		// - https://www.reddit.com/r/EmuDev/comments/zzltyt/what_is_the_window_internal_line_counter
+		// - https://gbdev.io/pandocs/Tile_Maps.html
 
-		if (gb->ppu.ly >= gb->ppu.wy)
+		const bool win_visible = gb->ppu.ly >= gb->ppu.wy && gb->ppu.wy <= 143 && gb->ppu.wx >= 0 && gb->ppu.wx <= 166;
+		if (win_visible)
 		{
-			assert(gb->ppu.wy < 144);
-			uint8_t y = gb->ppu.ly - gb->ppu.wy;
+			// TODO(stefalie): Window bugs not implemented.
+			// See: https://gbdev.io/pandocs/Scrolling.html#ff4aff4b--wy-wx-window-y-position-x-position-plus-7
+			// Can't assert, Donkey Kong sets WX = 166. Sigh.
+			// assert(gb->ppu.wx != 0 && gb->ppu.wx != 166);
+
+			uint8_t y = gb->ppu.ly_win_internal;
 			uint8_t tile_y = y >> 3u;
 			uint8_t in_tile_y = y & 7u;
 
@@ -3329,6 +3334,8 @@ gb__RenderScanLine(gb_GameBoy *gb)
 					scan_line[fb_x] = bgp_map[pixel];
 				}
 			}
+
+			++gb->ppu.ly_win_internal;
 		}
 	}
 
@@ -3527,6 +3534,7 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			// LY == 0 will therefore take that much longer.
 			// See: https://gameboy.mongenel.com/dmg/istat98.txt
 			ppu->ly = 0;
+			gb->ppu.ly_win_internal = 0;
 			gb__CompareLyToLyc(gb, prev_int48_signal);
 		}
 		if (ppu->mode_clock >= MODE_VBLANK_LINE_LENGTH)

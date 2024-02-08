@@ -199,7 +199,7 @@ typedef struct gb_GameBoy
 			struct
 			{
 				uint8_t mode : 2;  // A value of 'gb_PpuMode' (but can't use it as type).
-				uint8_t coincidence_flag : 1;  // TOOD:ren 
+				uint8_t coincidence_flag : 1;  // TOOD:ren
 				uint8_t interrupt_mode_hblank : 1;
 				uint8_t interrupt_mode_vblank : 1;
 				uint8_t interrupt_mode_oam_scan : 1;
@@ -212,6 +212,7 @@ typedef struct gb_GameBoy
 		uint8_t scy;  // Scroll Y
 		uint8_t scx;  // Scroll X
 		uint8_t ly;  // Line
+		uint8_t ly_win_internal;  // Line while window is active
 		uint8_t lyc;  // Line compare
 		uint8_t bgp;  // Background & window palette
 		uint8_t obp0;  // Object palette 0
