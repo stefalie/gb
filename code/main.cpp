@@ -544,6 +544,7 @@ struct Emulator
 		// for the case that we only pause to open a modal popup. When we return
 		// from the popup, we should go back to the state it had before the popup.
 		bool pause = false;
+		bool audio_paused = true;
 	} gui;
 
 	struct Debugger
@@ -1475,11 +1476,22 @@ UpdateGameTexture(gb_GameBoy *gb, Emulator *cfg, GLuint texture, gb_Color *pixel
 	}
 }
 
+static const size_t audio_sampling_rate = 48000;
+
+static void
+PlayAudio(void *user_data, uint8_t *stream, int len)
+{
+	gb_SampleAudio((gb_GameBoy *)user_data, audio_sampling_rate, len, stream);
+}
+
 int
 main(int argc, char *argv[])
 {
 	(void)argc;
 	(void)argv;
+
+	gb_GameBoy gb = {};
+
 	SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
 	// The high DPI behavior is a bit strange, at least on Windows.
 	// Both SDL_GetWindowSize and SDL_GL_GetDrawableSize always return the same
@@ -1489,6 +1501,24 @@ main(int argc, char *argv[])
 	// With high DPI enabled, the window on the screen simply appears smaller.
 
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS | SDL_INIT_GAMECONTROLLER) < 0)
+	{
+		SDL_CheckError();
+		exit(1);
+	}
+
+	// TODO(steaflie): Add an icon.
+
+	// Sound
+	SDL_AudioSpec audio_req = {}, audio;
+	audio_req.freq = audio_sampling_rate;
+	audio_req.format = AUDIO_S8;
+	audio_req.channels = 1;
+	audio_req.samples = 128;
+	audio_req.userdata = &gb;
+	audio_req.callback = &PlayAudio;
+	SDL_AudioDeviceID audio_dev = SDL_OpenAudioDevice(NULL, 0, &audio_req, &audio, 0);
+	assert(audio.freq == audio_sampling_rate);
+	if (!audio_dev)
 	{
 		SDL_CheckError();
 		exit(1);
@@ -1517,6 +1547,7 @@ main(int argc, char *argv[])
 				SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
 		if (!emu.handles.window)
 		{
+			SDL_CloseAudioDevice(audio_dev);
 			SDL_CheckError();
 			SDL_Quit();
 			exit(1);
@@ -1531,6 +1562,7 @@ main(int argc, char *argv[])
 		if (!emu.handles.debug_window)
 		{
 			SDL_DestroyWindow(emu.handles.window);
+			SDL_CloseAudioDevice(audio_dev);
 			SDL_CheckError();
 			SDL_Quit();
 			exit(1);
@@ -1605,7 +1637,6 @@ main(int argc, char *argv[])
 				dmca_sans_serif_v0900_600_compressed_data, dmca_sans_serif_v0900_600_compressed_size, main_font_size);
 	}
 
-	gb_GameBoy gb = {};
 	gb_Color *pixels = (gb_Color *)malloc(gb_MaxMagFramebufferSizeInBytes());
 	if (argc > 1)
 	{
@@ -1887,7 +1918,10 @@ main(int argc, char *argv[])
 		// See https://github.com/TylerGlaiel/FrameTimingControl/blob/master/frame_timer.cpp
 		const uint64_t curr_time = SDL_GetPerformanceCounter();
 		const double dt_in_s = (double)(curr_time - prev_time) / counter_freq;
-		const uint32_t elapsed_m_cycles = (uint32_t)(dt_in_s * GB_MACHINE_M_FREQ);
+		uint32_t elapsed_m_cycles = (uint32_t)(dt_in_s * GB_MACHINE_M_FREQ);
+		// TODO(stefalie): Clamp the elapsed_m_cycles to a multiple of GB_MACHINE_CYCLES_PER_FRAME?
+		// Because otherwise, resuming from the debugger might freeze because there are too many
+		// cycles to catch up.
 		prev_time = curr_time;
 
 		emu.gui.show_gui_timeout_in_s -= (float)dt_in_s;
@@ -1899,6 +1933,17 @@ main(int argc, char *argv[])
 		// Run emulator
 		const bool is_running_debug_mode = emu.gui.has_active_rom && emu.gui.pause && emu.gui.exec_next_step;
 		const bool is_running_normal_mode = emu.gui.has_active_rom && !emu.gui.pause;
+
+		if (is_running_normal_mode && emu.gui.audio_paused)
+		{
+			SDL_PauseAudioDevice(audio_dev, 0);
+			emu.gui.audio_paused = false;
+		}
+		if (!is_running_normal_mode && !emu.gui.audio_paused)
+		{
+			SDL_PauseAudioDevice(audio_dev, 1);
+			emu.gui.audio_paused = true;
+		}
 
 		if (is_running_debug_mode)
 		{
@@ -2105,6 +2150,7 @@ main(int argc, char *argv[])
 	SDL_GL_DeleteContext(emu.handles.gl_context);
 	SDL_DestroyWindow(emu.handles.debug_window);
 	SDL_DestroyWindow(emu.handles.window);
+	SDL_CloseAudioDevice(audio_dev);
 
 	SDL_Quit();
 

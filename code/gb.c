@@ -419,13 +419,12 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 					(addr >= 0xFF20 && addr <= 0xFF26))
 			{
 				// TODO SND
-				return gb->sound.nr[addr - 0xFF10];
+				return gb->apu.nr[addr - 0xFF10];
 			}
 			// Wave pattern
 			else if (addr >= 0xFF30 && addr <= 0xFF3F)
 			{
-				// TODO SND
-				return gb->sound.w[addr - 0xFF30];
+				return gb->apu.wave_pattern[addr - 0xFF30];
 			}
 			// Display
 			else if (addr == 0xFF40)
@@ -743,13 +742,12 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					(addr >= 0xFF20 && addr <= 0xFF26))
 			{
 				// TODO SND
-				gb->sound.nr[addr - 0xFF10] = value;
+				gb->apu.nr[addr - 0xFF10] = value;
 			}
 			// Wave pattern
 			else if (addr >= 0xFF30 && addr <= 0xFF3F)
 			{
-				// TODO SND
-				gb->sound.w[addr - 0xFF30] = value;
+				gb->apu.wave_pattern[addr - 0xFF30] = value;
 			}
 			// Display
 			else if (addr == 0xFF40)
@@ -3751,6 +3749,19 @@ gb_SetInput(gb_GameBoy *gb, gb_Input input, bool down)
 		*reg |= bit;
 	}
 	assert((*reg & 0xF0) == 0);
+}
+
+void
+gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t *samples)
+{
+	const float freq = 120;  // Hz
+	const float m_pi = 3.14159265358979323846f;
+
+	for (int i = 0; i < num_samples; ++i)
+	{
+		*samples++ = (uint8_t)(sin((2.0f * m_pi) * freq * gb->apu.clock_time * 1.0f / sampling_rate) * 127);
+		++gb->apu.clock_time;
+	}
 }
 
 gb_Tile
