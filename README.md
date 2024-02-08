@@ -52,6 +52,9 @@ If you want to see the output written to the serial port of the GameBoy, the bui
 
 ## Known Issues & TODO
 
+TODO: split this into a different file.
+TODO: list which blargg tests actually work
+
 ### Blargg Tests Fail Because gb Is Instruction-Stepped
 
 Blargg's memory timing tests fail. This is because the emulator is instruction-stepped and not cycle-stepped. The tests look at the scenario where the timer is updated in the middle of an instruction and reading the register that contains the timer. Now the result depends on the exact cycles when the read/write and the timer update happen. This is currently not supported. See these sources here for a better explanation.
@@ -68,6 +71,16 @@ This emulates the "no link cable connected" scenario.
 
 The current solution is a quick hack but it prevents infinite loops in certain games.
 Tetris, for example, waits for a serial transfer interrupt when selecting the 2-player  menu option.
+
+### Balloon Kid
+
+The logo animation on the title screen is incorrect.
+SameBoy and VBA have this right, but bgb does something a little bit different on each reset.
+This is likely is an interrupt timing issue.
+Not sure this is easily fixable with the current renderer that writes an entire scan line at a time.
+
+Also, selecting the vs. mode in the menu freezes the game.
+Likely a serial transfer related issue, 
 
 ## Resources
 

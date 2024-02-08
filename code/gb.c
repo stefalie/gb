@@ -3628,21 +3628,14 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		const gb_Instruction inst = gb_FetchInstruction(gb, gb->cpu.pc);
 		gb->cpu.pc += gb_InstructionSize(inst);
 
-		gb__InstructionInfo info = inst.is_extended ? gb__extended_instruction_infos[inst.opcode] :
-													  gb__basic_instruction_infos[inst.opcode];
-		// TODO(stefalie): See next TODO.
-		// gb__UpdateClockAndTimer(gb, info.num_machine_cycles);
-		gb__AdvancePpu(gb, info.num_machine_cycles_wo_branch);
-
 		num_cycles =
 				inst.is_extended ? gb__ExecuteExtendedInstruction(gb, inst) : gb__ExecuteBasicInstruction(gb, inst);
 
-		if (num_cycles > info.num_machine_cycles_wo_branch)
-		{
-			// TODO(stefalie): Is it better to individually update the timer twice?
-			// gb__UpdateClockAndTimer(gb, num_cycles);
-			gb__AdvancePpu(gb, num_cycles - info.num_machine_cycles_wo_branch);
-		}
+		// NOTE: Unclear if the updates should be done before or after the execution
+		// of the instruction. (Before has the problem that you don't know how many
+		// cycles it took in the case of a conditional jump.) That is the curse of
+		// instruction-stepping and of always rendering full scan lines at once.
+		gb__AdvancePpu(gb, num_cycles);
 		gb__UpdateClockAndTimer(gb, num_cycles);
 
 #if BLARGG_TEST_ENABLE
