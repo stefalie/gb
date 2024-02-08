@@ -1245,11 +1245,15 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 			ImGui::Text("lcdc 0xFF40 = 0x%02X", gb->ppu.lcdc.reg);
 			ImGui::Text("\tBG/Win enable    = %u", gb->ppu.lcdc.bg_and_win_enable);
 			ImGui::Text("\tOBJ              = %u", gb->ppu.lcdc.sprite_enable);
-			ImGui::Text("\tOBJ size         = %u (%s)", gb->ppu.lcdc.sprite_size, gb->ppu.lcdc.sprite_size ? "8x16" : "8x8");
-			ImGui::Text("\tBG tilemap       = %u (%s)", gb->ppu.lcdc.bg_tilemap_select, gb->ppu.lcdc.bg_tilemap_select ? "0x9C00-0x9FFF" : "0x9800-0x9BFF");
-			ImGui::Text("\tBG/Win addr mode = %u (%s)", gb->ppu.lcdc.bg_and_win_addr_mode, gb->ppu.lcdc.bg_and_win_addr_mode ? "base 0x9000 via int8" : "base 0x9800 via uint8");
+			ImGui::Text("\tOBJ size         = %u (%s)", gb->ppu.lcdc.sprite_size,
+					gb->ppu.lcdc.sprite_size ? "8x16" : "8x8");
+			ImGui::Text("\tBG tilemap       = %u (%s)", gb->ppu.lcdc.bg_tilemap_select,
+					gb->ppu.lcdc.bg_tilemap_select ? "0x9C00-0x9FFF" : "0x9800-0x9BFF");
+			ImGui::Text("\tBG/Win addr mode = %u (%s)", gb->ppu.lcdc.bg_and_win_addr_mode,
+					gb->ppu.lcdc.bg_and_win_addr_mode ? "base 0x9000 via int8" : "base 0x9800 via uint8");
 			ImGui::Text("\tBG enable        = %u", gb->ppu.lcdc.win_enable);
-			ImGui::Text("\tWin tilemap      = %u (%s)", gb->ppu.lcdc.win_tilemap_select, gb->ppu.lcdc.win_tilemap_select ? "0x9C00-0x9FFF" : "0x9800-0x9BFF");
+			ImGui::Text("\tWin tilemap      = %u (%s)", gb->ppu.lcdc.win_tilemap_select,
+					gb->ppu.lcdc.win_tilemap_select ? "0x9C00-0x9FFF" : "0x9800-0x9BFF");
 			ImGui::Text("\tLCD enable       = %u", gb->ppu.lcdc.lcd_enable);
 			ImGui::Text("stat 0xFF41 = 0x%02X", gb->ppu.stat.reg, gb->ppu.stat.mode);
 			ImGui::Text("\tmode                = %u", gb->ppu.stat.mode);
@@ -1916,6 +1920,19 @@ main(int argc, char *argv[])
 
 			while (m_cycle_acc > 0)
 			{
+				// Breakpoints for debugging
+				if (emu.debug.show)
+				{
+					for (size_t i = 0; i < num_breakpoints; ++i)
+					{
+						if (breakpoints[i].enable && gb.cpu.pc == breakpoints[i].address)
+						{
+							emu.gui.pause = true;
+							goto exit;
+						}
+					}
+				}
+
 				const size_t emulated_m_cycles = gb_ExecuteNextInstruction(&gb);
 				assert(emulated_m_cycles > 0);
 				m_cycle_acc -= emulated_m_cycles;
@@ -1937,16 +1954,6 @@ main(int argc, char *argv[])
 					emu.gui.pause = true;
 					emu.debug.show = true;
 					goto exit;
-				}
-
-				// Breakpoints for debugging
-				for (size_t i = 0; i < num_breakpoints; ++i)
-				{
-					if (breakpoints[i].enable && gb.cpu.pc == breakpoints[i].address)
-					{
-						emu.gui.pause = true;
-						goto exit;
-					}
 				}
 			}
 		exit:;

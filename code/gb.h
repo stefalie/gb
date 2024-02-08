@@ -137,6 +137,8 @@ typedef struct gb_GameBoy
 					uint8_t timer : 1;
 					uint8_t serial : 1;
 					uint8_t joypad : 1;
+					// TODO(stefalie): I should probably init that to 0x7 and
+					// and sure it all stays high?
 					uint8_t _ : 3;
 				};
 				uint8_t reg;

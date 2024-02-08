@@ -386,9 +386,10 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				{
 					p1 &= gb->joypad.dpad;
 				}
-				assert((gb->joypad.selection_wire & ~0x30) == 0);
+				assert((gb->joypad.selection_wire & 0x0F) == 0);
+				assert(gb->joypad._ == 0x3);
 				p1 |= gb->joypad.selection_wire;
-				assert((p1 & ~0x3F) == 0);
+				assert((p1 & ~0x3F) == 0xC0);
 				return p1;
 			}
 			// Timer
@@ -689,6 +690,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 			if (addr == 0xFF00)
 			{
 				gb->joypad.selection_wire = value & 0x30;
+				gb->joypad._ = 0x3;
 			}
 			// Serial port
 			else if (addr == 0xFF01)
@@ -1002,6 +1004,7 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 	// gb->joypad.selection_wire = 0x30;
 	gb->joypad.dpad_select = 1;
 	gb->joypad.buttons_select = 1;
+	gb->joypad._ = 0x3;
 
 	gb__MemoryWriteByte(gb, 0xFF05, 0x00);
 	gb__MemoryWriteByte(gb, 0xFF06, 0x00);
