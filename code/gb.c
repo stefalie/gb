@@ -22,12 +22,12 @@ static const gb_Color gb__DefaultPalette[4] = {
 };
 // TODO(stefalie): This is currently unused.
 // Color scheme from https://gbdev.io/pandocs/Tile_Data.html
-static const gb_Color gb__GbDevIoPalette[4] = {
-	{ .r = 0xE0, .g = 0xF8, .b = 0xD0 },
-	{ .r = 0x88, .g = 0xC0, .b = 0x70 },
-	{ .r = 0x34, .g = 0x68, .b = 0x56 },
-	{ .r = 0x08, .g = 0x18, .b = 0x20 },
-};
+// static const gb_Color gb__GbDevIoPalette[4] = {
+//	{ .r = 0xE0, .g = 0xF8, .b = 0xD0 },
+//	{ .r = 0x88, .g = 0xC0, .b = 0x70 },
+//	{ .r = 0x34, .g = 0x68, .b = 0x56 },
+//	{ .r = 0x08, .g = 0x18, .b = 0x20 },
+//};
 
 #define ROM_HEADER_START_ADDRESS 0x0100
 typedef struct gb__RomHeader
@@ -415,16 +415,115 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				return gb->cpu.interrupt.if_flags.reg;
 			}
 			// Sound channels
-			else if ((addr >= 0xFF10 && addr <= 0xFF14) || (addr >= 0xFF16 && addr <= 0xFF1E) ||
-					(addr >= 0xFF20 && addr <= 0xFF26))
+			else if (addr >= 0xFF10 && addr <= 0xFF3F)
 			{
-				// TODO SND
-				return gb->apu.nr[addr - 0xFF10];
-			}
-			// Wave pattern
-			else if (addr >= 0xFF30 && addr <= 0xFF3F)
-			{
-				return gb->apu.wave_pattern[addr - 0xFF30];
+				// Master control
+				if (addr == 0xFF26)
+				{
+					const uint8_t nr52 = (gb->apu.audio_enable ? 0x80 : 0x00) + (undefined_value & 0x70) +
+							(gb->apu.ch1.enable ? 0x01 : 0x00) + (gb->apu.ch2.enable ? 0x02 : 0x00) +
+							(gb->apu.ch3.enable ? 0x04 : 0x00) + (gb->apu.ch4.enable ? 0x08 : 0x00);
+					assert((nr52 & 0x70) == 0x70);
+					return nr52;
+				}
+				// Channel 1
+				else if (addr == 0xFF10)
+				{
+					return gb->apu.ch1.nr10.reg;
+				}
+				else if (addr == 0xFF11)
+				{
+					return (undefined_value & ~0xC0) + (gb->apu.ch1.nr11.reg & 0xC0);
+				}
+				else if (addr == 0xFF12)
+				{
+					return gb->apu.ch1.nr12.reg;
+				}
+				else if (addr == 0xFF13)
+				{
+					return undefined_value;
+				}
+				else if (addr == 0xFF14)
+				{
+					return (undefined_value & ~0x40) + (gb->apu.ch1.nr14 & 0x40);
+				}
+				// Channel 2
+				else if (addr == 0xFF16)
+				{
+					return (undefined_value & ~0xC0) + (gb->apu.ch2.nr21.reg & 0xC0);
+				}
+				else if (addr == 0xFF17)
+				{
+					return gb->apu.ch2.nr22.reg;
+				}
+				else if (addr == 0xFF18)
+				{
+					return undefined_value;
+				}
+				else if (addr == 0xFF19)
+				{
+					return (undefined_value & ~0x40) + (gb->apu.ch2.nr24 & 0x40);
+				}
+				// Channel 3
+				else if (addr == 0xFF1A)
+				{
+					assert((gb->apu.ch3.nr30.reg & 0x7F) == 0x7F);
+					return gb->apu.ch3.nr30.reg;
+				}
+				else if (addr == 0xFF1B)
+				{
+					// NOTE: GameBoy CPU Manual and gbdev.io disagree on if this is W or RW.
+					return undefined_value;
+				}
+				else if (addr == 0xFF1C)
+				{
+					assert((gb->apu.ch3.nr32.reg & 0x9F) == 0x9F);
+					return gb->apu.ch3.nr32.reg;
+				}
+				else if (addr == 0xFF1D)
+				{
+					return undefined_value;
+				}
+				else if (addr == 0xFF1E)
+				{
+					return (undefined_value & ~0x40) + (gb->apu.ch3.nr34 & 0x40);
+				}
+				// Channel 4
+				else if (addr == 0xFF20)
+				{
+					return undefined_value;
+				}
+				else if (addr == 0xFF21)
+				{
+					return gb->apu.ch4.nr42.reg;
+				}
+				else if (addr == 0xFF22)
+				{
+					return gb->apu.ch4.nr43.reg;
+				}
+				else if (addr == 0xFF23)
+				{
+					return (undefined_value & ~0x40) + (gb->apu.ch4.nr44.reg & 0x40);
+				}
+				// Master volume
+				else if (addr == 0xFF24)
+				{
+					return gb->apu.nr50.reg;
+				}
+				// Sound panning
+				else if (addr == 0xFF25)
+				{
+					return gb->apu.nr51.reg;
+				}
+				// Wave pattern
+				else if (addr >= 0xFF30 && addr <= 0xFF3F)
+				{
+					return gb->apu.wave_pattern[addr - 0xFF30];
+				}
+				else
+				{
+					return undefined_value;
+				}
 			}
 			// Display
 			else if (addr == 0xFF40)
@@ -505,10 +604,28 @@ gb_MemoryReadWord(const gb_GameBoy *gb, uint16_t addr)
 	return gb_MemoryReadByte(gb, addr) + (gb_MemoryReadByte(gb, addr + 1) << 8u);
 }
 
+// TODO(steaflie): Should the undefined values really be 1?
+static void
+gb__ClearApu(gb_GameBoy *gb)
+{
+	gb->apu = (struct gb_Apu){ 0 };
+	gb->apu.ch1.nr10._ = 1;
+	gb->apu.ch1._ = 0x7;
+	gb->apu.ch2._ = 0x7;
+	gb->apu.ch3.nr30._ = 0x7F;
+	gb->apu.ch3.nr32._ = 0x1F;
+	gb->apu.ch3.nr32.__ = 1;
+	gb->apu.ch3._ = 0x7;
+	gb->apu.ch4.nr41._ = 0x3;
+	gb->apu.ch4.nr44._ = 0x3F;
+}
+
 static void
 gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 {
 	struct gb_Memory *mem = &gb->memory;
+
+	const uint8_t undefined_value = 0xFF;
 
 	switch (addr & 0xF000)
 	{
@@ -738,16 +855,133 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				gb->cpu.interrupt.if_flags.reg = value & 0x1F;
 			}
 			// Sound channels
-			else if ((addr >= 0xFF10 && addr <= 0xFF14) || (addr >= 0xFF16 && addr <= 0xFF1E) ||
-					(addr >= 0xFF20 && addr <= 0xFF26))
+			else if (addr >= 0xFF10 && addr <= 0xFF3F)
 			{
-				// TODO SND
-				gb->apu.nr[addr - 0xFF10] = value;
-			}
-			// Wave pattern
-			else if (addr >= 0xFF30 && addr <= 0xFF3F)
-			{
-				gb->apu.wave_pattern[addr - 0xFF30] = value;
+				// Master control
+				if (addr == 0xFF26)
+				{
+					bool enable = (value & 0x80) != 0x00;
+					if (gb->apu.audio_enable && !enable)
+					{
+						// TODO SND: length timers
+						gb__ClearApu(gb);
+					}
+					gb->apu.audio_enable = enable;
+				}
+				else if (gb->apu.audio_enable)
+				{
+					// Channel 1
+					if (addr == 0xFF10)
+					{
+						// TODO(stefalie): Maybe, technically we should double buffer the frequency sweep
+						// pace because it should only change after a complete frequency_sweep iteration.
+						gb->apu.ch1.nr10.reg = (undefined_value & ~0x7F) + (value & 0x7F);
+					}
+					else if (addr == 0xFF11)
+					{
+						gb->apu.ch1.nr11.reg = value;
+					}
+					else if (addr == 0xFF12)
+					{
+						if ((value & 0xF8) == 0x00)
+						{
+							gb->apu.ch1.enable = false;
+						}
+						gb->apu.ch1.nr12.reg = value;
+					}
+					else if (addr == 0xFF13)
+					{
+						gb->apu.ch1.nr13 = value;
+					}
+					else if (addr == 0xFF14)
+					{
+						gb->apu.ch1.nr14 = (undefined_value & ~0x38) + (value & 0x47);
+						gb->apu.ch1.trigger = 1;
+					}
+					// Channel 2
+					else if (addr == 0xFF16)
+					{
+						gb->apu.ch2.nr21.reg = value;
+					}
+					else if (addr == 0xFF17)
+					{
+						if ((value & 0xF8) == 0x00)
+						{
+							gb->apu.ch2.enable = false;
+						}
+						gb->apu.ch2.nr22.reg = value;
+					}
+					else if (addr == 0xFF18)
+					{
+						gb->apu.ch2.nr23 = value;
+					}
+					else if (addr == 0xFF19)
+					{
+						gb->apu.ch2.nr24 = (undefined_value & ~0x38) + (value & 0x47);
+						gb->apu.ch2.trigger = 1;
+					}
+					// Channel 3
+					else if (addr == 0xFF1A)
+					{
+						uint8_t value_msb_only = value & 0x80;
+						gb->apu.ch3.nr30.reg = (undefined_value & 0x7F) + value_msb_only;
+						gb->apu.ch3.enable = value_msb_only > 0;
+					}
+					else if (addr == 0xFF1B)
+					{
+						gb->apu.ch3.nr31_length = value;
+					}
+					else if (addr == 0xFF1C)
+					{
+						gb->apu.ch3.nr32.reg = (undefined_value & ~0x60) + (value & 0x60);
+					}
+					else if (addr == 0xFF1D)
+					{
+						gb->apu.ch3.nr33 = value;
+					}
+					else if (addr == 0xFF1E)
+					{
+						gb->apu.ch3.nr34 = (undefined_value & ~0x38) + (value & 0x47);
+						gb->apu.ch3.trigger = 1;
+					}
+					// Channel 4
+					else if (addr == 0xFF20)
+					{
+						gb->apu.ch4.nr41.reg = (undefined_value & 0xC0) + (value & 0x3F);
+					}
+					else if (addr == 0xFF21)
+					{
+						if ((value & 0xF8) == 0x00)
+						{
+							gb->apu.ch4.enable = false;
+						}
+						gb->apu.ch4.nr42.reg = value;
+					}
+					else if (addr == 0xFF22)
+					{
+						gb->apu.ch4.nr43.reg = value;
+					}
+					else if (addr == 0xFF23)
+					{
+						gb->apu.ch4.nr44.reg = (undefined_value & ~0x3F) + (value & 0x40);
+						gb->apu.ch4.nr44.trigger = 1;
+					}
+					// Master volume
+					else if (addr == 0xFF24)
+					{
+						gb->apu.nr50.reg = value;
+					}
+					// Sound panning
+					else if (addr == 0xFF25)
+					{
+						gb->apu.nr51.reg = value;
+					}
+					// Wave pattern
+					else if (addr >= 0xFF30 && addr <= 0xFF3F)
+					{
+						gb->apu.wave_pattern[addr - 0xFF30] = value;
+					}
+				}
 			}
 			// Display
 			else if (addr == 0xFF40)
@@ -1002,6 +1236,8 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 	gb->joypad.dpad_select = 1;
 	gb->joypad.buttons_select = 1;
 	gb->joypad._ = 0x3;
+
+	gb__ClearApu(gb);
 
 	gb__MemoryWriteByte(gb, 0xFF05, 0x00);
 	gb__MemoryWriteByte(gb, 0xFF06, 0x00);
@@ -3393,7 +3629,7 @@ gb__RenderScanLine(gb_GameBoy *gb)
 		// See: https://gbdev.io/pandocs/OAM.html
 		bool masked[GB_FRAMEBUFFER_WIDTH] = { 0 };
 
-		for (size_t i = 0; i < num_scanned_sprites; ++i)
+		for (int i = 0; i < num_scanned_sprites; ++i)
 		{
 			const gb_Sprite sprite = scanned_sprites[i];
 
@@ -3757,10 +3993,10 @@ gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t
 	const float freq = 120;  // Hz
 	const float m_pi = 3.14159265358979323846f;
 
-	for (int i = 0; i < num_samples; ++i)
+	for (size_t i = 0; i < num_samples; ++i)
 	{
-		*samples++ = (uint8_t)(sin((2.0f * m_pi) * freq * gb->apu.clock_time * 1.0f / sampling_rate) * 127);
-		++gb->apu.clock_time;
+		*samples++ = (uint8_t)(sin((2.0f * m_pi) * freq * gb->apu.ch1.time * 1.0f / sampling_rate) * 127);
+		++gb->apu.ch1.time;
 	}
 }
 

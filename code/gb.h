@@ -431,130 +431,234 @@ typedef struct gb_GameBoy
 
 	struct gb_Apu
 	{
-		uint64_t clock_time;
-
 		bool audio_enable;
 
-		struct
-		{
-			uint8_t ch1_right : 1;
-			uint8_t ch2_right : 1;
-			uint8_t ch3_right : 1;
-			uint8_t ch4_right : 1;
-			uint8_t ch1_left : 1;
-			uint8_t ch2_left : 1;
-			uint8_t ch3_left : 1;
-			uint8_t ch4_left : 1;
-		} pan;
-
-		struct
-		{
-			uint8_t right_volume : 3;
-			uint8_t right_vin : 1;
-			uint8_t left_volume : 3;
-			uint8_t left_vin : 1;
-		} master;
-
-		struct
+		union
 		{
 			struct
 			{
-				uint8_t period_high : 3;
-				uint8_t _ : 3;
-				uint8_t length_enable : 1;
-				uint8_t trigger : 1;
+				uint8_t ch1_right : 1;
+				uint8_t ch2_right : 1;
+				uint8_t ch3_right : 1;
+				uint8_t ch4_right : 1;
+				uint8_t ch1_left : 1;
+				uint8_t ch2_left : 1;
+				uint8_t ch3_left : 1;
+				uint8_t ch4_left : 1;
 			};
-			uint8_t period_low;
-			struct
-			{
-				uint8_t sweep_pace : 3;
-				uint8_t envelope_dir : 1;
-				uint8_t volume : 4;
-			};
-			struct
-			{
-				uint8_t length : 6;
-				uint8_t duty_cycle : 2;
-			};
-			struct
-			{
-				uint8_t step : 3;
-				uint8_t dir : 1;
-				uint8_t pace : 3;
-				uint8_t __ : 1;
-			};
-		} pulse_a;
+			uint8_t reg;
+		} nr51;
 
-		struct
+		union
 		{
 			struct
 			{
-				uint8_t period_high : 3;
-				uint8_t _ : 3;
-				uint8_t length_enable : 1;
-				uint8_t trigger : 1;
+				uint8_t right_volume : 3;
+				uint8_t right_vin : 1;
+				uint8_t left_volume : 3;
+				uint8_t left_vin : 1;
 			};
-			uint8_t period_low;
-			struct
-			{
-				uint8_t sweep_pace : 3;
-				uint8_t envelope_dir : 1;
-				uint8_t volume : 4;
-			};
-			struct
-			{
-				uint8_t length : 6;
-				uint8_t duty_cycle : 2;
-			};
-		} pulse_b;
+			uint8_t reg;
+		} nr50;
 
-		struct
+		struct gb_PulseA
 		{
-			struct
-			{
-				uint8_t period_high : 3;
-				uint8_t _ : 3;
-				uint8_t length_enable : 1;
-				uint8_t trigger : 1;
-			};
-			uint8_t period_low;
-			struct
-			{
-				uint8_t __ : 5;
-				uint8_t output_level : 2;
-				uint8_t ___ : 1;
-			};
-			uint8_t length;
-		} wave;
+			bool enable;
+			uint32_t time;
+			uint16_t current_period;
+			uint8_t current_volume;
+			uint8_t current_volume_sweep_pace;
+			uint8_t current_envelope_dir;
 
-		struct
+			union
+			{
+				struct
+				{
+					uint8_t freq_sweep_step : 3;
+					uint8_t freq_sweep_dir : 1;
+					uint8_t freq_sweep_pace : 3;
+					uint8_t _ : 1;
+				};
+				uint8_t reg;
+			} nr10;
+			union
+			{
+				struct
+				{
+					uint8_t length : 6;
+					uint8_t duty_cycle : 2;
+				};
+				uint8_t reg;
+			} nr11;
+			union
+			{
+				struct
+				{
+					uint8_t volume_sweep_pace : 3;
+					uint8_t envelope_dir : 1;
+					uint8_t volume : 4;
+				};
+				uint8_t reg;
+			} nr12;
+			union
+			{
+				struct
+				{
+					uint8_t nr13, nr14;
+				};
+				struct
+				{
+					uint16_t period : 11;
+					uint16_t _ : 3;
+					uint16_t length_enable : 1;
+					uint16_t trigger : 1;
+				};
+			};
+		} ch1;
+
+		struct gb_PulseB
 		{
-			struct
-			{
-				uint8_t _ : 6;
-				uint8_t length_enable : 1;
-				uint8_t trigger : 1;
-			};
-			struct
-			{
-				uint8_t clock_div : 3;
-				uint8_t lfsr_width : 1;
-				uint8_t clock_shift : 4;
-			};
-			struct
-			{
-				uint8_t sweep_pace : 3;
-				uint8_t envelope_dir : 1;
-				uint8_t volume : 4;
-			};
-			struct
-			{
-				uint8_t length : 6;
-				uint8_t __ : 2;
-			};
-		} noise;
+			bool enable;
+			uint32_t time;
+			uint16_t current_period;
+			uint8_t current_volume;
+			uint8_t current_volume_sweep_pace;
+			uint8_t current_envelope_dir;
 
-		uint8_t nr[23];
+			union
+			{
+				struct
+				{
+					uint8_t length : 6;
+					uint8_t duty_cycle : 2;
+				};
+				uint8_t reg;
+			} nr21;
+			union
+			{
+				struct
+				{
+					uint8_t volume_sweep_pace : 3;
+					uint8_t envelope_dir : 1;
+					uint8_t volume : 4;
+				};
+				uint8_t reg;
+			} nr22;
+			union
+			{
+				struct
+				{
+					uint8_t nr23, nr24;
+				};
+				struct
+				{
+					uint16_t period : 11;
+					uint16_t _ : 3;
+					uint16_t length_enable : 1;
+					uint16_t trigger : 1;
+				};
+			};
+		} ch2;
+
+		struct gb_Wave
+		{
+			bool enable;  // 1-to-1 mirror of nr30.dac_enable
+			uint32_t time;
+			// TODO SND
+			uint16_t current_period;
+			uint8_t current_volume;
+			uint8_t current_volume_sweep_pace;
+			uint8_t current_envelope_dir;
+
+			union
+			{
+				struct
+				{
+					uint8_t _ : 7;
+					uint8_t dac_enable : 1;
+				};
+				uint8_t reg;
+			} nr30;
+			uint8_t nr31_length;
+			union
+			{
+				struct
+				{
+					uint8_t _ : 5;
+					uint8_t output_level : 2;
+					uint8_t __ : 1;
+				};
+				uint8_t reg;
+			} nr32;
+			union
+			{
+				struct
+				{
+					uint8_t nr33, nr34;
+				};
+				struct
+				{
+					uint16_t period : 11;
+					uint16_t _ : 3;
+					uint16_t length_enable : 1;
+					uint16_t trigger : 1;
+				};
+			};
+		} ch3;
+
+		struct gb_Noise
+		{
+			bool enable;
+			uint32_t time;
+			// TODO SND
+			uint16_t current_period;
+			uint8_t current_volume;
+			uint8_t current_volume_sweep_pace;
+			uint8_t current_envelope_dir;
+
+			uint16_t lfsr_state;
+
+			union
+			{
+				struct
+				{
+					uint8_t length : 6;
+					uint8_t _ : 2;
+				};
+				uint8_t reg;
+			} nr41;
+			union
+			{
+				struct
+				{
+					uint8_t volume_sweep_pace : 3;
+					uint8_t envelope_dir : 1;
+					uint8_t volume : 4;
+				};
+				uint8_t reg;
+			} nr42;
+			union
+			{
+				struct
+				{
+					uint8_t clock_div : 3;
+					uint8_t lfsr_width : 1;
+					uint8_t clock_shift : 4;
+				};
+				uint8_t reg;
+			} nr43;
+			union
+			{
+				struct
+				{
+					uint8_t _ : 6;
+					uint8_t length_enable : 1;
+					uint8_t trigger : 1;
+				};
+				uint8_t reg;
+			} nr44;
+		} ch4;
+
 		uint8_t wave_pattern[16];
 	} apu;
 

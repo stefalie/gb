@@ -54,7 +54,7 @@ rem dir. This is because Imgui wants them without parent dir.
 rem We're explicitly allowing anonymous struct/unions. Unfortunately we can't use
 rem the -std=c11 becasue clang doesn't like it when we also compile C++ files
 rem at the same time.
-set ClangCompilerFlags=-o %ExeName% -I%SdlDir% -I..\external -I%SdlDir%\SDL2 -I%ImguiDir% -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token -Wno-nested-anon-types -Wno-gnu-anonymous-struct -Wno-unused-but-set-variable
+set ClangCompilerFlags=-o %ExeName% -I%SdlDir% -I..\external -I%SdlDir%\SDL2 -I%ImguiDir% -Wall -Werror -Wextra -pedantic-errors -Wno-unused-parameter -Wno-language-extension-token -Wno-nested-anon-types -Wno-gnu-anonymous-struct -Wno-unused-but-set-variable -Wno-missing-field-initializers
 rem -fuse-ld=lld Use clang lld linker instead of msvc link.
 rem /SUBSYSTEM:console warns about both main and wmain being present.
 set ClangLinkerFlags=-fuse-ld=lld -Xlinker /INCREMENTAL:NO -Xlinker /OPT:REF -Xlinker /SUBSYSTEM:windows -lShell32 -lOpenGL32 -lComdlg32 %SdlLibs%
