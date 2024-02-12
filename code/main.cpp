@@ -1831,7 +1831,6 @@ main(int argc, char *argv[])
 			case SDL_CONTROLLERAXISMOTION:
 				for (size_t i = 0; i < num_inputs; ++i)
 				{
-					// TODO(stefalie): Test gamepad, it might all be bogus.
 					Input input = emu.ini.inputs[i];
 					if (input.type == Input::TYPE_AXIS && event.caxis.axis == input.sdl.axis)
 					{
@@ -1850,11 +1849,11 @@ main(int argc, char *argv[])
 						}
 						else if (!is_x_axis && is_positive)
 						{
-							gb_SetInput(&gb, GB_INPUT_ARROW_UP, is_pushed);
+							gb_SetInput(&gb, GB_INPUT_ARROW_DOWN, is_pushed);
 						}
 						else /* if (!is_x_axis && !is_positive) */
 						{
-							gb_SetInput(&gb, GB_INPUT_ARROW_DOWN, is_pushed);
+							gb_SetInput(&gb, GB_INPUT_ARROW_UP, is_pushed);
 						}
 					}
 				}
