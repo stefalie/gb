@@ -463,12 +463,15 @@ typedef struct gb_GameBoy
 
 		struct gb_PulseA
 		{
+			// Internals
 			bool enable;
 			uint32_t time;
 			uint16_t current_period;
 			uint8_t current_volume;
 			uint8_t current_volume_sweep_pace;
 			uint8_t current_envelope_dir;
+			//float length_timer;
+			double length_timer;
 
 			union
 			{
@@ -524,6 +527,7 @@ typedef struct gb_GameBoy
 			uint8_t current_volume;
 			uint8_t current_volume_sweep_pace;
 			uint8_t current_envelope_dir;
+			double length_timer;
 
 			union
 			{

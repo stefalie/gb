@@ -605,6 +605,7 @@ gb_MemoryReadWord(const gb_GameBoy *gb, uint16_t addr)
 }
 
 // TODO(steaflie): Should the undefined values really be 1?
+// See here: https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Register_Reading
 static void
 gb__ClearApu(gb_GameBoy *gb)
 {
@@ -880,13 +881,17 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF11)
 					{
 						gb->apu.ch1.nr11.reg = value;
+						// TODO(stefalie): Should we reset the length timer here? Goes for other
+						// channels too.
+						// gb->apu.ch1.length_timer = (64 - ch1.nr11.length) * (1.0f / 256.0f));
 					}
 					else if (addr == 0xFF12)
 					{
-						if ((value & 0xF8) == 0x00)
-						{
-							gb->apu.ch1.enable = false;
-						}
+						// TODO SND
+						// if ((value & 0xF8) == 0x00)
+						//{
+						//	gb->apu.ch1.enable = false;
+						//}
 						gb->apu.ch1.nr12.reg = value;
 					}
 					else if (addr == 0xFF13)
@@ -895,8 +900,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					}
 					else if (addr == 0xFF14)
 					{
-						gb->apu.ch1.nr14 = (undefined_value & ~0x38) + (value & 0x47);
-						gb->apu.ch1.trigger = 1;
+						gb->apu.ch1.nr14 = (undefined_value & 0x38) + (value & 0xC7);
 					}
 					// Channel 2
 					else if (addr == 0xFF16)
@@ -905,10 +909,11 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					}
 					else if (addr == 0xFF17)
 					{
-						if ((value & 0xF8) == 0x00)
-						{
-							gb->apu.ch2.enable = false;
-						}
+						// TODO SND
+						// if ((value & 0xF8) == 0x00)
+						//{
+						//	gb->apu.ch2.enable = false;
+						//}
 						gb->apu.ch2.nr22.reg = value;
 					}
 					else if (addr == 0xFF18)
@@ -917,15 +922,16 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					}
 					else if (addr == 0xFF19)
 					{
-						gb->apu.ch2.nr24 = (undefined_value & ~0x38) + (value & 0x47);
-						gb->apu.ch2.trigger = 1;
+						gb->apu.ch2.nr24 = (undefined_value & 0x38) + (value & 0xC7);
 					}
 					// Channel 3
 					else if (addr == 0xFF1A)
 					{
-						uint8_t value_msb_only = value & 0x80;
-						gb->apu.ch3.nr30.reg = (undefined_value & 0x7F) + value_msb_only;
-						gb->apu.ch3.enable = value_msb_only > 0;
+						// TODO SND
+						// uint8_t value_msb_only = value & 0x80;
+						// gb->apu.ch3.nr30.reg = (undefined_value & 0x7F) + value_msb_only;
+						// gb->apu.ch3.enable = value_msb_only > 0;
+						gb->apu.ch3.nr30.reg = (undefined_value & 0x7F) + value & 0x80;
 					}
 					else if (addr == 0xFF1B)
 					{
@@ -941,8 +947,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					}
 					else if (addr == 0xFF1E)
 					{
-						gb->apu.ch3.nr34 = (undefined_value & ~0x38) + (value & 0x47);
-						gb->apu.ch3.trigger = 1;
+						gb->apu.ch3.nr34 = (undefined_value & 0x38) + (value & 0xC7);
 					}
 					// Channel 4
 					else if (addr == 0xFF20)
@@ -951,10 +956,11 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					}
 					else if (addr == 0xFF21)
 					{
-						if ((value & 0xF8) == 0x00)
-						{
-							gb->apu.ch4.enable = false;
-						}
+						// TODO SND
+						// if ((value & 0xF8) == 0x00)
+						//{
+						//	gb->apu.ch4.enable = false;
+						//}
 						gb->apu.ch4.nr42.reg = value;
 					}
 					else if (addr == 0xFF22)
@@ -963,8 +969,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					}
 					else if (addr == 0xFF23)
 					{
-						gb->apu.ch4.nr44.reg = (undefined_value & ~0x3F) + (value & 0x40);
-						gb->apu.ch4.nr44.trigger = 1;
+						gb->apu.ch4.nr44.reg = (undefined_value & ~0x3F) + (value & 0xC0);
 					}
 					// Master volume
 					else if (addr == 0xFF24)
@@ -3987,17 +3992,200 @@ gb_SetInput(gb_GameBoy *gb, gb_Input input, bool down)
 	assert((*reg & 0xF0) == 0);
 }
 
+static const uint8_t gb__PwmWaveForms[4][8] = {
+	//{ 1, 1, 1, 1, 1, 1, 1, 0 },
+	//{ 0, 1, 1, 1, 1, 1, 1, 0 },
+	//{ 0, 1, 1, 1, 1, 0, 0, 0 },
+	//{ 1, 0, 0, 0, 0, 0, 0, 1 },
+	{ 0, 0, 0, 0, 0, 0, 0, 1 },
+	{ 1, 0, 0, 0, 0, 0, 0, 1 },
+	{ 1, 0, 0, 0, 0, 1, 1, 1 },
+	{ 0, 1, 1, 1, 1, 1, 1, 0 },
+};
+
+static inline int8_t
+sinewave(uint32_t f, double t)
+{
+	const double m_pi = 3.14159265358979323846;
+	return (int8_t)(sin((2.0 * m_pi) * f * t) * 128.0);
+}
+
+static inline int8_t
+squarewave(uint32_t f, double t, int8_t dutyline)
+{
+	return sinewave(f, t) > dutyline ? 127 : -127;
+}
+
+static int8_t dutylines[4] = { -118, -90, 0, 90 };
+
 void
 gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t *samples)
 {
-	const float freq = 120;  // Hz
-	const float m_pi = 3.14159265358979323846f;
-
 	for (size_t i = 0; i < num_samples; ++i)
 	{
-		*samples++ = (uint8_t)(sin((2.0f * m_pi) * freq * gb->apu.ch1.time * 1.0f / sampling_rate) * 127);
-		++gb->apu.ch1.time;
+		int8_t sample_result = 0;
+		if (gb->apu.audio_enable)
+		{
+			int8_t channel_samples[4] = { 0 };
+
+			// Channel 1
+			struct gb_PulseA *ch1 = &gb->apu.ch1;
+			// TODO(steaflie): Turning off the DACs can happen at the wrong time.
+			// This is because the CPU that writes these registers is advanced at
+			// V-Sync frequency (likely 60 Hz), but audio sampling happens more
+			// frequently.
+			const bool dac1_off = ch1->nr12.volume == 0 && ch1->nr12.envelope_dir == 0;
+			if (dac1_off)
+			{
+				ch1->enable = false;
+			}
+			else
+			{
+				if (ch1->trigger == 1)
+				{
+					ch1->trigger = 0;
+					ch1->enable = true;
+					ch1->time = 0;
+					ch1->current_period = ch1->period;
+					ch1->current_volume = ch1->nr12.volume;
+					ch1->current_volume_sweep_pace = ch1->nr12.volume_sweep_pace;
+					ch1->current_envelope_dir = ch1->nr12.envelope_dir;
+					// TODO(stefalie): I think we should only reset the length timer when it is 0
+					// (goes for other channels too).
+					// See: https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Length_Counter
+					ch1->length_timer = (64 - ch1->nr11.length) * (1.0f / 256.0f);
+				}
+
+				if (ch1->enable)
+				{
+					// float t_in_s = (float)ch1->time / sampling_rate;
+					double t_in_s = (double)ch1->time / sampling_rate;
+
+					// Reload frequency in case it changed.
+					int wave_form_idx = 0;
+					if (wave_form_idx == 0)
+					{
+						ch1->current_period = ch1->period;
+					}
+
+					bool timeout = false;
+					if (ch1->length_enable)
+					{
+						ch1->length_timer -= t_in_s;
+
+						if (ch1->length_timer <= 0.0f)  // Timeout
+						{
+							timeout = true;
+							ch1->enable = false;
+							ch1->length_timer = 0.0f;
+						}
+					}
+
+					if (!ch1->length_enable || !timeout)
+					{
+						// TODO: sweep frequency, volume sweep
+						double freq = 131072.0f / (2048.0f - ch1->current_period);
+						(freq);
+
+						channel_samples[0] = ch1->current_volume *
+								squarewave((uint32_t)freq, t_in_s, dutylines[ch1->nr11.duty_cycle]);
+						++ch1->time;
+
+						// gb__PwmWaveForms[ch1->nr11.duty_cycle][wave_form_idx]
+					}
+				}
+			}
+
+			// Channel 2
+			struct gb_PulseB *ch2 = &gb->apu.ch2;
+			// TODO(steaflie): Turning off the DACs can happen at the wrong time.
+			// This is because the CPU that writes these registers is advanced at
+			// V-Sync frequency (likely 60 Hz), but audio sampling happens more
+			// frequently.
+			const bool dac2_off = ch2->nr22.volume == 0 && ch2->nr22.envelope_dir == 0;
+			if (dac2_off)
+			{
+				ch2->enable = false;
+			}
+			else
+			{
+				if (ch2->trigger == 1)
+				{
+					ch2->trigger = 0;
+					ch2->enable = true;
+					ch2->time = 0;
+					ch2->current_period = ch2->period;
+					ch2->current_volume = ch2->nr22.volume;
+					ch2->current_volume_sweep_pace = ch2->nr22.volume_sweep_pace;
+					ch2->current_envelope_dir = ch2->nr22.envelope_dir;
+					// TODO(stefalie): I think we should only reset the length timer when it is 0
+					// (goes for other channels too).
+					// See: https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Length_Counter
+					ch2->length_timer = (64 - ch2->nr21.length) * (1.0f / 256.0f);
+				}
+
+				if (ch2->enable)
+				{
+					// float t_in_s = (float)ch2->time / sampling_rate;
+					double t_in_s = (double)ch2->time / sampling_rate;
+
+					// Reload frequency in case it changed.
+					int wave_form_idx = 0;
+					if (wave_form_idx == 0)
+					{
+						ch2->current_period = ch2->period;
+					}
+
+					bool timeout = false;
+					if (ch2->length_enable)
+					{
+						ch2->length_timer -= t_in_s;
+
+						if (ch2->length_timer <= 0.0f)  // Timeout
+						{
+							timeout = true;
+							ch2->enable = false;
+							ch2->length_timer = 0.0f;
+						}
+					}
+
+					if (!ch2->length_enable || !timeout)
+					{
+						// TODO: sweep frequency, volume sweep
+						double freq = 131072.0f / (2048.0f - ch2->current_period);
+						(freq);
+
+						channel_samples[1] = ch2->current_volume *
+								squarewave((uint32_t)freq, t_in_s, dutylines[ch2->nr21.duty_cycle]);
+						++ch2->time;
+
+						// gb__PwmWaveForms[ch2->nr21.duty_cycle][wave_form_idx]
+					}
+				}
+			}
+
+			// Channel 3
+			// TODO
+
+			// Channel 4
+			// TODO
+
+			sample_result = channel_samples[0];  // + channel_samples[1];;
+		}
+
+		*samples++ = (uint8_t)sample_result;
 	}
+
+	// Debug sine
+	// const float freq = 120;  // Hz
+	// const float m_pi = 3.14159265358979323846f;
+
+	// static int t = 0;
+	// for (size_t i = 0; i < num_samples; ++i)
+	//{
+	//	*samples++ = (uint8_t)(sin((2.0f * m_pi) * freq * t * 1.0f / sampling_rate) * 127);
+	//	++t;
+	// }
 }
 
 gb_Tile
