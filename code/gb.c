@@ -4106,7 +4106,7 @@ gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t
 
 						uint8_t wave_sample = gb__PwmWaveForms[ch1->nr11.duty_cycle][wave_form_idx];
 						uint8_t sample2 =
-								ch1->current_volume * ((wave_sample * 2 - 1) * 127);
+								ch1->current_volume * (wave_sample * 2 - 1);
 
 						channel_samples[0] = sample2;
 						++ch1->time;
