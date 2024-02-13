@@ -518,6 +518,7 @@ struct Emulator
 	{
 		bool reset_gui_timeout = false;
 		float show_gui_timeout_in_s = 0.0f;
+		bool reset_delta_time = false;
 
 		bool pressed_escape = false;
 
@@ -571,10 +572,12 @@ struct Emulator
 		SDL_Window *debug_window = NULL;
 		ImGuiContext *debug_imgui = NULL;
 		ImFont *debug_font = NULL;
+
+		SDL_AudioDeviceID audio_dev = 0;
 	} handles;
 };
 
-static void
+static bool
 LoadRomFromFile(Emulator *emu, gb_GameBoy *gb, const char *file_path)
 {
 	Rom new_rom = {};
@@ -619,6 +622,8 @@ LoadRomFromFile(Emulator *emu, gb_GameBoy *gb, const char *file_path)
 	{
 		emu->gui.show_rom_load_error = true;
 	}
+
+	return !new_rom.data;
 }
 
 // TODO(stefalie): Consider using only OpenGL 2.1 compatible functions, glCreateShaderProgram needs OpenGL 4.1.
@@ -674,6 +679,9 @@ GuiDraw(Emulator *emu, gb_GameBoy *gb)
 
 				if (ImGui::MenuItem("Open ROM"))
 				{
+					SDL_PauseAudioDevice(emu->handles.audio_dev, 1);
+					emu->gui.audio_paused = true;
+
 					char file_path[MAX_PATH] = {};
 
 					OPENFILENAME ofn = {};
@@ -686,7 +694,10 @@ GuiDraw(Emulator *emu, gb_GameBoy *gb)
 					ofn.Flags = OFN_FILEMUSTEXIST;
 					if (GetOpenFileNameA(&ofn))
 					{
-						LoadRomFromFile(emu, gb, ofn.lpstrFile);
+						if (!LoadRomFromFile(emu, gb, ofn.lpstrFile))
+						{
+							emu->gui.reset_delta_time = true;
+						}
 					}
 				}
 				if (ImGui::MenuItem("Eject ROM", NULL, false, emu->gui.has_active_rom))
@@ -1508,6 +1519,12 @@ main(int argc, char *argv[])
 
 	// TODO(steaflie): Add an icon.
 
+	Emulator emu;
+	emu.debug.mem_view.ReadOnly = true;
+	emu.debug.mem_view.ReadFn = &DebuggerMemoryViewReadFunc;
+	emu.debug.rom_view.ReadOnly = true;
+	emu.save_dir_path = SDL_GetPrefPath(NULL, "GB");
+
 	// Sound
 	SDL_AudioSpec audio_req = {}, audio;
 	audio_req.freq = audio_sampling_rate;
@@ -1516,19 +1533,13 @@ main(int argc, char *argv[])
 	audio_req.samples = 128;
 	audio_req.userdata = &gb;
 	audio_req.callback = &PlayAudio;
-	SDL_AudioDeviceID audio_dev = SDL_OpenAudioDevice(NULL, 0, &audio_req, &audio, 0);
+	emu.handles.audio_dev = SDL_OpenAudioDevice(NULL, 0, &audio_req, &audio, 0);
 	assert(audio.freq == audio_sampling_rate);
-	if (!audio_dev)
+	if (!emu.handles.audio_dev)
 	{
 		SDL_CheckError();
 		exit(1);
 	}
-
-	Emulator emu;
-	emu.debug.mem_view.ReadOnly = true;
-	emu.debug.mem_view.ReadFn = &DebuggerMemoryViewReadFunc;
-	emu.debug.rom_view.ReadOnly = true;
-	emu.save_dir_path = SDL_GetPrefPath(NULL, "GB");
 
 	// Load ini
 	const char *ini_name = "config.ini";
@@ -1547,7 +1558,7 @@ main(int argc, char *argv[])
 				SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
 		if (!emu.handles.window)
 		{
-			SDL_CloseAudioDevice(audio_dev);
+			SDL_CloseAudioDevice(emu.handles.audio_dev);
 			SDL_CheckError();
 			SDL_Quit();
 			exit(1);
@@ -1562,7 +1573,7 @@ main(int argc, char *argv[])
 		if (!emu.handles.debug_window)
 		{
 			SDL_DestroyWindow(emu.handles.window);
-			SDL_CloseAudioDevice(audio_dev);
+			SDL_CloseAudioDevice(emu.handles.audio_dev);
 			SDL_CheckError();
 			SDL_Quit();
 			exit(1);
@@ -1923,6 +1934,12 @@ main(int argc, char *argv[])
 		// cycles to catch up.
 		prev_time = curr_time;
 
+		if (emu.gui.reset_delta_time)
+		{
+			elapsed_m_cycles = 0;
+			emu.gui.reset_delta_time = false;
+		}
+
 		emu.gui.show_gui_timeout_in_s -= (float)dt_in_s;
 		if (emu.gui.show_gui_timeout_in_s < 0.0f)
 		{
@@ -1935,12 +1952,12 @@ main(int argc, char *argv[])
 
 		if (is_running_normal_mode && emu.gui.audio_paused)
 		{
-			SDL_PauseAudioDevice(audio_dev, 0);
+			SDL_PauseAudioDevice(emu.handles.audio_dev, 0);
 			emu.gui.audio_paused = false;
 		}
 		if (!is_running_normal_mode && !emu.gui.audio_paused)
 		{
-			SDL_PauseAudioDevice(audio_dev, 1);
+			SDL_PauseAudioDevice(emu.handles.audio_dev, 1);
 			emu.gui.audio_paused = true;
 		}
 
@@ -2149,7 +2166,7 @@ main(int argc, char *argv[])
 	SDL_GL_DeleteContext(emu.handles.gl_context);
 	SDL_DestroyWindow(emu.handles.debug_window);
 	SDL_DestroyWindow(emu.handles.window);
-	SDL_CloseAudioDevice(audio_dev);
+	SDL_CloseAudioDevice(emu.handles.audio_dev);
 
 	SDL_Quit();
 
