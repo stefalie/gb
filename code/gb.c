@@ -3997,10 +3997,16 @@ static const uint8_t gb__PwmWaveForms[4][8] = {
 	//{ 0, 1, 1, 1, 1, 1, 1, 0 },
 	//{ 0, 1, 1, 1, 1, 0, 0, 0 },
 	//{ 1, 0, 0, 0, 0, 0, 0, 1 },
+	//
 	{ 0, 0, 0, 0, 0, 0, 0, 1 },
 	{ 1, 0, 0, 0, 0, 0, 0, 1 },
 	{ 1, 0, 0, 0, 0, 1, 1, 1 },
 	{ 0, 1, 1, 1, 1, 1, 1, 0 },
+	//
+	//{ 1, 1, 1, 1, 1, 1, 1, 0 },
+	//{ 0, 1, 1, 1, 1, 1, 1, 0 },
+	//{ 0, 1, 1, 1, 1, 0, 0, 0 },
+	//{ 1, 0, 0, 0, 0, 0, 0, 1 },
 };
 
 static inline int8_t
@@ -4021,6 +4027,9 @@ static int8_t dutylines[4] = { -118, -90, 0, 90 };
 void
 gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t *samples)
 {
+	//static double t_acc = 0;
+	//static size_t wave_form_idx2 = 0;
+
 	for (size_t i = 0; i < num_samples; ++i)
 	{
 		int8_t sample_result = 0;
@@ -4058,15 +4067,20 @@ gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t
 
 				if (ch1->enable)
 				{
-					// float t_in_s = (float)ch1->time / sampling_rate;
 					double t_in_s = (double)ch1->time / sampling_rate;
 
+
+					double t_in_m_cycles = t_in_s * 1048576;
+					//size_t wave_form_idx = (size_t)(8 * fmod(t_in_m_cycles, (2048.0 - ch1->current_period) * 8));
+					size_t wave_form_idx = (size_t)(t_in_m_cycles / (2048.0 - ch1->current_period)) % 8;
+
 					// Reload frequency in case it changed.
-					int wave_form_idx = 0;
-					if (wave_form_idx == 0)
-					{
-						ch1->current_period = ch1->period;
-					}
+					// TODO SND: incorrect when the period seep is on. it will reload the period
+					// not because it was changed via the register but due to the sweep.
+					//if (wave_form_idx == 0)
+					//{
+					//	ch1->current_period = ch1->period;
+					//}
 
 					bool timeout = false;
 					if (ch1->length_enable)
@@ -4087,11 +4101,15 @@ gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t
 						double freq = 131072.0f / (2048.0f - ch1->current_period);
 						(freq);
 
-						channel_samples[0] = ch1->current_volume *
-								squarewave((uint32_t)freq, t_in_s, dutylines[ch1->nr11.duty_cycle]);
-						++ch1->time;
+						//uint8_t sample1 = ch1->current_volume *
+						//		squarewave((uint32_t)freq, t_in_s, dutylines[ch1->nr11.duty_cycle]);
 
-						// gb__PwmWaveForms[ch1->nr11.duty_cycle][wave_form_idx]
+						uint8_t wave_sample = gb__PwmWaveForms[ch1->nr11.duty_cycle][wave_form_idx];
+						uint8_t sample2 =
+								ch1->current_volume * ((wave_sample * 2 - 1) * 127);
+
+						channel_samples[0] = sample2;
+						++ch1->time;
 					}
 				}
 			}
@@ -4130,11 +4148,11 @@ gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t
 					double t_in_s = (double)ch2->time / sampling_rate;
 
 					// Reload frequency in case it changed.
-					int wave_form_idx = 0;
-					if (wave_form_idx == 0)
-					{
-						ch2->current_period = ch2->period;
-					}
+					//int wave_form_idx = 0;
+					//if (wave_form_idx == 0)
+					//{
+					//	ch2->current_period = ch2->period;
+					//}
 
 					bool timeout = false;
 					if (ch2->length_enable)
