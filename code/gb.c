@@ -944,7 +944,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 						// uint8_t value_msb_only = value & 0x80;
 						// gb->apu.ch3.nr30.reg = (undefined_value & 0x7F) + value_msb_only;
 						// gb->apu.ch3.enable = value_msb_only > 0;
-						gb->apu.ch3.nr30.reg = (undefined_value & 0x7F) + value & 0x80;
+						gb->apu.ch3.nr30.reg = (undefined_value & 0x7F) + (value & 0x80);
 					}
 					else if (addr == 0xFF1B)
 					{
