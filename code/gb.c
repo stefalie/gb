@@ -609,7 +609,26 @@ gb_MemoryReadWord(const gb_GameBoy *gb, uint16_t addr)
 static void
 gb__ClearApu(gb_GameBoy *gb)
 {
+	gb_AudioCallback *prev_callback = gb->apu.callback;
+	void *prev_callback_user_data = gb->apu.callback_user_data;
 	gb->apu = (struct gb_Apu){ 0 };
+	gb->apu.callback = prev_callback;
+	gb->apu.callback_user_data = prev_callback_user_data;
+
+	// TODO SND
+	//// Adds some audio delay.
+	// gb->apu.num_samples = sizeof(gb->apu.sample_buffer) / 2;
+	// if (gb->apu.callback)
+	//{
+	//	gb->apu.callback(gb->apu.callback_user_data, gb->apu.sample_buffer, sizeof(gb->apu.sample_buffer));
+	// }
+	//  Adds some audio delay.
+	if (gb->apu.callback)
+	{
+		int8_t silence[2048 * 2] = { 0 };
+		gb->apu.callback(gb->apu.callback_user_data, silence, sizeof(silence));
+	}
+
 	gb->apu.ch1.nr10._ = 1;
 	gb->apu.ch1._ = 0x7;
 	gb->apu.ch2._ = 0x7;
@@ -865,7 +884,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					if (gb->apu.audio_enable && !enable)
 					{
 						// TODO SND: length timers
-						gb__ClearApu(gb);
+						// gb__ClearApu(gb);
 					}
 					gb->apu.audio_enable = enable;
 				}
@@ -1193,12 +1212,16 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 {
 	struct gb_Memory *mem = &gb->memory;
 
-	// Reset everything to zero except the ROM info and the MBC type.
-	const struct gb_Rom prev_rom = gb->rom;
-	const gb_MbcType prev_mbc_type = mem->mbc_type;
+	// Reset everything to zero except the ROM info, MBC type, and audio callback.
+	struct gb_Rom prev_rom = gb->rom;
+	gb_MbcType prev_mbc_type = mem->mbc_type;
+	gb_AudioCallback *prev_callback = gb->apu.callback;
+	void *prev_callback_user_data = gb->apu.callback_user_data;
 	*gb = (gb_GameBoy){ 0 };
 	gb->rom = prev_rom;
 	mem->mbc_type = prev_mbc_type;
+	gb->apu.callback = prev_callback;
+	gb->apu.callback_user_data = prev_callback_user_data;
 
 	gb->display.updated = true;
 
@@ -3844,6 +3867,50 @@ gb__AdvancePpu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 	assert(stat->mode != GB_PPU_MODE_VRAM_SCAN || ppu->mode_clock < MODE_VRAM_SCAN_LENGTH);
 }
 
+static void
+gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
+{
+	// We should pump out a new sample every 1024 * 1024 / 48 kHz.
+	// This is not an integral number, therefore let's go via the LCM.
+	//
+	// LCM of 48k and 1 MHz is 375 * 1024 * 1024 == 8192 * 48000
+	gb->apu.clock_acc += elapsed_m_cycles * 375;
+
+	if (gb->apu.clock_acc >= 8192)
+	{
+		gb->apu.clock_acc -= 8192;
+
+		if (gb->apu.callback)
+		{
+			//const uint32_t max_num_samples = sizeof(gb->apu.sample_buffer) / 2;
+			//assert(gb->apu.num_samples <= max_num_samples);
+			// if (gb->apu.num_samples == max_num_samples)
+			//{
+			//	gb->apu.callback(gb->apu.callback_user_data, gb->apu.sample_buffer, gb->apu.num_samples * 2);
+			//	gb->apu.num_samples = 0;
+			// }
+
+			// Debug sine
+			const float freq = 240;  // Hz
+			const float m_pi = 3.14159265358979323846f;
+
+			static int t = 0;
+			int8_t sample;
+			sample = (int8_t)(sin((2.0f * m_pi) * freq * /*gb->apu.*/ t++ * 1.0f / GB_AUDIO_SAMPLING_RATE) * 15);
+
+			// gb->apu.sample_buffer[gb->apu.num_samples++] = sample;  // Left
+			// gb->apu.sample_buffer[gb->apu.num_samples++] = sample;  // Right
+			int8_t samples[] = { sample, sample };
+			gb->apu.callback(gb->apu.callback_user_data, samples, 2);
+
+			// sample = (int8_t)(sin((2.0f * m_pi) * freq * t++ * 1.0f / GB_AUDIO_SAMPLING_RATE) * 15);
+
+			// gb->apu.callback(gb->apu.callback_user_data, &sample, 1);
+			// gb->apu.callback(gb->apu.callback_user_data, &sample, 1);
+		}
+	}
+}
+
 size_t
 gb_ExecuteNextInstruction(gb_GameBoy *gb)
 {
@@ -3876,6 +3943,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		// instruction-stepping and of always rendering full scan lines at once.
 		gb__AdvancePpu(gb, num_cycles);
 		gb__UpdateClockAndTimer(gb, num_cycles);
+		gb__AdvanceApu(gb, num_cycles);
 
 #if BLARGG_TEST_ENABLE
 		if (gb->serial.sc == 0x81)
@@ -3890,8 +3958,9 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 	const uint16_t num_interrupt_cycles = gb__HandleInterrupts(gb);
 	if (num_interrupt_cycles > 0)
 	{
-		gb__UpdateClockAndTimer(gb, num_interrupt_cycles);
 		gb__AdvancePpu(gb, num_interrupt_cycles);
+		gb__UpdateClockAndTimer(gb, num_interrupt_cycles);
+		gb__AdvanceApu(gb, num_interrupt_cycles);
 		num_cycles += num_interrupt_cycles;
 	}
 
@@ -3909,6 +3978,7 @@ gb_ExecuteNextInstruction(gb_GameBoy *gb)
 		num_cycles = 1;
 		gb__UpdateClockAndTimer(gb, num_cycles);
 		gb__AdvancePpu(gb, num_cycles);
+		gb__AdvanceApu(gb, num_cycles);
 	}
 
 	if (gb->serial.enable_interrupt_timer)
@@ -3998,10 +4068,7 @@ static const uint8_t gb__PwmWaveForms[4][8] = {
 	//{ 0, 1, 1, 1, 1, 0, 0, 0 },
 	//{ 1, 0, 0, 0, 0, 0, 0, 1 },
 	//
-	{ 0, 0, 0, 0, 0, 0, 0, 1 },
-	{ 1, 0, 0, 0, 0, 0, 0, 1 },
-	{ 1, 0, 0, 0, 0, 1, 1, 1 },
-	{ 0, 1, 1, 1, 1, 1, 1, 0 },
+	{ 0, 0, 0, 0, 0, 0, 0, 1 }, { 1, 0, 0, 0, 0, 0, 0, 1 }, { 1, 0, 0, 0, 0, 1, 1, 1 }, { 0, 1, 1, 1, 1, 1, 1, 0 },
 	//
 	//{ 1, 1, 1, 1, 1, 1, 1, 0 },
 	//{ 0, 1, 1, 1, 1, 1, 1, 0 },
@@ -4027,8 +4094,8 @@ static int8_t dutylines[4] = { -118, -90, 0, 90 };
 void
 gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t *samples)
 {
-	//static double t_acc = 0;
-	//static size_t wave_form_idx2 = 0;
+	// static double t_acc = 0;
+	// static size_t wave_form_idx2 = 0;
 
 	for (size_t i = 0; i < num_samples; ++i)
 	{
@@ -4071,13 +4138,13 @@ gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t
 
 
 					double t_in_m_cycles = t_in_s * 1048576;
-					//size_t wave_form_idx = (size_t)(8 * fmod(t_in_m_cycles, (2048.0 - ch1->current_period) * 8));
+					// size_t wave_form_idx = (size_t)(8 * fmod(t_in_m_cycles, (2048.0 - ch1->current_period) * 8));
 					size_t wave_form_idx = (size_t)(t_in_m_cycles / (2048.0 - ch1->current_period)) % 8;
 
 					// Reload frequency in case it changed.
 					// TODO SND: incorrect when the period seep is on. it will reload the period
 					// not because it was changed via the register but due to the sweep.
-					//if (wave_form_idx == 0)
+					// if (wave_form_idx == 0)
 					//{
 					//	ch1->current_period = ch1->period;
 					//}
@@ -4101,12 +4168,11 @@ gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t
 						double freq = 131072.0f / (2048.0f - ch1->current_period);
 						(freq);
 
-						//uint8_t sample1 = ch1->current_volume *
+						// uint8_t sample1 = ch1->current_volume *
 						//		squarewave((uint32_t)freq, t_in_s, dutylines[ch1->nr11.duty_cycle]);
 
 						uint8_t wave_sample = gb__PwmWaveForms[ch1->nr11.duty_cycle][wave_form_idx];
-						uint8_t sample2 =
-								ch1->current_volume * (wave_sample * 2 - 1);
+						uint8_t sample2 = ch1->current_volume * (wave_sample * 2 - 1);
 
 						channel_samples[0] = sample2;
 						++ch1->time;
@@ -4148,8 +4214,8 @@ gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t
 					double t_in_s = (double)ch2->time / sampling_rate;
 
 					// Reload frequency in case it changed.
-					//int wave_form_idx = 0;
-					//if (wave_form_idx == 0)
+					// int wave_form_idx = 0;
+					// if (wave_form_idx == 0)
 					//{
 					//	ch2->current_period = ch2->period;
 					//}
@@ -4191,7 +4257,8 @@ gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t
 			sample_result = channel_samples[0];  // + channel_samples[1];;
 		}
 
-		*samples++ = (uint8_t)sample_result;
+		*samples++ = (uint8_t)sample_result;  // Left
+		*samples++ = (uint8_t)sample_result;  // Right
 	}
 
 	// Debug sine
@@ -4204,6 +4271,13 @@ gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t
 	//	*samples++ = (uint8_t)(sin((2.0f * m_pi) * freq * t * 1.0f / sampling_rate) * 127);
 	//	++t;
 	// }
+}
+
+void
+gb_SetAudioCallback(gb_GameBoy *gb, gb_AudioCallback *callback, void *user_data)
+{
+	gb->apu.callback = callback;
+	gb->apu.callback_user_data = user_data;
 }
 
 gb_Tile

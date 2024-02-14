@@ -11,8 +11,10 @@
 #define GB_FRAMEBUFFER_WIDTH 160
 #define GB_FRAMEBUFFER_HEIGHT 144
 
-#define GB_MACHINE_M_FREQ 1048576
+#define GB_MACHINE_M_FREQ (1024 * 1024)
 #define GB_MACHINE_CYCLES_PER_FRAME (70224 / 4)
+
+#define GB_AUDIO_SAMPLING_RATE 48000
 
 typedef struct gb_GameBoy gb_GameBoy;
 
@@ -78,8 +80,15 @@ typedef enum gb_Input
 void
 gb_SetInput(gb_GameBoy *gb, gb_Input input, bool down);
 
+// TODO SND rem
+// void
+// gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t *samples);
+
+// The emulators calls the callback and provides stereo 8-bit integer audio samples at 48 kHz.
+typedef void
+gb_AudioCallback(void *user_data, const int8_t *data, size_t len_in_bytes);
 void
-gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t *samples);
+gb_SetAudioCallback(gb_GameBoy *gb, gb_AudioCallback *callback, void *user_data);
 
 // Note that this is currently rather wasteful as we only support the monochrome
 // DMG. If we however decide to go for Color GameBoy support, this will make it
@@ -431,6 +440,14 @@ typedef struct gb_GameBoy
 
 	struct gb_Apu
 	{
+		uint64_t clock_acc;
+
+		gb_AudioCallback *callback;
+		void *callback_user_data;
+
+		//int8_t sample_buffer[2048 * 2];
+		//uint32_t num_samples;
+
 		bool audio_enable;
 
 		union
@@ -470,7 +487,7 @@ typedef struct gb_GameBoy
 			uint8_t current_volume;
 			uint8_t current_volume_sweep_pace;
 			uint8_t current_envelope_dir;
-			//float length_timer;
+			// float length_timer;
 			double length_timer;
 
 			union
