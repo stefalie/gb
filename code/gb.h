@@ -80,10 +80,6 @@ typedef enum gb_Input
 void
 gb_SetInput(gb_GameBoy *gb, gb_Input input, bool down);
 
-// TODO SND rem
-// void
-// gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t *samples);
-
 // The emulators calls the callback and provides stereo 8-bit integer audio samples at 48 kHz.
 typedef void
 gb_AudioCallback(void *user_data, const int8_t *data, size_t len_in_bytes);
@@ -444,9 +440,6 @@ typedef struct gb_GameBoy
 
 		gb_AudioCallback *callback;
 		void *callback_user_data;
-
-		//int8_t sample_buffer[2048 * 2];
-		//uint32_t num_samples;
 
 		bool audio_enable;
 

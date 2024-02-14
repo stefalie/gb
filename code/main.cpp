@@ -1487,40 +1487,11 @@ UpdateGameTexture(gb_GameBoy *gb, Emulator *cfg, GLuint texture, gb_Color *pixel
 	}
 }
 
-// TODO SND rem
-// static void
-// PlayAudio(void *user_data, uint8_t *stream, int len)
-//{
-//	gb_SampleAudio((gb_GameBoy *)user_data, GB_AUDIO_SAMPLING_RATE, len / 2, stream);
-//}
-
 static void
 PlayAudio(void *user_data, const int8_t *data, size_t len_in_bytes)
 {
 	SDL_QueueAudio(*(SDL_AudioDeviceID *)user_data, data, (uint32_t)len_in_bytes);
 }
-
-void
-PlayAudio2(SDL_AudioDeviceID dev)
-{
-	static size_t t = 0;
-
-	for (int i = 0; i < 800; ++i)
-	{
-		const float freq = 120;  // Hz
-		const float m_pi = 3.14159265358979323846f;
-
-		int8_t sample;
-		sample = (int8_t)(sin((2.0f * m_pi) * freq * t * 1.0f / GB_AUDIO_SAMPLING_RATE) * 15);
-		++t;
-
-		// gb->apu.sample_buffer[gb->apu.num_samples++] = sample;  // Right
-		int8_t samples[] = { sample, sample };
-
-		SDL_QueueAudio(dev, samples, 2);
-	}
-}
-
 
 int
 main(int argc, char *argv[])
@@ -1559,8 +1530,6 @@ main(int argc, char *argv[])
 	audio_req.channels = 2;
 	audio_req.samples = 1024;
 	audio_req.userdata = &gb;
-	// TODO SND
-	// audio_req.callback = &PlayAudio;
 	emu.handles.audio_dev = SDL_OpenAudioDevice(NULL, 0, &audio_req, &audio, 0);
 	assert(audio.freq == GB_AUDIO_SAMPLING_RATE);
 	if (!emu.handles.audio_dev)
@@ -1569,9 +1538,6 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 	gb_SetAudioCallback(&gb, &PlayAudio, &emu.handles.audio_dev);
-
-	// uint8_t audio_init_buf[4096 * 2] = {};
-	// SDL_QueueAudio(emu.handles.audio_dev, audio_init_buf, sizeof(audio_init_buf));
 
 	// Load ini
 	const char *ini_name = "config.ini";
@@ -1685,8 +1651,6 @@ main(int argc, char *argv[])
 	{
 		LoadRomFromFile(&emu, &gb, argv[1]);
 	}
-
-	SDL_CheckError();
 
 	// OpenGL setup. Leave matrices as identity.
 	GLuint shader_program;
@@ -1994,8 +1958,6 @@ main(int argc, char *argv[])
 			SDL_PauseAudioDevice(emu.handles.audio_dev, 1);
 			emu.gui.audio_paused = true;
 		}
-
-		// PlayAudio2(emu.handles.audio_dev);
 
 		if (is_running_debug_mode)
 		{
