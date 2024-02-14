@@ -434,6 +434,10 @@ typedef struct gb_GameBoy
 		gb_Color pixels[GB_FRAMEBUFFER_WIDTH * GB_FRAMEBUFFER_HEIGHT];
 	} display;
 
+	// TODO(stefalie): In retrospect, especially after having implemented the APU,
+	// I think I shouldn't have used bitfields and unions. Also, some "registers"
+	// dont' need to be represented at all as is (particularly write-only registers
+	// in the APU).
 	struct gb_Apu
 	{
 		uint64_t clock_acc;

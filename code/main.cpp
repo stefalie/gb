@@ -2018,6 +2018,11 @@ main(int argc, char *argv[])
 					}
 				}
 
+				// TODO(stefalie): Retrospective NOTE to self for the case I'll
+				// ever implement another emulator: Make debugging/breaking an
+				// intergral part of the GameBoy/console library itself and don't
+				// only for the user/application side like here (it's too limiting).
+
 				// Break when new frame is shown.
 				const bool vlbank_rising_edge = emu.gui.prev_lcd_mode == GB_PPU_MODE_HBLANK &&
 						(gb_PpuMode)gb.ppu.stat.mode == GB_PPU_MODE_VBLANK;
