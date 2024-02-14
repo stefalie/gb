@@ -473,8 +473,12 @@ typedef struct gb_GameBoy
 
 		struct gb_PulseA
 		{
+			// TODO SND check what's necessary
 			// Internals
 			bool enable;
+			uint8_t wave_pos;
+			uint16_t wave_pos_timer;
+
 			uint32_t time;
 			uint16_t current_period;
 			uint8_t current_volume;
