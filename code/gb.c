@@ -615,6 +615,13 @@ gb__ClearApu(gb_GameBoy *gb)
 	gb->apu.callback = prev_callback;
 	gb->apu.callback_user_data = prev_callback_user_data;
 
+	// TODO SND: Length counters are not affected.
+	// https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Power_Control
+
+	// TODO SND: this is wrong!!!
+	// Only do that at startup not during!
+	// Maybe we have to split this up.
+	//
 	// Adds some audio delay.
 	if (gb->apu.callback)
 	{
@@ -910,10 +917,12 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF13)
 					{
 						gb->apu.ch1.nr13 = value;
+						gb->apu.ch1.update_period = true;
 					}
 					else if (addr == 0xFF14)
 					{
 						gb->apu.ch1.nr14 = (undefined_value & 0x38) + (value & 0xC7);
+						gb->apu.ch1.update_period = true;
 					}
 					// Channel 2
 					else if (addr == 0xFF16)
@@ -936,6 +945,8 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF19)
 					{
 						gb->apu.ch2.nr24 = (undefined_value & 0x38) + (value & 0xC7);
+						// TODO SND
+						// gb->apu.ch2.update_period = true;
 					}
 					// Channel 3
 					else if (addr == 0xFF1A)
@@ -3882,7 +3893,7 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 	struct gb_Wave *ch3 = &gb->apu.ch3;
 	struct gb_Noise *ch4 = &gb->apu.ch4;
 
-	// Advance registers.
+	// Advance timers, triggering, and sweeps.
 	if (gb->apu.audio_enable)
 	{
 		// Channel 1
@@ -3899,15 +3910,29 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				ch1->enable = true;
 				ch1->wave_pos = 0;
 				ch1->wave_pos_timer = 0;
-				ch1->time = 0;
+				ch1->update_period = false;
 				ch1->current_period = ch1->period;
-				ch1->current_volume = ch1->nr12.volume;
-				ch1->current_volume_sweep_pace = ch1->nr12.volume_sweep_pace;
-				ch1->current_envelope_dir = ch1->nr12.envelope_dir;
-				// TODO(stefalie): I think we should only reset the length timer when it is 0
-				// (goes for other channels too).
+
+				// Length counter only reset if it was on 0.
 				// See: https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Length_Counter
-				ch1->length_timer = (64 - ch1->nr11.length) * (1.0f / 256.0f);
+				if (ch1->length_counter == 0)
+				{
+					ch1->length_counter = 64 - ch1->nr11.length;
+				}
+				// TODO(stefalie): Should this be inside the if just above?
+				ch1->length_timer = 0;
+
+				ch1->current_volume = ch1->nr12.volume;
+				ch1->current_sweep_pace = ch1->nr12.volume_sweep_pace;
+				ch1->current_envelope_dir = ch1->nr12.envelope_dir;
+
+				// The frame sequencer is stepped every 2048 m-cycles (512 Hz).
+				// The volume timer fires for the first time after 7 ticks,
+				// so it starts at 2048 and then again after each subsequent 16384
+				// ticks.
+				// See: https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html
+				ch1->volume_timer = 2048;
+				ch1->sweep_pace_timer = ch1->current_sweep_pace;
 			}
 
 			if (ch1->enable)
@@ -3921,19 +3946,61 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 					ch1->wave_pos %= 8;
 				}
 
-				// TODO SND
-				// bool timeout = false;
-				// if (ch1->length_enable)
-				//{
-				//	ch1->length_timer -= t_in_s;
+				if (ch1->wave_pos == 0 && ch1->update_period)
+				{
+					ch1->update_period = false;
+					ch1->current_period = ch1->period;
+				}
 
-				//	if (ch1->length_timer <= 0.0f)  // Timeout
-				//	{
-				//		timeout = true;
-				//		ch1->enable = false;
-				//		ch1->length_timer = 0.0f;
-				//	}
-				//}
+				// Length timeout
+				if (ch1->length_enable)
+				{
+					ch1->length_timer += elapsed_m_cycles;
+
+					if (ch1->length_timer >= 4096)  // 256 Hz
+					{
+						ch1->length_timer -= 4096;
+						if (ch1->length_counter > 0)
+						{
+							--ch1->length_counter;
+						}
+						if (ch1->length_counter == 0)
+						{
+							ch1->enable = false;
+						}
+					}
+				}
+
+				// Volume sweep
+				if (ch1->current_sweep_pace > 0)
+				{
+					ch1->volume_timer += elapsed_m_cycles;
+
+					if (ch1->volume_timer >= 16384)  // 64 Hz
+					{
+						ch1->volume_timer -= 16384;
+						if (ch1->sweep_pace_timer > 0)
+						{
+							--ch1->sweep_pace_timer;
+						}
+						if (ch1->sweep_pace_timer == 0)
+						{
+							ch1->sweep_pace_timer = ch1->current_sweep_pace;
+
+							// Decrease volume
+							if (ch1->current_volume > 0 && ch1->current_envelope_dir == 0)
+							{
+								--ch1->current_volume;
+							}
+
+							// Increase volume
+							if (ch1->current_volume < 0xF && ch1->current_envelope_dir == 1)
+							{
+								++ch1->current_volume;
+							}
+						}
+					}
+				}
 			}
 		}
 
@@ -4135,111 +4202,6 @@ gb_SetInput(gb_GameBoy *gb, gb_Input input, bool down)
 		*reg |= bit;
 	}
 	assert((*reg & 0xF0) == 0);
-}
-
-void
-gb_SampleAudio(gb_GameBoy *gb, size_t sampling_rate, size_t num_samples, uint8_t *samples)
-{
-	// static double t_acc = 0;
-	// static size_t wave_form_idx2 = 0;
-
-	for (size_t i = 0; i < num_samples; ++i)
-	{
-		int8_t sample_result = 0;
-		if (gb->apu.audio_enable)
-		{
-			int8_t channel_samples[4] = { 0 };
-
-			// Channel 1
-			struct gb_PulseA *ch1 = &gb->apu.ch1;
-			// TODO(steaflie): Turning off the DACs can happen at the wrong time.
-			// This is because the CPU that writes these registers is advanced at
-			// V-Sync frequency (likely 60 Hz), but audio sampling happens more
-			// frequently.
-			const bool dac1_off = ch1->nr12.volume == 0 && ch1->nr12.envelope_dir == 0;
-			if (dac1_off)
-			{
-				ch1->enable = false;
-			}
-			else
-			{
-				if (ch1->trigger == 1)
-				{
-					ch1->trigger = 0;
-					ch1->enable = true;
-					ch1->time = 0;
-					ch1->current_period = ch1->period;
-					ch1->current_volume = ch1->nr12.volume;
-					ch1->current_volume_sweep_pace = ch1->nr12.volume_sweep_pace;
-					ch1->current_envelope_dir = ch1->nr12.envelope_dir;
-					// TODO(stefalie): I think we should only reset the length timer when it is 0
-					// (goes for other channels too).
-					// See: https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Length_Counter
-					ch1->length_timer = (64 - ch1->nr11.length) * (1.0f / 256.0f);
-				}
-
-				if (ch1->enable)
-				{
-					double t_in_s = (double)ch1->time / sampling_rate;
-
-
-					double t_in_m_cycles = t_in_s * 1048576;
-					// size_t wave_form_idx = (size_t)(8 * fmod(t_in_m_cycles, (2048.0 - ch1->current_period) * 8));
-					size_t wave_form_idx = (size_t)(t_in_m_cycles / (2048.0 - ch1->current_period)) % 8;
-
-					// Reload frequency in case it changed.
-					// TODO SND: incorrect when the period seep is on. it will reload the period
-					// not because it was changed via the register but due to the sweep.
-					// if (wave_form_idx == 0)
-					//{
-					//	ch1->current_period = ch1->period;
-					//}
-
-					bool timeout = false;
-					if (ch1->length_enable)
-					{
-						ch1->length_timer -= t_in_s;
-
-						if (ch1->length_timer <= 0.0f)  // Timeout
-						{
-							timeout = true;
-							ch1->enable = false;
-							ch1->length_timer = 0.0f;
-						}
-					}
-
-					if (!ch1->length_enable || !timeout)
-					{
-						// TODO: sweep frequency, volume sweep
-						double freq = 131072.0f / (2048.0f - ch1->current_period);
-						(freq);
-
-						uint8_t wave_sample = gb__PwmWaveForms[ch1->nr11.duty_cycle][wave_form_idx];
-						uint8_t sample2 = ch1->current_volume * (wave_sample * 2 - 1);
-
-						channel_samples[0] = sample2;
-						++ch1->time;
-					}
-				}
-			}
-
-			sample_result = channel_samples[0];  // + channel_samples[1];;
-		}
-
-		*samples++ = (uint8_t)sample_result;  // Left
-		*samples++ = (uint8_t)sample_result;  // Right
-	}
-
-	// Debug sine
-	// const float freq = 120;  // Hz
-	// const float m_pi = 3.14159265358979323846f;
-
-	// static int t = 0;
-	// for (size_t i = 0; i < num_samples; ++i)
-	//{
-	//	*samples++ = (uint8_t)(sin((2.0f * m_pi) * freq * t * 1.0f / sampling_rate) * 127);
-	//	++t;
-	// }
 }
 
 void
