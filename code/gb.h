@@ -478,7 +478,8 @@ typedef struct gb_GameBoy
 		struct gb_PulseA
 		{
 			// Internals
-			bool enable;
+			bool dac_enable;
+			bool channel_enable;
 			uint8_t wave_pos;
 			uint16_t wave_pos_timer;
 			bool update_period;
@@ -544,7 +545,8 @@ typedef struct gb_GameBoy
 		struct gb_PulseB
 		{
 			// Internals
-			bool enable;
+			bool dac_enable;
+			bool channel_enable;
 			uint8_t wave_pos;
 			uint16_t wave_pos_timer;
 			bool update_period;
@@ -594,13 +596,14 @@ typedef struct gb_GameBoy
 
 		struct gb_Wave
 		{
-			bool enable;  // 1-to-1 mirror of nr30.dac_enable
-			uint32_t time;
-			// TODO SND
+			// Internals
+			bool channel_enable;
+			uint8_t wave_pos;
+			uint16_t wave_pos_timer;
+			bool update_period;
 			uint16_t current_period;
-			uint8_t current_volume;
-			uint8_t current_sweep_pace;
-			uint8_t current_envelope_dir;
+			uint16_t length_counter;
+			uint16_t length_timer;
 
 			union
 			{
@@ -640,8 +643,8 @@ typedef struct gb_GameBoy
 
 		struct gb_Noise
 		{
-			bool enable;
-			uint32_t time;
+			bool dac_enable;
+			bool channel_enable;
 			// TODO SND
 			uint16_t current_period;
 			uint8_t current_volume;

@@ -421,8 +421,8 @@ gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr)
 				if (addr == 0xFF26)
 				{
 					const uint8_t nr52 = (gb->apu.audio_enable ? 0x80 : 0x00) + (undefined_value & 0x70) +
-							(gb->apu.ch1.enable ? 0x01 : 0x00) + (gb->apu.ch2.enable ? 0x02 : 0x00) +
-							(gb->apu.ch3.enable ? 0x04 : 0x00) + (gb->apu.ch4.enable ? 0x08 : 0x00);
+							(gb->apu.ch1.channel_enable ? 0x01 : 0x00) + (gb->apu.ch2.channel_enable ? 0x02 : 0x00) +
+							(gb->apu.ch3.channel_enable ? 0x04 : 0x00) + (gb->apu.ch4.channel_enable ? 0x08 : 0x00);
 					assert((nr52 & 0x70) == 0x70);
 					return nr52;
 				}
@@ -926,6 +926,11 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF12)
 					{
 						gb->apu.ch1.nr12.reg = value;
+						gb->apu.ch1.dac_enable = !(gb->apu.ch1.nr12.volume == 0 && gb->apu.ch1.nr12.envelope_dir == 0);
+						if (!gb->apu.ch1.dac_enable)
+						{
+							gb->apu.ch1.channel_enable = false;
+						}
 					}
 					else if (addr == 0xFF13)
 					{
@@ -945,6 +950,11 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF17)
 					{
 						gb->apu.ch2.nr22.reg = value;
+						gb->apu.ch2.dac_enable = !(gb->apu.ch2.nr22.volume == 0 && gb->apu.ch2.nr22.envelope_dir == 0);
+						if (!gb->apu.ch2.dac_enable)
+						{
+							gb->apu.ch2.channel_enable = false;
+						}
 					}
 					else if (addr == 0xFF18)
 					{
@@ -955,16 +965,15 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					{
 						gb->apu.ch2.nr24 = (undefined_value & 0x38) + (value & 0xC7);
 						gb->apu.ch2.update_period = true;
-						// TODO SND is this also necessary for channels 3/4?
 					}
 					// Channel 3
 					else if (addr == 0xFF1A)
 					{
-						// TODO SND
-						// uint8_t value_msb_only = value & 0x80;
-						// gb->apu.ch3.nr30.reg = (undefined_value & 0x7F) + value_msb_only;
-						// gb->apu.ch3.enable = value_msb_only > 0;
 						gb->apu.ch3.nr30.reg = (undefined_value & 0x7F) + (value & 0x80);
+						if (!gb->apu.ch3.nr30.dac_enable)
+						{
+							gb->apu.ch3.channel_enable = false;
+						}
 					}
 					else if (addr == 0xFF1B)
 					{
@@ -977,10 +986,13 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF1D)
 					{
 						gb->apu.ch3.nr33 = value;
+						gb->apu.ch3.update_period = true;
 					}
 					else if (addr == 0xFF1E)
 					{
 						gb->apu.ch3.nr34 = (undefined_value & 0x38) + (value & 0xC7);
+						gb->apu.ch3.update_period = true;
+						// TODO SND is this also necessary for channels 4?
 					}
 					// Channel 4
 					else if (addr == 0xFF20)
@@ -990,6 +1002,11 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF21)
 					{
 						gb->apu.ch4.nr42.reg = value;
+						gb->apu.ch4.dac_enable = !(gb->apu.ch4.nr42.volume == 0 && gb->apu.ch4.nr42.envelope_dir == 0);
+						if (!gb->apu.ch4.dac_enable)
+						{
+							gb->apu.ch4.channel_enable = false;
+						}
 					}
 					else if (addr == 0xFF22)
 					{
@@ -3893,7 +3910,7 @@ gb__CalculateSweepFrequency(struct gb_PulseA *ch1)
 
 	if (new_period >= 2048)
 	{
-		ch1->enable = false;
+		ch1->channel_enable = false;
 	}
 	// NOTE: This can never underflow since delta_period is always smaller than the period.
 
@@ -3903,11 +3920,6 @@ gb__CalculateSweepFrequency(struct gb_PulseA *ch1)
 static void
 gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 {
-	struct gb_PulseA *ch1 = &gb->apu.ch1;
-	struct gb_PulseB *ch2 = &gb->apu.ch2;
-	struct gb_Wave *ch3 = &gb->apu.ch3;
-	struct gb_Noise *ch4 = &gb->apu.ch4;
-
 	// Advance timers, triggering, and sweeps.
 	//
 	// NOTE: Everything is advanced as long as audio is not off. Even if the
@@ -3915,15 +3927,14 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 	if (gb->apu.audio_enable)
 	{
 		{  // Channel 1
-			const bool dac1_off = ch1->nr12.volume == 0 && ch1->nr12.envelope_dir == 0;
-			if (dac1_off)
-			{
-				ch1->enable = false;
-			}
-			if (ch1->trigger == 1 && !dac1_off)
+			struct gb_PulseA *ch1 = &gb->apu.ch1;
+
+			// TODO(steaflie): Trigger could also directly go into memory write
+			// procedure. Consider it.
+			if (ch1->trigger == 1 && ch1->dac_enable)
 			{
 				ch1->trigger = 0;
-				ch1->enable = true;
+				ch1->channel_enable = true;
 				ch1->update_period = false;
 				ch1->current_period = ch1->period;
 
@@ -3979,7 +3990,7 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 					}
 					if (ch1->length_counter == 0)
 					{
-						ch1->enable = false;
+						ch1->channel_enable = false;
 					}
 				}
 			}
@@ -4060,20 +4071,15 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 		// TODO(stefalie): Can we somehow de-duplicate some of this? The timers Maybe?
 		// Now I can wish I could use inheritance for at least pulse A & B.
 		{  // Channel 2
-			const bool dac2_off = ch2->nr22.volume == 0 && ch2->nr22.envelope_dir == 0;
-			if (dac2_off)
-			{
-				ch2->enable = false;
-			}
-			if (ch2->trigger == 1 && !dac2_off)
+			struct gb_PulseB *ch2 = &gb->apu.ch2;
+
+			if (ch2->trigger == 1 && ch2->dac_enable)
 			{
 				ch2->trigger = 0;
-				ch2->enable = true;
+				ch2->channel_enable = true;
 				ch2->update_period = false;
 				ch2->current_period = ch2->period;
 
-				// Length counter only reset if it was on 0.
-				// See: https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Length_Counter
 				if (ch2->length_counter == 0)
 				{
 					ch2->length_counter = 64 - ch2->nr21.length;
@@ -4116,11 +4122,10 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 					}
 					if (ch2->length_counter == 0)
 					{
-						ch2->enable = false;
+						ch2->channel_enable = false;
 					}
 				}
 			}
-
 
 			// Volume sweep
 			ch2->volume_timer += elapsed_m_cycles;
@@ -4159,6 +4164,8 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 		}
 
 		{  // Channel 4
+			struct gb_Noise *ch4 = &gb->apu.ch4;
+
 			(void)ch4;
 		}
 	}
@@ -4181,8 +4188,15 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			float samples[2] = { 0 };
 			if (gb->apu.audio_enable)
 			{
-				if (ch1->enable)
+				struct gb_PulseA *ch1 = &gb->apu.ch1;
+				struct gb_PulseB *ch2 = &gb->apu.ch2;
+				struct gb_Wave *ch3 = &gb->apu.ch3;
+				struct gb_Noise *ch4 = &gb->apu.ch4;
+
+				if (ch1->channel_enable)
 				{
+					assert(ch1->dac_enable);
+
 					uint8_t sample = ch1->current_volume * gb__PwmWaveForms[ch1->nr11.duty_cycle][ch1->wave_pos];
 					if (gb->apu.nr51.ch1_left == 1)
 					{
@@ -4194,8 +4208,10 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 					}
 				}
 
-				if (ch2->enable)
+				if (ch2->channel_enable)
 				{
+					assert(ch2->dac_enable);
+
 					uint8_t sample = ch2->current_volume * gb__PwmWaveForms[ch2->nr21.duty_cycle][ch2->wave_pos];
 					if (gb->apu.nr51.ch2_left == 1)
 					{
@@ -4207,8 +4223,10 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 					}
 				}
 
-				if (ch3->enable)
+				if (ch3->channel_enable)
 				{
+					assert(ch3->nr30.dac_enable);
+
 					uint8_t sample = 0;
 					if (gb->apu.nr51.ch3_left == 1)
 					{
@@ -4220,8 +4238,10 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 					}
 				}
 
-				if (ch4->enable)
+				if (ch4->channel_enable)
 				{
+					assert(ch2->dac_enable);
+
 					uint8_t sample = 0;
 					if (gb->apu.nr51.ch4_left == 1)
 					{
