@@ -4231,10 +4231,11 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			// samples[0] = sinf((2.0f * 3.14159265358f) * 240 /* Hz */ * t++ * 1.0f / GB_AUDIO_SAMPLING_RATE);
 			// samples[1] = samples[0];
 
+			// TODO(stefalie): should these be rounded instead of truncated?
 			const float volume_multiplier = 1.0f;
 			int8_t int_samples[] = {
-				(int8_t)(samples[0] * (gb->apu.nr50.left_volume + 1) * volume_multiplier + 0.5f),
-				(int8_t)(samples[1] * (gb->apu.nr50.right_volume + 1) * volume_multiplier + 0.5f),
+				(int8_t)(samples[0] * (gb->apu.nr50.left_volume + 1) * volume_multiplier),
+				(int8_t)(samples[1] * (gb->apu.nr50.right_volume + 1) * volume_multiplier),
 			};
 			gb->apu.callback(gb->apu.callback_user_data, int_samples, 2);
 		}
