@@ -1257,13 +1257,6 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 
 	gb__ClearApu(gb);
 
-	// Adds some audio delay.
-	if (gb->apu.callback)
-	{
-		int8_t silence[2048 * 2] = { 0 };
-		gb->apu.callback(gb->apu.callback_user_data, silence, sizeof(silence));
-	}
-
 	gb__MemoryWriteByte(gb, 0xFF05, 0x00);
 	gb__MemoryWriteByte(gb, 0xFF06, 0x00);
 	gb__MemoryWriteByte(gb, 0xFF07, 0x00);

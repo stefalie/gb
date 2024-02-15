@@ -697,7 +697,6 @@ GuiDraw(Emulator *emu, gb_GameBoy *gb)
 						if (!LoadRomFromFile(emu, gb, ofn.lpstrFile))
 						{
 							emu->gui.reset_delta_time = true;
-							SDL_ClearQueuedAudio(emu->handles.audio_dev);
 						}
 					}
 				}
@@ -721,9 +720,7 @@ GuiDraw(Emulator *emu, gb_GameBoy *gb)
 				if (ImGui::MenuItem("Reset"))
 				{
 					gb_Reset(gb, emu->ini.skip_bios);
-					emu->debug.elapsed_m_cycles = 0;
-					emu->gui.reset_delta_time = true;  // TODO(stefalie): Is this needed?
-					SDL_ClearQueuedAudio(emu->handles.audio_dev);
+					emu->gui.reset_delta_time = true;
 				}
 				if (ImGui::MenuItem("Pause", "Space", emu->gui.pause))
 				{
@@ -1541,6 +1538,10 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 	gb_SetAudioCallback(&gb, &PlayAudio, &emu.handles.audio_dev);
+	SDL_ClearQueuedAudio(emu.handles.audio_dev);
+	// Add a tiny audio delay
+	int8_t silence[1024 * 2] = { 0 };
+	SDL_QueueAudio(emu.handles.audio_dev, silence, sizeof(silence));
 
 	// Load ini
 	const char *ini_name = "config.ini";
@@ -1794,6 +1795,9 @@ main(int argc, char *argv[])
 				emu.gui.show_quit_popup = true;
 				break;
 			case SDL_WINDOWEVENT:
+
+				// SDL_PauseAudioDevice(emu.handles.audio_dev, 1);
+				// emu.gui.audio_paused = true;
 				if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED &&
 						SDL_GetWindowFromID(event.window.windowID) == emu.handles.window)
 				{
@@ -1803,6 +1807,13 @@ main(int argc, char *argv[])
 						emu.ini.window_width = (int)(event.window.data1 / dpi_scale);
 						emu.ini.window_height = (int)(event.window.data2 / dpi_scale);
 					}
+					emu.gui.reset_delta_time = true;
+				}
+
+				if ((event.window.event == SDL_WINDOWEVENT_RESIZED || event.window.event == SDL_WINDOWEVENT_MOVED) &&
+						SDL_GetWindowFromID(event.window.windowID) == emu.handles.window)
+				{
+					emu.gui.reset_delta_time = true;
 				}
 				else if (event.window.event == SDL_WINDOWEVENT_CLOSE &&
 						SDL_GetWindowFromID(event.window.windowID) == emu.handles.window)
@@ -1939,6 +1950,9 @@ main(int argc, char *argv[])
 		{
 			elapsed_m_cycles = 0;
 			emu.gui.reset_delta_time = false;
+			SDL_ClearQueuedAudio(emu.handles.audio_dev);
+			// Add a tiny audio delay
+			SDL_QueueAudio(emu.handles.audio_dev, silence, sizeof(silence));
 		}
 
 		emu.gui.show_gui_timeout_in_s -= (float)dt_in_s;
