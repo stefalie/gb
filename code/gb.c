@@ -907,11 +907,6 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					}
 					else if (addr == 0xFF12)
 					{
-						// TODO SND
-						// if ((value & 0xF8) == 0x00)
-						//{
-						//	gb->apu.ch1.enable = false;
-						//}
 						gb->apu.ch1.nr12.reg = value;
 					}
 					else if (addr == 0xFF13)
@@ -931,22 +926,18 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					}
 					else if (addr == 0xFF17)
 					{
-						// TODO SND
-						// if ((value & 0xF8) == 0x00)
-						//{
-						//	gb->apu.ch2.enable = false;
-						//}
 						gb->apu.ch2.nr22.reg = value;
 					}
 					else if (addr == 0xFF18)
 					{
 						gb->apu.ch2.nr23 = value;
+						gb->apu.ch2.update_period = true;
 					}
 					else if (addr == 0xFF19)
 					{
 						gb->apu.ch2.nr24 = (undefined_value & 0x38) + (value & 0xC7);
-						// TODO SND
-						// gb->apu.ch2.update_period = true;
+						gb->apu.ch2.update_period = true;
+						// TODO SND is this also necessary for channels 3/4?
 					}
 					// Channel 3
 					else if (addr == 0xFF1A)
@@ -980,11 +971,6 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					}
 					else if (addr == 0xFF21)
 					{
-						// TODO SND
-						// if ((value & 0xF8) == 0x00)
-						//{
-						//	gb->apu.ch4.enable = false;
-						//}
 						gb->apu.ch4.nr42.reg = value;
 					}
 					else if (addr == 0xFF22)
@@ -3933,6 +3919,15 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				// See: https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html
 				ch1->volume_timer = 2048;
 				ch1->sweep_pace_timer = ch1->current_sweep_pace;
+				ch1->freq_sweep_enable = ch1->nr10.freq_sweep_pace != 0 || ch1->nr10.freq_sweep_step != 0;
+				// Similar thought process for the frequency sweep timing.
+				ch1->freq_timer = 4096;
+				ch1->freq_sweep_pace_timer = ch1->nr10.freq_sweep_pace;
+				if (ch1->freq_sweep_pace_timer == 0)
+				{
+					ch1->freq_sweep_pace_timer = 8;
+				}
+				ch1->freq_shadow_period = ch1->period;
 			}
 
 			if (ch1->enable)
@@ -4001,11 +3996,165 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 						}
 					}
 				}
+
+				// Frequency sweep
+				if (ch1->freq_sweep_enable)
+				{
+					ch1->freq_timer += elapsed_m_cycles;
+
+					if (ch1->freq_timer >= 8192)  // 128 Hz
+					{
+						ch1->freq_timer -= 8192;
+
+						if (ch1->freq_sweep_pace_timer > 0)
+						{
+							--ch1->freq_sweep_pace_timer;
+						}
+						if (ch1->freq_sweep_pace_timer == 0)
+						{
+							ch1->freq_sweep_pace_timer = ch1->nr10.freq_sweep_pace;
+							if (ch1->freq_sweep_pace_timer == 0)
+							{
+								ch1->freq_sweep_pace_timer = 8;
+							}
+
+							// TODO(stefalie): I find it weird that we even have the frequency sweep enabled
+							// if the pace == 0. It's similarly weird to run this with a step of 0 because
+							// it doesn't alter the period at all. But this seems all correct according to:
+							// - https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html
+							// - https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Frequency_Sweep
+							if (ch1->nr10.freq_sweep_pace > 0)
+							{
+								uint16_t shadow_p = ch1->freq_shadow_period;
+								int delta_p = shadow_p >> ch1->nr10.freq_sweep_step;
+								// Decrease/increase frequency (increase/decrease period)
+								int new_period =
+										ch1->nr10.freq_sweep_dir == 0 ? shadow_p + delta_p : shadow_p - delta_p;
+
+								if (new_period >= 2048)
+								{
+									ch1->enable = false;
+								}
+								else
+								{
+									ch1->freq_shadow_period = (uint16_t)new_period;
+									// Write period back to registers. This will become the active period
+									// once the current sample sequence restarts.
+									ch1->period = (uint16_t)new_period;
+									gb->apu.ch1.update_period = true;
+								}
+
+								// NOTE: This can never underflow since delta_period is always
+								// smaller than the period.
+							}
+						}
+					}
+				}
 			}
 		}
 
+		// TODO(stefalie): Can we somehow de-duplicate some of this? The timers Maybe?
+		// Now I can wish I could use inheritance for at least pulse A & B.
+		//
 		// Channel 2
-		(void)ch2;
+		const bool dac2_off = ch2->nr22.volume == 0 && ch2->nr22.envelope_dir == 0;
+		if (dac2_off)
+		{
+			ch2->enable = false;
+		}
+		else
+		{
+			if (ch2->trigger == 1)
+			{
+				ch2->trigger = 0;
+				ch2->enable = true;
+				ch2->wave_pos = 0;
+				ch2->wave_pos_timer = 0;
+				ch2->update_period = false;
+				ch2->current_period = ch2->period;
+
+				if (ch2->length_counter == 0)
+				{
+					ch2->length_counter = 64 - ch2->nr21.length;
+				}
+				ch2->length_timer = 0;
+
+				ch2->current_volume = ch2->nr22.volume;
+				ch2->current_sweep_pace = ch2->nr22.volume_sweep_pace;
+				ch2->current_envelope_dir = ch2->nr22.envelope_dir;
+
+				ch2->volume_timer = 2048;
+				ch2->sweep_pace_timer = ch2->current_sweep_pace;
+			}
+
+			if (ch2->enable)
+			{
+				ch2->wave_pos_timer += elapsed_m_cycles;
+				uint16_t period = 2048 - ch2->current_period;
+				while (ch2->wave_pos_timer >= period)
+				{
+					ch2->wave_pos_timer -= period;
+					++ch2->wave_pos;
+					ch2->wave_pos %= 8;
+				}
+
+				if (ch2->wave_pos == 0 && ch2->update_period)
+				{
+					ch2->update_period = false;
+					ch2->current_period = ch2->period;
+				}
+
+				// Length timeout
+				if (ch2->length_enable)
+				{
+					ch2->length_timer += elapsed_m_cycles;
+
+					if (ch2->length_timer >= 4096)  // 256 Hz
+					{
+						ch2->length_timer -= 4096;
+						if (ch2->length_counter > 0)
+						{
+							--ch2->length_counter;
+						}
+						if (ch2->length_counter == 0)
+						{
+							ch2->enable = false;
+						}
+					}
+				}
+
+				// Volume sweep
+				if (ch2->current_sweep_pace > 0)
+				{
+					ch2->volume_timer += elapsed_m_cycles;
+
+					if (ch2->volume_timer >= 16384)  // 64 Hz
+					{
+						ch2->volume_timer -= 16384;
+						if (ch2->sweep_pace_timer > 0)
+						{
+							--ch2->sweep_pace_timer;
+						}
+						if (ch2->sweep_pace_timer == 0)
+						{
+							ch2->sweep_pace_timer = ch2->current_sweep_pace;
+
+							// Decrease volume
+							if (ch2->current_volume > 0 && ch2->current_envelope_dir == 0)
+							{
+								--ch2->current_volume;
+							}
+
+							// Increase volume
+							if (ch2->current_volume < 0xF && ch2->current_envelope_dir == 1)
+							{
+								++ch2->current_volume;
+							}
+						}
+					}
+				}
+			}
+		}
 
 		// Channel 3
 		(void)ch3;
@@ -4025,28 +4174,68 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			float samples[2] = { 0 };
 			if (gb->apu.audio_enable)
 			{
-				uint8_t channel_samples[4] = { 0 };
-
 				if (ch1->enable)
 				{
-					channel_samples[0] = ch1->current_volume * gb__PwmWaveForms[ch1->nr11.duty_cycle][ch1->wave_pos];
+					uint8_t sample = ch1->current_volume * gb__PwmWaveForms[ch1->nr11.duty_cycle][ch1->wave_pos];
+					if (gb->apu.nr51.ch1_left == 1)
+					{
+						samples[0] += 1.0f - sample / 7.5f;
+					}
+					if (gb->apu.nr51.ch1_right == 1)
+					{
+						samples[1] += 1.0f - sample / 7.5f;
+					}
 				}
 
-				// TODO SND: scale each channel:
-				// https://gbdev.io/pandocs/Audio_Registers.html#ff24--nr50-master-volume--vin-panning
-				samples[0] = 1.0f - channel_samples[0] / 7.5f;
-				samples[1] = samples[0];
+				if (ch2->enable)
+				{
+					uint8_t sample = ch2->current_volume * gb__PwmWaveForms[ch2->nr21.duty_cycle][ch2->wave_pos];
+					if (gb->apu.nr51.ch2_left == 1)
+					{
+						samples[0] += 1.0f - sample / 7.5f;
+					}
+					if (gb->apu.nr51.ch2_right == 1)
+					{
+						samples[1] += 1.0f - sample / 7.5f;
+					}
+				}
+
+				if (ch3->enable)
+				{
+					uint8_t sample = 0;
+					if (gb->apu.nr51.ch3_left == 1)
+					{
+						samples[0] += 1.0f - sample / 7.5f;
+					}
+					if (gb->apu.nr51.ch3_right == 1)
+					{
+						samples[1] += 1.0f - sample / 7.5f;
+					}
+				}
+
+				if (ch4->enable)
+				{
+					uint8_t sample = 0;
+					if (gb->apu.nr51.ch4_left == 1)
+					{
+						samples[0] += 1.0f - sample / 7.5f;
+					}
+					if (gb->apu.nr51.ch4_right == 1)
+					{
+						samples[1] += 1.0f - sample / 7.5f;
+					}
+				}
 			}
 
-			// Debug sine
+			// TODO(stefalie): Remove this debug sine wave once it's not used anymore.
 			// static int t;
 			// samples[0] = sinf((2.0f * 3.14159265358f) * 240 /* Hz */ * t++ * 1.0f / GB_AUDIO_SAMPLING_RATE);
 			// samples[1] = samples[0];
 
-			const float volume_multiplier = 15.0f;
+			const float volume_multiplier = 1.0f;
 			int8_t int_samples[] = {
-				(int8_t)(samples[0] * volume_multiplier + 0.5f),
-				(int8_t)(samples[1] * volume_multiplier + 0.5f),
+				(int8_t)(samples[0] * (gb->apu.nr50.left_volume + 1) * volume_multiplier + 0.5f),
+				(int8_t)(samples[1] * (gb->apu.nr50.right_volume + 1) * volume_multiplier + 0.5f),
 			};
 			gb->apu.callback(gb->apu.callback_user_data, int_samples, 2);
 		}

@@ -477,6 +477,9 @@ typedef struct gb_GameBoy
 
 		struct gb_PulseA
 		{
+			// TODO(stefalie): Can we somehow de-duplicate some of this? The timers Maybe?
+			// Now I can wish I could use inheritance for at least pulse A & B.
+
 			// Internals
 			bool enable;
 			uint8_t wave_pos;
@@ -489,7 +492,11 @@ typedef struct gb_GameBoy
 			uint8_t current_sweep_pace;
 			uint8_t current_envelope_dir;
 			uint16_t volume_timer;
-			uint16_t sweep_pace_timer;
+			uint8_t sweep_pace_timer;
+			bool freq_sweep_enable;
+			uint16_t freq_timer;
+			uint8_t freq_sweep_pace_timer;
+			uint16_t freq_shadow_period;
 
 			union
 			{
@@ -539,14 +546,19 @@ typedef struct gb_GameBoy
 
 		struct gb_PulseB
 		{
-			// TODO SND check what's necessary
+			// Internals
 			bool enable;
-			uint32_t time;
+			uint8_t wave_pos;
+			uint16_t wave_pos_timer;
+			bool update_period;
 			uint16_t current_period;
+			uint16_t length_counter;
+			uint16_t length_timer;
 			uint8_t current_volume;
 			uint8_t current_sweep_pace;
 			uint8_t current_envelope_dir;
-			double length_timer;
+			uint16_t volume_timer;
+			uint8_t sweep_pace_timer;
 
 			union
 			{
