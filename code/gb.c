@@ -4134,11 +4134,52 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 		}
 
 		{  // Channel 3
-			(void)ch3;
+			struct gb_Wave *ch3 = &gb->apu.ch3;
+
+			if (ch3->trigger == 1 && ch3->nr30.dac_enable)
+			{
+				ch3->trigger = 0;
+				ch3->channel_enable = true;
+
+				if (ch3->length_counter == 0)
+				{
+					ch3->length_counter = 256 - ch3->nr31_length;
+				}
+			}
+
+			ch3->wave_pos_timer += elapsed_m_cycles * 2;  // NOTE: 2 MHz, not 1 MHz
+			uint16_t period = 2048 - ch3->period;
+			while (ch3->wave_pos_timer >= period)
+			{
+				ch3->wave_pos_timer -= period;
+				++ch3->wave_pos;
+				ch3->wave_pos %= 32;  // NOTE: The wave length of channel 3 is longer.
+			}
+
+			// Length timer
+			ch3->length_timer += elapsed_m_cycles;
+			if (ch3->length_timer >= 4096)  // 256 Hz
+			{
+				ch3->length_timer -= 4096;
+
+				// Timeout
+				if (ch3->length_enable && ch3->length_counter > 0)
+				{
+					if (ch3->length_counter > 0)
+					{
+						--ch3->length_counter;
+					}
+					if (ch3->length_counter == 0)
+					{
+						ch3->channel_enable = false;
+					}
+				}
+			}
 		}
 
 		{  // Channel 4
 			struct gb_Noise *ch4 = &gb->apu.ch4;
+			// TODO SND
 
 			(void)ch4;
 		}
@@ -4167,11 +4208,14 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				struct gb_Wave *ch3 = &gb->apu.ch3;
 				struct gb_Noise *ch4 = &gb->apu.ch4;
 
+				// TODO(stefalie): Add a GUI/debugger option to selectively disable channels.
+
 				if (ch1->channel_enable)
 				{
 					assert(ch1->dac_enable);
 
 					uint8_t sample = ch1->current_volume * gb__PwmWaveForms[ch1->nr11.duty_cycle][ch1->wave_pos];
+					// TODO SND take  1.0 ... out
 					if (gb->apu.nr51.ch1_left == 1)
 					{
 						samples[0] += 1.0f - sample / 7.5f;
@@ -4200,8 +4244,31 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				if (ch3->channel_enable)
 				{
 					assert(ch3->nr30.dac_enable);
+					uint8_t pos = ch3->wave_pos;
+					// NOTE: I think Argentum does the wrong thing here. Upper nibble comes first.
+					uint8_t sample = (gb->apu.wave_pattern[pos / 2] >> ((pos & 0x01) == 0 ? 4u : 0u)) & 0x0F;
 
-					uint8_t sample = 0;
+					uint8_t volume_shift = 0xFF;
+					if (ch3->nr32.output_level == 1)
+					{
+						volume_shift = 0;
+					}
+					else if (ch3->nr32.output_level == 2)
+					{
+						volume_shift = 1;
+					}
+					else if (ch3->nr32.output_level == 3)
+					{
+						volume_shift = 2;
+					}
+					else if (ch3->nr32.output_level == 0)
+					{
+						volume_shift = 4;
+					}
+					assert(volume_shift != 0xFF);
+
+					sample >>= volume_shift;
+
 					if (gb->apu.nr51.ch3_left == 1)
 					{
 						samples[0] += 1.0f - sample / 7.5f;
