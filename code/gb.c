@@ -3893,8 +3893,8 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			{
 				ch1->trigger = 0;
 				ch1->enable = true;
-				ch1->wave_pos = 0;
-				ch1->wave_pos_timer = 0;
+				// ch1->wave_pos = 0;
+				// ch1->wave_pos_timer = 0;
 				ch1->update_period = false;
 				ch1->current_period = ch1->period;
 
@@ -3905,7 +3905,7 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 					ch1->length_counter = 64 - ch1->nr11.length;
 				}
 				// TODO(stefalie): Should this be inside the if just above?
-				ch1->length_timer = 0;
+				// ch1->length_timer = 0;
 
 				ch1->current_volume = ch1->nr12.volume;
 				ch1->current_sweep_pace = ch1->nr12.volume_sweep_pace;
@@ -3916,11 +3916,11 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				// so it starts at 2048 and then again after each subsequent 16384
 				// ticks.
 				// See: https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html
-				ch1->volume_timer = 2048;
+				// ch1->volume_timer = 2048;
 				ch1->sweep_pace_timer = ch1->current_sweep_pace;
 				ch1->freq_sweep_enable = ch1->nr10.freq_sweep_pace != 0 || ch1->nr10.freq_sweep_step != 0;
 				// Similar thought process for the frequency sweep timing.
-				ch1->freq_timer = 4096;
+				// ch1->freq_timer = 4096;
 				ch1->freq_sweep_pace_timer = ch1->nr10.freq_sweep_pace;
 				if (ch1->freq_sweep_pace_timer == 0)
 				{
@@ -4067,8 +4067,8 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			{
 				ch2->trigger = 0;
 				ch2->enable = true;
-				ch2->wave_pos = 0;
-				ch2->wave_pos_timer = 0;
+				// ch2->wave_pos = 0;
+				// ch2->wave_pos_timer = 0;
 				ch2->update_period = false;
 				ch2->current_period = ch2->period;
 
@@ -4076,13 +4076,13 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				{
 					ch2->length_counter = 64 - ch2->nr21.length;
 				}
-				ch2->length_timer = 0;
+				// ch2->length_timer = 0;
 
 				ch2->current_volume = ch2->nr22.volume;
 				ch2->current_sweep_pace = ch2->nr22.volume_sweep_pace;
 				ch2->current_envelope_dir = ch2->nr22.envelope_dir;
 
-				ch2->volume_timer = 2048;
+				// ch2->volume_timer = 2048;
 				ch2->sweep_pace_timer = ch2->current_sweep_pace;
 			}
 
