@@ -479,7 +479,13 @@ SaveGameState(const gb_GameBoy *gb, const char *dir, int slot)
 }
 
 static void
-LoadGameState(gb_GameBoy *gb, const char *dir, int slot, Rom rom)
+PlayAudio(void *user_data, const int8_t *data, size_t len_in_bytes)
+{
+	SDL_QueueAudio(*(SDL_AudioDeviceID *)user_data, data, (uint32_t)len_in_bytes);
+}
+
+static void
+LoadGameState(gb_GameBoy *gb, const char *dir, int slot, Rom rom, SDL_AudioDeviceID *audio_dev)
 {
 	char path[512];
 	PrepareSavePath(gb, dir, slot, path);
@@ -499,6 +505,7 @@ LoadGameState(gb_GameBoy *gb, const char *dir, int slot, Rom rom)
 		// This is the only pointer inside the gb_GameBoy struct.
 		// It needs patching.
 		gb->rom.data = rom.data;
+		gb_SetAudioCallback(gb, &PlayAudio, audio_dev);
 	}
 }
 
@@ -733,7 +740,8 @@ GuiDraw(Emulator *emu, gb_GameBoy *gb)
 				}
 				if (ImGui::MenuItem("Load", "F7", false, emu->gui.has_active_rom))
 				{
-					LoadGameState(gb, emu->save_dir_path, emu->gui.save_slot, emu->rom);
+					LoadGameState(gb, emu->save_dir_path, emu->gui.save_slot, emu->rom, &emu->handles.audio_dev);
+					emu->gui.reset_delta_time = true;
 				}
 				if (ImGui::BeginMenu("Save Slot"))
 				{
@@ -1487,12 +1495,6 @@ UpdateGameTexture(gb_GameBoy *gb, Emulator *cfg, GLuint texture, gb_Color *pixel
 	}
 }
 
-static void
-PlayAudio(void *user_data, const int8_t *data, size_t len_in_bytes)
-{
-	SDL_QueueAudio(*(SDL_AudioDeviceID *)user_data, data, (uint32_t)len_in_bytes);
-}
-
 int
 main(int argc, char *argv[])
 {
@@ -1901,7 +1903,8 @@ main(int argc, char *argv[])
 				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F7)
 				{
-					LoadGameState(&gb, emu.save_dir_path, emu.gui.save_slot, emu.rom);
+					LoadGameState(&gb, emu.save_dir_path, emu.gui.save_slot, emu.rom, &emu.handles.audio_dev);
+					emu.gui.reset_delta_time = true;
 				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F10)
 				{

@@ -617,18 +617,20 @@ gb__ClearApu(gb_GameBoy *gb)
 	gb->apu.nr51.reg = 0;
 	gb->apu.nr50.reg = 0;
 
-	struct gb_PulseA old_ch1 = gb->apu.ch1;
+	// TODO SND
+	// struct gb_PulseA old_ch1 = gb->apu.ch1;
 	gb->apu.ch1 = (struct gb_PulseA){ 0 };
 
-	gb->apu.ch1.length_timer = old_ch1.length_timer;
-	gb->apu.ch1.volume_timer = old_ch1.volume_timer;
-	gb->apu.ch1.freq_timer = old_ch1.freq_timer;
+	// gb->apu.ch1.length_timer = old_ch1.length_timer;
+	// gb->apu.ch1.volume_timer = old_ch1.volume_timer;
+	// gb->apu.ch1.freq_timer = old_ch1.freq_timer;
 
-	struct gb_PulseB old_ch2 = gb->apu.ch2;
+	// TODO SND
+	// struct gb_PulseB old_ch2 = gb->apu.ch2;
 	gb->apu.ch2 = (struct gb_PulseB){ 0 };
 
-	gb->apu.ch2.length_timer = old_ch2.length_timer;
-	gb->apu.ch2.volume_timer = old_ch2.volume_timer;
+	// gb->apu.ch2.length_timer = old_ch2.length_timer;
+	// gb->apu.ch2.volume_timer = old_ch2.volume_timer;
 
 	// Reset undefined values to 1.
 	gb->apu.ch1.nr10._ = 1;
@@ -644,6 +646,23 @@ gb__ClearApu(gb_GameBoy *gb)
 	uint8_t wave[] = { 0x84, 0x40, 0x43, 0xAA, 0x2D, 0x78, 0x92, 0x3C, 0x60, 0x59, 0x59, 0xB0, 0x34, 0xB8, 0x2E, 0xDA };
 	assert(sizeof(gb->apu.wave_pattern) == sizeof(wave));
 	memcpy(gb->apu.wave_pattern, wave, sizeof(wave));
+
+	// Reset frame sequencer
+	//
+	// The frame sequencer is stepped every 2048 m-cycles (512 Hz).
+	// The volume timer fires for the first time after 7 ticks,
+	// so it starts at 2048 and then again after each subsequent 16384
+	// ticks.
+	// See: https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html
+	gb->apu.ch1.wave_pos = 0;
+	gb->apu.ch1.wave_pos_timer = 0;
+	gb->apu.ch1.length_timer = 0;
+	gb->apu.ch1.volume_timer = 2048;
+	gb->apu.ch1.freq_timer = 4096;  // Similar thought process for the frequency sweep timing.
+	gb->apu.ch2.wave_pos = 0;
+	gb->apu.ch2.wave_pos_timer = 0;
+	gb->apu.ch2.length_timer = 0;
+	gb->apu.ch2.volume_timer = 2048;
 }
 
 static void
@@ -3864,37 +3883,47 @@ static const uint8_t gb__PwmWaveForms[4][8] = {
 	{ 0, 1, 1, 1, 1, 1, 1, 0 },
 };
 
+static uint16_t
+gb__CalculateSweepFrequency(struct gb_PulseA *ch1)
+{
+	uint16_t shadow_p = ch1->freq_shadow_period;
+	uint16_t delta_p = shadow_p >> ch1->nr10.freq_sweep_step;
+	// Decrease/increase frequency (increase/decrease period)
+	uint16_t new_period = ch1->nr10.freq_sweep_dir == 0 ? shadow_p + delta_p : shadow_p - delta_p;
+
+	if (new_period >= 2048)
+	{
+		ch1->enable = false;
+	}
+	// NOTE: This can never underflow since delta_period is always smaller than the period.
+
+	return new_period;
+}
+
 static void
 gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 {
-	// We should pump out a new sample every 1024 * 1024 / 48 kHz.
-	// This is not an integral number, therefore let's go via the LCM.
-	//
-	// LCM of 48k and 1 MHz is 375 * 1024 * 1024 == 8192 * 48000
-	gb->apu.clock_acc += elapsed_m_cycles * 375;
-
 	struct gb_PulseA *ch1 = &gb->apu.ch1;
 	struct gb_PulseB *ch2 = &gb->apu.ch2;
 	struct gb_Wave *ch3 = &gb->apu.ch3;
 	struct gb_Noise *ch4 = &gb->apu.ch4;
 
 	// Advance timers, triggering, and sweeps.
+	//
+	// NOTE: Everything is advanced as long as audio is not off. Even if the
+	// channels or their DACs are off, the timers still advance.
 	if (gb->apu.audio_enable)
 	{
-		// Channel 1
-		const bool dac1_off = ch1->nr12.volume == 0 && ch1->nr12.envelope_dir == 0;
-		if (dac1_off)
-		{
-			ch1->enable = false;
-		}
-		else
-		{
-			if (ch1->trigger == 1)
+		{  // Channel 1
+			const bool dac1_off = ch1->nr12.volume == 0 && ch1->nr12.envelope_dir == 0;
+			if (dac1_off)
+			{
+				ch1->enable = false;
+			}
+			if (ch1->trigger == 1 && !dac1_off)
 			{
 				ch1->trigger = 0;
 				ch1->enable = true;
-				// ch1->wave_pos = 0;
-				// ch1->wave_pos_timer = 0;
 				ch1->update_period = false;
 				ch1->current_period = ch1->period;
 
@@ -3904,148 +3933,124 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				{
 					ch1->length_counter = 64 - ch1->nr11.length;
 				}
-				// TODO(stefalie): Should this be inside the if just above?
-				// ch1->length_timer = 0;
 
 				ch1->current_volume = ch1->nr12.volume;
 				ch1->current_sweep_pace = ch1->nr12.volume_sweep_pace;
 				ch1->current_envelope_dir = ch1->nr12.envelope_dir;
+				ch1->sweep_pace_counter = ch1->current_sweep_pace;
 
-				// The frame sequencer is stepped every 2048 m-cycles (512 Hz).
-				// The volume timer fires for the first time after 7 ticks,
-				// so it starts at 2048 and then again after each subsequent 16384
-				// ticks.
-				// See: https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html
-				// ch1->volume_timer = 2048;
-				ch1->sweep_pace_timer = ch1->current_sweep_pace;
 				ch1->freq_sweep_enable = ch1->nr10.freq_sweep_pace != 0 || ch1->nr10.freq_sweep_step != 0;
-				// Similar thought process for the frequency sweep timing.
-				// ch1->freq_timer = 4096;
-				ch1->freq_sweep_pace_timer = ch1->nr10.freq_sweep_pace;
-				if (ch1->freq_sweep_pace_timer == 0)
+				ch1->freq_sweep_pace_counter = ch1->nr10.freq_sweep_pace;
+				if (ch1->freq_sweep_pace_counter == 0)
 				{
-					ch1->freq_sweep_pace_timer = 8;
+					ch1->freq_sweep_pace_counter = 8;
 				}
 				ch1->freq_shadow_period = ch1->period;
 			}
 
-			if (ch1->enable)
+			ch1->wave_pos_timer += elapsed_m_cycles;
+			uint16_t period = 2048 - ch1->current_period;
+			while (ch1->wave_pos_timer >= period)
 			{
-				ch1->wave_pos_timer += elapsed_m_cycles;
-				uint16_t period = 2048 - ch1->current_period;
-				while (ch1->wave_pos_timer >= period)
-				{
-					ch1->wave_pos_timer -= period;
-					++ch1->wave_pos;
-					ch1->wave_pos %= 8;
-				}
+				ch1->wave_pos_timer -= period;
+				++ch1->wave_pos;
+				ch1->wave_pos %= 8;
+			}
 
-				if (ch1->wave_pos == 0 && ch1->update_period)
-				{
-					ch1->update_period = false;
-					ch1->current_period = ch1->period;
-				}
+			// Wave pos can only change when on the beginning of the sample sequence.
+			if (ch1->wave_pos == 0 && ch1->update_period)
+			{
+				ch1->update_period = false;
+				ch1->current_period = ch1->period;
+			}
 
-				// Length timeout
-				if (ch1->length_enable)
-				{
-					ch1->length_timer += elapsed_m_cycles;
+			// Length timer
+			ch1->length_timer += elapsed_m_cycles;
+			if (ch1->length_timer >= 4096)  // 256 Hz
+			{
+				ch1->length_timer -= 4096;
 
-					if (ch1->length_timer >= 4096)  // 256 Hz
+				// Timeout
+				if (ch1->length_enable && ch1->length_counter > 0)
+				{
+					if (ch1->length_counter > 0)
 					{
-						ch1->length_timer -= 4096;
-						if (ch1->length_counter > 0)
-						{
-							--ch1->length_counter;
-						}
-						if (ch1->length_counter == 0)
-						{
-							ch1->enable = false;
-						}
+						--ch1->length_counter;
+					}
+					if (ch1->length_counter == 0)
+					{
+						ch1->enable = false;
 					}
 				}
+			}
 
-				// Volume sweep
+
+			// Volume sweep
+			ch1->volume_timer += elapsed_m_cycles;
+			if (ch1->volume_timer >= 16384)  // 64 Hz
+			{
+				ch1->volume_timer -= 16384;
+
 				if (ch1->current_sweep_pace > 0)
 				{
-					ch1->volume_timer += elapsed_m_cycles;
-
-					if (ch1->volume_timer >= 16384)  // 64 Hz
+					if (ch1->sweep_pace_counter > 0)
 					{
-						ch1->volume_timer -= 16384;
-						if (ch1->sweep_pace_timer > 0)
+						--ch1->sweep_pace_counter;
+					}
+					if (ch1->sweep_pace_counter == 0)
+					{
+						ch1->sweep_pace_counter = ch1->current_sweep_pace;
+
+						// Decrease volume
+						if (ch1->current_volume > 0 && ch1->current_envelope_dir == 0)
 						{
-							--ch1->sweep_pace_timer;
+							--ch1->current_volume;
 						}
-						if (ch1->sweep_pace_timer == 0)
+
+						// Increase volume
+						if (ch1->current_volume < 0xF && ch1->current_envelope_dir == 1)
 						{
-							ch1->sweep_pace_timer = ch1->current_sweep_pace;
-
-							// Decrease volume
-							if (ch1->current_volume > 0 && ch1->current_envelope_dir == 0)
-							{
-								--ch1->current_volume;
-							}
-
-							// Increase volume
-							if (ch1->current_volume < 0xF && ch1->current_envelope_dir == 1)
-							{
-								++ch1->current_volume;
-							}
+							++ch1->current_volume;
 						}
 					}
 				}
+			}
 
-				// Frequency sweep
-				if (ch1->freq_sweep_enable)
+			// Frequency sweep
+			ch1->freq_timer += elapsed_m_cycles;
+			if (ch1->freq_timer >= 8192)  // 128 Hz
+			{
+				ch1->freq_timer -= 8192;
+
+				if (ch1->freq_sweep_pace_counter > 0)
 				{
-					ch1->freq_timer += elapsed_m_cycles;
-
-					if (ch1->freq_timer >= 8192)  // 128 Hz
+					--ch1->freq_sweep_pace_counter;
+				}
+				if (ch1->freq_sweep_pace_counter == 0)
+				{
+					ch1->freq_sweep_pace_counter = ch1->nr10.freq_sweep_pace;
+					if (ch1->freq_sweep_pace_counter == 0)
 					{
-						ch1->freq_timer -= 8192;
+						ch1->freq_sweep_pace_counter = 8;
+					}
 
-						if (ch1->freq_sweep_pace_timer > 0)
+					if (ch1->freq_sweep_enable && ch1->nr10.freq_sweep_pace > 0)
+					{
+						// NOTE: This is so weird, but see:
+						// - https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html
+						// - https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Frequency_Sweep
+						uint16_t new_period = gb__CalculateSweepFrequency(ch1);
+
+						if (new_period < 2048 && ch1->nr10.freq_sweep_step > 0)
 						{
-							--ch1->freq_sweep_pace_timer;
-						}
-						if (ch1->freq_sweep_pace_timer == 0)
-						{
-							ch1->freq_sweep_pace_timer = ch1->nr10.freq_sweep_pace;
-							if (ch1->freq_sweep_pace_timer == 0)
-							{
-								ch1->freq_sweep_pace_timer = 8;
-							}
+							ch1->freq_shadow_period = new_period;
+							// Write period back to registers. This will become the active period
+							// once the current sample sequence restarts.
+							ch1->period = new_period;
+							gb->apu.ch1.update_period = true;
 
-							// TODO(stefalie): I find it weird that we even have the frequency sweep enabled
-							// if the pace == 0. It's similarly weird to run this with a step of 0 because
-							// it doesn't alter the period at all. But this seems all correct according to:
-							// - https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html
-							// - https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Frequency_Sweep
-							if (ch1->nr10.freq_sweep_pace > 0)
-							{
-								uint16_t shadow_p = ch1->freq_shadow_period;
-								int delta_p = shadow_p >> ch1->nr10.freq_sweep_step;
-								// Decrease/increase frequency (increase/decrease period)
-								int new_period =
-										ch1->nr10.freq_sweep_dir == 0 ? shadow_p + delta_p : shadow_p - delta_p;
-
-								if (new_period >= 2048)
-								{
-									ch1->enable = false;
-								}
-								else
-								{
-									ch1->freq_shadow_period = (uint16_t)new_period;
-									// Write period back to registers. This will become the active period
-									// once the current sample sequence restarts.
-									ch1->period = (uint16_t)new_period;
-									gb->apu.ch1.update_period = true;
-								}
-
-								// NOTE: This can never underflow since delta_period is always
-								// smaller than the period.
-							}
+							// Run overflow check again.
+							gb__CalculateSweepFrequency(ch1);
 						}
 					}
 				}
@@ -4054,115 +4059,118 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 
 		// TODO(stefalie): Can we somehow de-duplicate some of this? The timers Maybe?
 		// Now I can wish I could use inheritance for at least pulse A & B.
-		//
-		// Channel 2
-		const bool dac2_off = ch2->nr22.volume == 0 && ch2->nr22.envelope_dir == 0;
-		if (dac2_off)
-		{
-			ch2->enable = false;
-		}
-		else
-		{
-			if (ch2->trigger == 1)
+		{  // Channel 2
+			const bool dac2_off = ch2->nr22.volume == 0 && ch2->nr22.envelope_dir == 0;
+			if (dac2_off)
+			{
+				ch2->enable = false;
+			}
+			if (ch2->trigger == 1 && !dac2_off)
 			{
 				ch2->trigger = 0;
 				ch2->enable = true;
-				// ch2->wave_pos = 0;
-				// ch2->wave_pos_timer = 0;
 				ch2->update_period = false;
 				ch2->current_period = ch2->period;
 
+				// Length counter only reset if it was on 0.
+				// See: https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Length_Counter
 				if (ch2->length_counter == 0)
 				{
 					ch2->length_counter = 64 - ch2->nr21.length;
 				}
-				// ch2->length_timer = 0;
 
 				ch2->current_volume = ch2->nr22.volume;
 				ch2->current_sweep_pace = ch2->nr22.volume_sweep_pace;
 				ch2->current_envelope_dir = ch2->nr22.envelope_dir;
-
-				// ch2->volume_timer = 2048;
-				ch2->sweep_pace_timer = ch2->current_sweep_pace;
+				ch2->sweep_pace_counter = ch2->current_sweep_pace;
 			}
 
-			if (ch2->enable)
+			ch2->wave_pos_timer += elapsed_m_cycles;
+			uint16_t period = 2048 - ch2->current_period;
+			while (ch2->wave_pos_timer >= period)
 			{
-				ch2->wave_pos_timer += elapsed_m_cycles;
-				uint16_t period = 2048 - ch2->current_period;
-				while (ch2->wave_pos_timer >= period)
-				{
-					ch2->wave_pos_timer -= period;
-					++ch2->wave_pos;
-					ch2->wave_pos %= 8;
-				}
+				ch2->wave_pos_timer -= period;
+				++ch2->wave_pos;
+				ch2->wave_pos %= 8;
+			}
 
-				if (ch2->wave_pos == 0 && ch2->update_period)
-				{
-					ch2->update_period = false;
-					ch2->current_period = ch2->period;
-				}
+			// Wave pos can only change when on the beginning of the sample sequence.
+			if (ch2->wave_pos == 0 && ch2->update_period)
+			{
+				ch2->update_period = false;
+				ch2->current_period = ch2->period;
+			}
 
-				// Length timeout
-				if (ch2->length_enable)
-				{
-					ch2->length_timer += elapsed_m_cycles;
+			// Length timer
+			ch2->length_timer += elapsed_m_cycles;
+			if (ch2->length_timer >= 4096)  // 256 Hz
+			{
+				ch2->length_timer -= 4096;
 
-					if (ch2->length_timer >= 4096)  // 256 Hz
+				// Timeout
+				if (ch2->length_enable && ch2->length_counter > 0)
+				{
+					if (ch2->length_counter > 0)
 					{
-						ch2->length_timer -= 4096;
-						if (ch2->length_counter > 0)
-						{
-							--ch2->length_counter;
-						}
-						if (ch2->length_counter == 0)
-						{
-							ch2->enable = false;
-						}
+						--ch2->length_counter;
+					}
+					if (ch2->length_counter == 0)
+					{
+						ch2->enable = false;
 					}
 				}
+			}
 
-				// Volume sweep
+
+			// Volume sweep
+			ch2->volume_timer += elapsed_m_cycles;
+			if (ch2->volume_timer >= 16384)  // 64 Hz
+			{
+				ch2->volume_timer -= 16384;
+
 				if (ch2->current_sweep_pace > 0)
 				{
-					ch2->volume_timer += elapsed_m_cycles;
-
-					if (ch2->volume_timer >= 16384)  // 64 Hz
+					if (ch2->sweep_pace_counter > 0)
 					{
-						ch2->volume_timer -= 16384;
-						if (ch2->sweep_pace_timer > 0)
+						--ch2->sweep_pace_counter;
+					}
+					if (ch2->sweep_pace_counter == 0)
+					{
+						ch2->sweep_pace_counter = ch2->current_sweep_pace;
+
+						// Decrease volume
+						if (ch2->current_volume > 0 && ch2->current_envelope_dir == 0)
 						{
-							--ch2->sweep_pace_timer;
+							--ch2->current_volume;
 						}
-						if (ch2->sweep_pace_timer == 0)
+
+						// Increase volume
+						if (ch2->current_volume < 0xF && ch2->current_envelope_dir == 1)
 						{
-							ch2->sweep_pace_timer = ch2->current_sweep_pace;
-
-							// Decrease volume
-							if (ch2->current_volume > 0 && ch2->current_envelope_dir == 0)
-							{
-								--ch2->current_volume;
-							}
-
-							// Increase volume
-							if (ch2->current_volume < 0xF && ch2->current_envelope_dir == 1)
-							{
-								++ch2->current_volume;
-							}
+							++ch2->current_volume;
 						}
 					}
 				}
 			}
 		}
 
-		// Channel 3
-		(void)ch3;
+		{  // Channel 3
+			(void)ch3;
+		}
 
-		// Channel 4
-		(void)ch4;
+		{  // Channel 4
+			(void)ch4;
+		}
 	}
 
 	// Create a 48 kHz sample if it's time.
+
+	// We should pump out a new sample every 1024 * 1024 / 48 kHz.
+	// This is not an integral number, therefore let's go via the LCM.
+	//
+	// LCM of 48k and 1 MHz is 375 * 1024 * 1024 == 8192 * 48000
+	gb->apu.clock_acc += elapsed_m_cycles * 375;
+
 	if (gb->apu.clock_acc >= 8192)
 	{
 		gb->apu.clock_acc -= 8192;

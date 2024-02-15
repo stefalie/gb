@@ -489,10 +489,10 @@ typedef struct gb_GameBoy
 			uint8_t current_sweep_pace;
 			uint8_t current_envelope_dir;
 			uint16_t volume_timer;
-			uint8_t sweep_pace_timer;
+			uint8_t sweep_pace_counter;
 			bool freq_sweep_enable;
 			uint16_t freq_timer;
-			uint8_t freq_sweep_pace_timer;
+			uint8_t freq_sweep_pace_counter;
 			uint16_t freq_shadow_period;
 
 			union
@@ -555,7 +555,7 @@ typedef struct gb_GameBoy
 			uint8_t current_sweep_pace;
 			uint8_t current_envelope_dir;
 			uint16_t volume_timer;
-			uint8_t sweep_pace_timer;
+			uint8_t sweep_pace_counter;
 
 			union
 			{
