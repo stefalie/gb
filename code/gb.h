@@ -482,8 +482,6 @@ typedef struct gb_GameBoy
 			bool channel_enable;
 			uint8_t wave_pos;
 			uint16_t wave_pos_timer;
-			bool update_period;
-			uint16_t current_period;
 			uint16_t length_counter;
 			uint16_t length_timer;
 			uint8_t current_volume;
@@ -549,8 +547,6 @@ typedef struct gb_GameBoy
 			bool channel_enable;
 			uint8_t wave_pos;
 			uint16_t wave_pos_timer;
-			bool update_period;
-			uint16_t current_period;
 			uint16_t length_counter;
 			uint16_t length_timer;
 			uint8_t current_volume;
@@ -600,8 +596,6 @@ typedef struct gb_GameBoy
 			bool channel_enable;
 			uint8_t wave_pos;
 			uint16_t wave_pos_timer;
-			bool update_period;
-			uint16_t current_period;
 			uint16_t length_counter;
 			uint16_t length_timer;
 
@@ -646,7 +640,6 @@ typedef struct gb_GameBoy
 			bool dac_enable;
 			bool channel_enable;
 			// TODO SND
-			uint16_t current_period;
 			uint8_t current_volume;
 			uint8_t current_sweep_pace;
 			uint8_t current_envelope_dir;

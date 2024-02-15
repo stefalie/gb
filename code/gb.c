@@ -935,12 +935,10 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF13)
 					{
 						gb->apu.ch1.nr13 = value;
-						gb->apu.ch1.update_period = true;
 					}
 					else if (addr == 0xFF14)
 					{
 						gb->apu.ch1.nr14 = (undefined_value & 0x38) + (value & 0xC7);
-						gb->apu.ch1.update_period = true;
 					}
 					// Channel 2
 					else if (addr == 0xFF16)
@@ -959,12 +957,10 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF18)
 					{
 						gb->apu.ch2.nr23 = value;
-						gb->apu.ch2.update_period = true;
 					}
 					else if (addr == 0xFF19)
 					{
 						gb->apu.ch2.nr24 = (undefined_value & 0x38) + (value & 0xC7);
-						gb->apu.ch2.update_period = true;
 					}
 					// Channel 3
 					else if (addr == 0xFF1A)
@@ -986,13 +982,10 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF1D)
 					{
 						gb->apu.ch3.nr33 = value;
-						gb->apu.ch3.update_period = true;
 					}
 					else if (addr == 0xFF1E)
 					{
 						gb->apu.ch3.nr34 = (undefined_value & 0x38) + (value & 0xC7);
-						gb->apu.ch3.update_period = true;
-						// TODO SND is this also necessary for channels 4?
 					}
 					// Channel 4
 					else if (addr == 0xFF20)
@@ -1015,6 +1008,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF23)
 					{
 						gb->apu.ch4.nr44.reg = (undefined_value & ~0x3F) + (value & 0xC0);
+						// TODO SND?
 					}
 					// Master volume
 					else if (addr == 0xFF24)
@@ -3935,8 +3929,6 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			{
 				ch1->trigger = 0;
 				ch1->channel_enable = true;
-				ch1->update_period = false;
-				ch1->current_period = ch1->period;
 
 				// Length counter only reset if it was on 0.
 				// See: https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Length_Counter
@@ -3960,19 +3952,12 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			}
 
 			ch1->wave_pos_timer += elapsed_m_cycles;
-			uint16_t period = 2048 - ch1->current_period;
+			uint16_t period = 2048 - ch1->period;
 			while (ch1->wave_pos_timer >= period)
 			{
 				ch1->wave_pos_timer -= period;
 				++ch1->wave_pos;
 				ch1->wave_pos %= 8;
-			}
-
-			// Wave pos can only change when on the beginning of the sample sequence.
-			if (ch1->wave_pos == 0 && ch1->update_period)
-			{
-				ch1->update_period = false;
-				ch1->current_period = ch1->period;
 			}
 
 			// Length timer
@@ -4055,10 +4040,8 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 						if (new_period < 2048 && ch1->nr10.freq_sweep_step > 0)
 						{
 							ch1->freq_shadow_period = new_period;
-							// Write period back to registers. This will become the active period
-							// once the current sample sequence restarts.
+							// Write period back to registers.
 							ch1->period = new_period;
-							gb->apu.ch1.update_period = true;
 
 							// Run overflow check again.
 							gb__CalculateSweepFrequency(ch1);
@@ -4077,8 +4060,6 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			{
 				ch2->trigger = 0;
 				ch2->channel_enable = true;
-				ch2->update_period = false;
-				ch2->current_period = ch2->period;
 
 				if (ch2->length_counter == 0)
 				{
@@ -4092,19 +4073,12 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			}
 
 			ch2->wave_pos_timer += elapsed_m_cycles;
-			uint16_t period = 2048 - ch2->current_period;
+			uint16_t period = 2048 - ch2->period;
 			while (ch2->wave_pos_timer >= period)
 			{
 				ch2->wave_pos_timer -= period;
 				++ch2->wave_pos;
 				ch2->wave_pos %= 8;
-			}
-
-			// Wave pos can only change when on the beginning of the sample sequence.
-			if (ch2->wave_pos == 0 && ch2->update_period)
-			{
-				ch2->update_period = false;
-				ch2->current_period = ch2->period;
 			}
 
 			// Length timer
