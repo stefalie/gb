@@ -697,6 +697,7 @@ GuiDraw(Emulator *emu, gb_GameBoy *gb)
 						if (!LoadRomFromFile(emu, gb, ofn.lpstrFile))
 						{
 							emu->gui.reset_delta_time = true;
+							SDL_ClearQueuedAudio(emu->handles.audio_dev);
 						}
 					}
 				}
@@ -721,6 +722,8 @@ GuiDraw(Emulator *emu, gb_GameBoy *gb)
 				{
 					gb_Reset(gb, emu->ini.skip_bios);
 					emu->debug.elapsed_m_cycles = 0;
+					emu->gui.reset_delta_time = true;  // TODO(stefalie): Is this needed?
+					SDL_ClearQueuedAudio(emu->handles.audio_dev);
 				}
 				if (ImGui::MenuItem("Pause", "Space", emu->gui.pause))
 				{

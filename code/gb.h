@@ -477,9 +477,6 @@ typedef struct gb_GameBoy
 
 		struct gb_PulseA
 		{
-			// TODO(stefalie): Can we somehow de-duplicate some of this? The timers Maybe?
-			// Now I can wish I could use inheritance for at least pulse A & B.
-
 			// Internals
 			bool enable;
 			uint8_t wave_pos;

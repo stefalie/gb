@@ -609,26 +609,28 @@ gb_MemoryReadWord(const gb_GameBoy *gb, uint16_t addr)
 static void
 gb__ClearApu(gb_GameBoy *gb)
 {
-	gb_AudioCallback *prev_callback = gb->apu.callback;
-	void *prev_callback_user_data = gb->apu.callback_user_data;
-	gb->apu = (struct gb_Apu){ 0 };
-	gb->apu.callback = prev_callback;
-	gb->apu.callback_user_data = prev_callback_user_data;
-
-	// TODO SND: Length counters are not affected.
-	// https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Power_Control
-
-	// TODO SND: this is wrong!!!
-	// Only do that at startup not during!
-	// Maybe we have to split this up.
+	// See: https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Power_Control
 	//
-	// Adds some audio delay.
-	if (gb->apu.callback)
-	{
-		int8_t silence[2048 * 2] = { 0 };
-		gb->apu.callback(gb->apu.callback_user_data, silence, sizeof(silence));
-	}
+	// TODO(stefalie): Length counters are not affected on DMG when powered off. We don't do this.
 
+	gb->apu.audio_enable = false;
+	gb->apu.nr51.reg = 0;
+	gb->apu.nr50.reg = 0;
+
+	struct gb_PulseA old_ch1 = gb->apu.ch1;
+	gb->apu.ch1 = (struct gb_PulseA){ 0 };
+
+	gb->apu.ch1.length_timer = old_ch1.length_timer;
+	gb->apu.ch1.volume_timer = old_ch1.volume_timer;
+	gb->apu.ch1.freq_timer = old_ch1.freq_timer;
+
+	struct gb_PulseB old_ch2 = gb->apu.ch2;
+	gb->apu.ch2 = (struct gb_PulseB){ 0 };
+
+	gb->apu.ch2.length_timer = old_ch2.length_timer;
+	gb->apu.ch2.volume_timer = old_ch2.volume_timer;
+
+	// Reset undefined values to 1.
 	gb->apu.ch1.nr10._ = 1;
 	gb->apu.ch1._ = 0x7;
 	gb->apu.ch2._ = 0x7;
@@ -638,6 +640,10 @@ gb__ClearApu(gb_GameBoy *gb)
 	gb->apu.ch3._ = 0x7;
 	gb->apu.ch4.nr41._ = 0x3;
 	gb->apu.ch4.nr44._ = 0x3F;
+
+	uint8_t wave[] = { 0x84, 0x40, 0x43, 0xAA, 0x2D, 0x78, 0x92, 0x3C, 0x60, 0x59, 0x59, 0xB0, 0x34, 0xB8, 0x2E, 0xDA };
+	assert(sizeof(gb->apu.wave_pattern) == sizeof(wave));
+	memcpy(gb->apu.wave_pattern, wave, sizeof(wave));
 }
 
 static void
@@ -883,9 +889,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					bool enable = (value & 0x80) != 0x00;
 					if (gb->apu.audio_enable && !enable)
 					{
-						// TODO SND: length timers
-						// TODO SND: re-enable?
-						// gb__ClearApu(gb);
+						gb__ClearApu(gb);
 					}
 					gb->apu.audio_enable = enable;
 				}
@@ -894,16 +898,11 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					// Channel 1
 					if (addr == 0xFF10)
 					{
-						// TODO(stefalie): Maybe, technically we should double buffer the frequency sweep
-						// pace because it should only change after a complete frequency_sweep iteration.
 						gb->apu.ch1.nr10.reg = (undefined_value & ~0x7F) + (value & 0x7F);
 					}
 					else if (addr == 0xFF11)
 					{
 						gb->apu.ch1.nr11.reg = value;
-						// TODO(stefalie): Should we reset the length timer here? Goes for other
-						// channels too.
-						// gb->apu.ch1.length_timer = (64 - ch1.nr11.length) * (1.0f / 256.0f));
 					}
 					else if (addr == 0xFF12)
 					{
@@ -1257,6 +1256,13 @@ gb_Reset(gb_GameBoy *gb, bool skip_bios)
 	gb->joypad._ = 0x3;
 
 	gb__ClearApu(gb);
+
+	// Adds some audio delay.
+	if (gb->apu.callback)
+	{
+		int8_t silence[2048 * 2] = { 0 };
+		gb->apu.callback(gb->apu.callback_user_data, silence, sizeof(silence));
+	}
 
 	gb__MemoryWriteByte(gb, 0xFF05, 0x00);
 	gb__MemoryWriteByte(gb, 0xFF06, 0x00);
