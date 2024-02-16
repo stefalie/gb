@@ -219,6 +219,16 @@ typedef struct gb_SoundTimeout
 	uint16_t length_timer;
 } gb_SoundTimeout;
 
+typedef struct gb_SoundVolumeSweep
+{
+	uint16_t volume_timer;
+	uint8_t current_volume;
+	// TODO(stefalie): Not sure that this needs caching. Argentum doesn't, gbdev.io says yes.
+	uint8_t current_sweep_pace;
+	uint8_t current_envelope_dir;
+	uint8_t sweep_pace_counter;
+} gb_SoundVolumeSweep;
+
 typedef struct gb_GameBoy
 {
 	// The CPU conains only the registers.
@@ -494,11 +504,7 @@ typedef struct gb_GameBoy
 			bool channel_enable;
 			gb_SoundSampleTimer wave_timer;
 			gb_SoundTimeout timeout;
-			uint8_t current_volume;
-			uint8_t current_sweep_pace;
-			uint8_t current_envelope_dir;
-			uint16_t volume_timer;
-			uint8_t sweep_pace_counter;
+			gb_SoundVolumeSweep volume_sweep;
 			bool freq_sweep_enable;
 			uint16_t freq_timer;
 			uint8_t freq_sweep_pace_counter;
@@ -557,11 +563,7 @@ typedef struct gb_GameBoy
 			bool channel_enable;
 			gb_SoundSampleTimer wave_timer;
 			gb_SoundTimeout timeout;
-			uint8_t current_volume;
-			uint8_t current_sweep_pace;
-			uint8_t current_envelope_dir;
-			uint16_t volume_timer;
-			uint8_t sweep_pace_counter;
+			gb_SoundVolumeSweep volume_sweep;
 
 			union
 			{

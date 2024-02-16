@@ -656,12 +656,12 @@ gb__ClearApu(gb_GameBoy *gb)
 	// See: https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html
 	gb->apu.ch1.wave_timer = (gb_SoundSampleTimer){ 0 };
 	gb->apu.ch1.timeout.length_timer = 0;
-	gb->apu.ch1.volume_timer = 2048;
+	gb->apu.ch1.volume_sweep.volume_timer = 2048;
 	gb->apu.ch1.freq_timer = 4096;  // Similar thought process for the frequency sweep timing.
 
 	gb->apu.ch2.wave_timer = (gb_SoundSampleTimer){ 0 };
 	gb->apu.ch2.timeout.length_timer = 0;
-	gb->apu.ch2.volume_timer = 2048;
+	gb->apu.ch2.volume_sweep.volume_timer = 2048;
 
 	gb->apu.ch3.wave_timer = (gb_SoundSampleTimer){ 0 };
 	gb->apu.ch3.timeout.length_timer = 0;
@@ -3961,6 +3961,40 @@ gb__SoundTimeoutAdvance(gb_SoundTimeout *timeout, uint16_t elapsed_m_cycles, uin
 }
 
 static void
+gb__VolumeSweepAdvance(gb_SoundVolumeSweep *vol_sweep, uint16_t elapsed_m_cycles)
+{
+	vol_sweep->volume_timer += elapsed_m_cycles;
+	if (vol_sweep->volume_timer >= 16384)  // 64 Hz
+	{
+		vol_sweep->volume_timer -= 16384;
+
+		if (vol_sweep->current_sweep_pace > 0)
+		{
+			if (vol_sweep->sweep_pace_counter > 0)
+			{
+				--vol_sweep->sweep_pace_counter;
+			}
+			if (vol_sweep->sweep_pace_counter == 0)
+			{
+				vol_sweep->sweep_pace_counter = vol_sweep->current_sweep_pace;
+
+				// Decrease volume
+				if (vol_sweep->current_volume > 0 && vol_sweep->current_envelope_dir == 0)
+				{
+					--vol_sweep->current_volume;
+				}
+
+				// Increase volume
+				if (vol_sweep->current_volume < 0xF && vol_sweep->current_envelope_dir == 1)
+				{
+					++vol_sweep->current_volume;
+				}
+			}
+		}
+	}
+}
+
+static void
 gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 {
 	// Advance timers, triggering, and sweeps.
@@ -3986,10 +4020,10 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 					ch1->timeout.length_counter = 64;
 				}
 
-				ch1->current_volume = ch1->nr12.volume;
-				ch1->current_sweep_pace = ch1->nr12.volume_sweep_pace;
-				ch1->current_envelope_dir = ch1->nr12.envelope_dir;
-				ch1->sweep_pace_counter = ch1->current_sweep_pace;
+				ch1->volume_sweep.current_volume = ch1->nr12.volume;
+				ch1->volume_sweep.current_sweep_pace = ch1->nr12.volume_sweep_pace;
+				ch1->volume_sweep.current_envelope_dir = ch1->nr12.envelope_dir;
+				ch1->volume_sweep.sweep_pace_counter = ch1->volume_sweep.current_sweep_pace;
 
 				ch1->freq_sweep_enable = ch1->nr10.freq_sweep_pace != 0 || ch1->nr10.freq_sweep_step != 0;
 				ch1->freq_sweep_pace_counter = ch1->nr10.freq_sweep_pace;
@@ -4007,36 +4041,7 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				ch1->channel_enable = false;
 			}
 
-			// Volume sweep
-			ch1->volume_timer += elapsed_m_cycles;
-			if (ch1->volume_timer >= 16384)  // 64 Hz
-			{
-				ch1->volume_timer -= 16384;
-
-				if (ch1->current_sweep_pace > 0)
-				{
-					if (ch1->sweep_pace_counter > 0)
-					{
-						--ch1->sweep_pace_counter;
-					}
-					if (ch1->sweep_pace_counter == 0)
-					{
-						ch1->sweep_pace_counter = ch1->current_sweep_pace;
-
-						// Decrease volume
-						if (ch1->current_volume > 0 && ch1->current_envelope_dir == 0)
-						{
-							--ch1->current_volume;
-						}
-
-						// Increase volume
-						if (ch1->current_volume < 0xF && ch1->current_envelope_dir == 1)
-						{
-							++ch1->current_volume;
-						}
-					}
-				}
-			}
+			gb__VolumeSweepAdvance(&ch1->volume_sweep, elapsed_m_cycles);
 
 			// Frequency sweep
 			ch1->freq_timer += elapsed_m_cycles;
@@ -4092,10 +4097,10 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 					ch2->timeout.length_counter = 64;
 				}
 
-				ch2->current_volume = ch2->nr22.volume;
-				ch2->current_sweep_pace = ch2->nr22.volume_sweep_pace;
-				ch2->current_envelope_dir = ch2->nr22.envelope_dir;
-				ch2->sweep_pace_counter = ch2->current_sweep_pace;
+				ch2->volume_sweep.current_volume = ch2->nr22.volume;
+				ch2->volume_sweep.current_sweep_pace = ch2->nr22.volume_sweep_pace;
+				ch2->volume_sweep.current_envelope_dir = ch2->nr22.envelope_dir;
+				ch2->volume_sweep.sweep_pace_counter = ch2->volume_sweep.current_sweep_pace;
 			}
 
 			gb__SoundSampleAdvance(&ch2->wave_timer, elapsed_m_cycles, ch2->period, false);
@@ -4105,36 +4110,7 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				ch2->channel_enable = false;
 			}
 
-			// Volume sweep
-			ch2->volume_timer += elapsed_m_cycles;
-			if (ch2->volume_timer >= 16384)  // 64 Hz
-			{
-				ch2->volume_timer -= 16384;
-
-				if (ch2->current_sweep_pace > 0)
-				{
-					if (ch2->sweep_pace_counter > 0)
-					{
-						--ch2->sweep_pace_counter;
-					}
-					if (ch2->sweep_pace_counter == 0)
-					{
-						ch2->sweep_pace_counter = ch2->current_sweep_pace;
-
-						// Decrease volume
-						if (ch2->current_volume > 0 && ch2->current_envelope_dir == 0)
-						{
-							--ch2->current_volume;
-						}
-
-						// Increase volume
-						if (ch2->current_volume < 0xF && ch2->current_envelope_dir == 1)
-						{
-							++ch2->current_volume;
-						}
-					}
-				}
-			}
+			gb__VolumeSweepAdvance(&ch2->volume_sweep, elapsed_m_cycles);
 		}
 
 		{  // Channel 3
@@ -4196,8 +4172,8 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				{
 					assert(ch1->dac_enable);
 
-					uint8_t sample =
-							ch1->current_volume * gb__PwmWaveForms[ch1->nr11.duty_cycle][ch1->wave_timer.wave_pos];
+					uint8_t sample = ch1->volume_sweep.current_volume *
+							gb__PwmWaveForms[ch1->nr11.duty_cycle][ch1->wave_timer.wave_pos];
 					if (gb->apu.nr51.ch1_left == 1)
 					{
 						samples[0] += 1.0f - sample / 7.5f;
@@ -4212,8 +4188,8 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				{
 					assert(ch2->dac_enable);
 
-					uint8_t sample =
-							ch2->current_volume * gb__PwmWaveForms[ch2->nr21.duty_cycle][ch2->wave_timer.wave_pos];
+					uint8_t sample = ch2->volume_sweep.current_volume *
+							gb__PwmWaveForms[ch2->nr21.duty_cycle][ch2->wave_timer.wave_pos];
 					if (gb->apu.nr51.ch2_left == 1)
 					{
 						samples[0] += 1.0f - sample / 7.5f;
