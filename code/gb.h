@@ -207,6 +207,12 @@ typedef enum gb_PpuMode
 	GB_PPU_MODE_VRAM_SCAN,
 } gb_PpuMode;
 
+typedef struct gb_SoundTimer
+{
+	uint16_t length_counter;
+	uint16_t length_timer;
+} gb_SoundTimer;
+
 typedef struct gb_GameBoy
 {
 	// The CPU conains only the registers.
@@ -482,8 +488,7 @@ typedef struct gb_GameBoy
 			bool channel_enable;
 			uint8_t wave_pos;
 			uint16_t wave_pos_timer;
-			uint16_t length_counter;
-			uint16_t length_timer;
+			gb_SoundTimer timeout;
 			uint8_t current_volume;
 			uint8_t current_sweep_pace;
 			uint8_t current_envelope_dir;
@@ -547,8 +552,7 @@ typedef struct gb_GameBoy
 			bool channel_enable;
 			uint8_t wave_pos;
 			uint16_t wave_pos_timer;
-			uint16_t length_counter;
-			uint16_t length_timer;
+			gb_SoundTimer timeout;
 			uint8_t current_volume;
 			uint8_t current_sweep_pace;
 			uint8_t current_envelope_dir;
@@ -596,8 +600,7 @@ typedef struct gb_GameBoy
 			bool channel_enable;
 			uint8_t wave_pos;
 			uint16_t wave_pos_timer;
-			uint16_t length_counter;
-			uint16_t length_timer;
+			gb_SoundTimer timeout;
 
 			union
 			{
@@ -639,6 +642,8 @@ typedef struct gb_GameBoy
 		{
 			bool dac_enable;
 			bool channel_enable;
+
+			gb_SoundTimer timeout;
 			// TODO SND
 			uint8_t current_volume;
 			uint8_t current_sweep_pace;

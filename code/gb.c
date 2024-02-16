@@ -656,13 +656,18 @@ gb__ClearApu(gb_GameBoy *gb)
 	// See: https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html
 	gb->apu.ch1.wave_pos = 0;
 	gb->apu.ch1.wave_pos_timer = 0;
-	gb->apu.ch1.length_timer = 0;
+	gb->apu.ch1.timeout.length_timer = 0;
 	gb->apu.ch1.volume_timer = 2048;
 	gb->apu.ch1.freq_timer = 4096;  // Similar thought process for the frequency sweep timing.
+
 	gb->apu.ch2.wave_pos = 0;
 	gb->apu.ch2.wave_pos_timer = 0;
-	gb->apu.ch2.length_timer = 0;
+	gb->apu.ch2.timeout.length_timer = 0;
 	gb->apu.ch2.volume_timer = 2048;
+
+	gb->apu.ch3.wave_pos = 0;
+	gb->apu.ch3.wave_pos_timer = 0;
+	gb->apu.ch3.timeout.length_timer = 0;
 }
 
 static void
@@ -922,6 +927,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF11)
 					{
 						gb->apu.ch1.nr11.reg = value;
+						gb->apu.ch1.timeout.length_counter = 64 - gb->apu.ch1.nr11.length;
 					}
 					else if (addr == 0xFF12)
 					{
@@ -944,6 +950,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF16)
 					{
 						gb->apu.ch2.nr21.reg = value;
+						gb->apu.ch2.timeout.length_counter = 64 - gb->apu.ch2.nr21.length;
 					}
 					else if (addr == 0xFF17)
 					{
@@ -974,6 +981,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF1B)
 					{
 						gb->apu.ch3.nr31_length = value;
+						gb->apu.ch3.timeout.length_counter = 256 - gb->apu.ch3.nr31_length;
 					}
 					else if (addr == 0xFF1C)
 					{
@@ -991,6 +999,8 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF20)
 					{
 						gb->apu.ch4.nr41.reg = (undefined_value & 0xC0) + (value & 0x3F);
+						// TODO SND?
+						gb->apu.ch4.timeout.length_counter = 64 - gb->apu.ch4.nr41.length;
 					}
 					else if (addr == 0xFF21)
 					{
@@ -3911,6 +3921,34 @@ gb__CalculateSweepFrequency(struct gb_PulseA *ch1)
 	return new_period;
 }
 
+// Returns true if the channel needs to be disabled.
+static bool
+gb__SoundTimerAdvance(gb_SoundTimer *timeout, uint16_t elapsed_m_cycles, uint16_t timeout_enabled)
+{
+	bool disable = false;
+
+	timeout->length_timer += elapsed_m_cycles;
+	if (timeout->length_timer >= 4096)  // 256 Hz
+	{
+		timeout->length_timer -= 4096;
+
+		// Timeout
+		if (timeout_enabled && timeout->length_counter > 0)
+		{
+			if (timeout->length_counter > 0)
+			{
+				--timeout->length_counter;
+			}
+			if (timeout->length_counter == 0)
+			{
+				disable = true;
+			}
+		}
+	}
+
+	return disable;
+}
+
 static void
 gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 {
@@ -3930,11 +3968,11 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				ch1->trigger = 0;
 				ch1->channel_enable = true;
 
-				// Length counter only reset if it was on 0.
+				// Length counter only resets to max if it was on 0.
 				// See: https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Length_Counter
-				if (ch1->length_counter == 0)
+				if (ch1->timeout.length_counter == 0)
 				{
-					ch1->length_counter = 64 - ch1->nr11.length;
+					ch1->timeout.length_counter = 64;
 				}
 
 				ch1->current_volume = ch1->nr12.volume;
@@ -3960,26 +3998,10 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				ch1->wave_pos %= 8;
 			}
 
-			// Length timer
-			ch1->length_timer += elapsed_m_cycles;
-			if (ch1->length_timer >= 4096)  // 256 Hz
+			if (gb__SoundTimerAdvance(&ch1->timeout, elapsed_m_cycles, ch1->length_enable))
 			{
-				ch1->length_timer -= 4096;
-
-				// Timeout
-				if (ch1->length_enable && ch1->length_counter > 0)
-				{
-					if (ch1->length_counter > 0)
-					{
-						--ch1->length_counter;
-					}
-					if (ch1->length_counter == 0)
-					{
-						ch1->channel_enable = false;
-					}
-				}
+				ch1->channel_enable = false;
 			}
-
 
 			// Volume sweep
 			ch1->volume_timer += elapsed_m_cycles;
@@ -4061,9 +4083,9 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				ch2->trigger = 0;
 				ch2->channel_enable = true;
 
-				if (ch2->length_counter == 0)
+				if (ch2->timeout.length_counter == 0)
 				{
-					ch2->length_counter = 64 - ch2->nr21.length;
+					ch2->timeout.length_counter = 64;
 				}
 
 				ch2->current_volume = ch2->nr22.volume;
@@ -4081,24 +4103,9 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				ch2->wave_pos %= 8;
 			}
 
-			// Length timer
-			ch2->length_timer += elapsed_m_cycles;
-			if (ch2->length_timer >= 4096)  // 256 Hz
+			if (gb__SoundTimerAdvance(&ch2->timeout, elapsed_m_cycles, ch2->length_enable))
 			{
-				ch2->length_timer -= 4096;
-
-				// Timeout
-				if (ch2->length_enable && ch2->length_counter > 0)
-				{
-					if (ch2->length_counter > 0)
-					{
-						--ch2->length_counter;
-					}
-					if (ch2->length_counter == 0)
-					{
-						ch2->channel_enable = false;
-					}
-				}
+				ch2->channel_enable = false;
 			}
 
 			// Volume sweep
@@ -4141,9 +4148,9 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				ch3->trigger = 0;
 				ch3->channel_enable = true;
 
-				if (ch3->length_counter == 0)
+				if (ch3->timeout.length_counter == 0)
 				{
-					ch3->length_counter = 256 - ch3->nr31_length;
+					ch3->timeout.length_counter = 256;
 				}
 			}
 
@@ -4156,24 +4163,9 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				ch3->wave_pos %= 32;  // NOTE: The wave length of channel 3 is longer.
 			}
 
-			// Length timer
-			ch3->length_timer += elapsed_m_cycles;
-			if (ch3->length_timer >= 4096)  // 256 Hz
+			if (gb__SoundTimerAdvance(&ch3->timeout, elapsed_m_cycles, ch3->length_enable))
 			{
-				ch3->length_timer -= 4096;
-
-				// Timeout
-				if (ch3->length_enable && ch3->length_counter > 0)
-				{
-					if (ch3->length_counter > 0)
-					{
-						--ch3->length_counter;
-					}
-					if (ch3->length_counter == 0)
-					{
-						ch3->channel_enable = false;
-					}
-				}
+				ch3->channel_enable = false;
 			}
 		}
 
@@ -4215,7 +4207,6 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 					assert(ch1->dac_enable);
 
 					uint8_t sample = ch1->current_volume * gb__PwmWaveForms[ch1->nr11.duty_cycle][ch1->wave_pos];
-					// TODO SND take  1.0 ... out
 					if (gb->apu.nr51.ch1_left == 1)
 					{
 						samples[0] += 1.0f - sample / 7.5f;
