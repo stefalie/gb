@@ -654,19 +654,16 @@ gb__ClearApu(gb_GameBoy *gb)
 	// so it starts at 2048 and then again after each subsequent 16384
 	// ticks.
 	// See: https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html
-	gb->apu.ch1.wave_pos = 0;
-	gb->apu.ch1.wave_pos_timer = 0;
+	gb->apu.ch1.wave_timer = (gb_SoundSampleTimer){ 0 };
 	gb->apu.ch1.timeout.length_timer = 0;
 	gb->apu.ch1.volume_timer = 2048;
 	gb->apu.ch1.freq_timer = 4096;  // Similar thought process for the frequency sweep timing.
 
-	gb->apu.ch2.wave_pos = 0;
-	gb->apu.ch2.wave_pos_timer = 0;
+	gb->apu.ch2.wave_timer = (gb_SoundSampleTimer){ 0 };
 	gb->apu.ch2.timeout.length_timer = 0;
 	gb->apu.ch2.volume_timer = 2048;
 
-	gb->apu.ch3.wave_pos = 0;
-	gb->apu.ch3.wave_pos_timer = 0;
+	gb->apu.ch3.wave_timer = (gb_SoundSampleTimer){ 0 };
 	gb->apu.ch3.timeout.length_timer = 0;
 }
 
@@ -3921,9 +3918,23 @@ gb__CalculateSweepFrequency(struct gb_PulseA *ch1)
 	return new_period;
 }
 
+static void
+gb__SoundSampleAdvance(gb_SoundSampleTimer *sample, uint16_t elapsed_m_cycles, uint16_t freq, bool is_channel_3)
+{
+	// NOTE: Channel 3 is ticked at 2 MHz, not 1 MHz, and it has 32 samples instead of 8.
+	sample->wave_pos_timer += elapsed_m_cycles * (is_channel_3 ? 2 : 1);
+	uint16_t period = 2048 - freq;
+	while (sample->wave_pos_timer >= period)
+	{
+		sample->wave_pos_timer -= period;
+		++sample->wave_pos;
+		sample->wave_pos %= (is_channel_3 ? 32 : 8);
+	}
+}
+
 // Returns true if the channel needs to be disabled.
 static bool
-gb__SoundTimerAdvance(gb_SoundTimer *timeout, uint16_t elapsed_m_cycles, uint16_t timeout_enabled)
+gb__SoundTimeoutAdvance(gb_SoundTimeout *timeout, uint16_t elapsed_m_cycles, uint16_t timeout_enabled)
 {
 	bool disable = false;
 
@@ -3989,16 +4000,9 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				ch1->freq_shadow_period = ch1->period;
 			}
 
-			ch1->wave_pos_timer += elapsed_m_cycles;
-			uint16_t period = 2048 - ch1->period;
-			while (ch1->wave_pos_timer >= period)
-			{
-				ch1->wave_pos_timer -= period;
-				++ch1->wave_pos;
-				ch1->wave_pos %= 8;
-			}
+			gb__SoundSampleAdvance(&ch1->wave_timer, elapsed_m_cycles, ch1->period, false);
 
-			if (gb__SoundTimerAdvance(&ch1->timeout, elapsed_m_cycles, ch1->length_enable))
+			if (gb__SoundTimeoutAdvance(&ch1->timeout, elapsed_m_cycles, ch1->length_enable))
 			{
 				ch1->channel_enable = false;
 			}
@@ -4094,16 +4098,9 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				ch2->sweep_pace_counter = ch2->current_sweep_pace;
 			}
 
-			ch2->wave_pos_timer += elapsed_m_cycles;
-			uint16_t period = 2048 - ch2->period;
-			while (ch2->wave_pos_timer >= period)
-			{
-				ch2->wave_pos_timer -= period;
-				++ch2->wave_pos;
-				ch2->wave_pos %= 8;
-			}
+			gb__SoundSampleAdvance(&ch2->wave_timer, elapsed_m_cycles, ch2->period, false);
 
-			if (gb__SoundTimerAdvance(&ch2->timeout, elapsed_m_cycles, ch2->length_enable))
+			if (gb__SoundTimeoutAdvance(&ch2->timeout, elapsed_m_cycles, ch2->length_enable))
 			{
 				ch2->channel_enable = false;
 			}
@@ -4154,16 +4151,9 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				}
 			}
 
-			ch3->wave_pos_timer += elapsed_m_cycles * 2;  // NOTE: 2 MHz, not 1 MHz
-			uint16_t period = 2048 - ch3->period;
-			while (ch3->wave_pos_timer >= period)
-			{
-				ch3->wave_pos_timer -= period;
-				++ch3->wave_pos;
-				ch3->wave_pos %= 32;  // NOTE: The wave length of channel 3 is longer.
-			}
+			gb__SoundSampleAdvance(&ch3->wave_timer, elapsed_m_cycles, ch3->period, true);
 
-			if (gb__SoundTimerAdvance(&ch3->timeout, elapsed_m_cycles, ch3->length_enable))
+			if (gb__SoundTimeoutAdvance(&ch3->timeout, elapsed_m_cycles, ch3->length_enable))
 			{
 				ch3->channel_enable = false;
 			}
@@ -4206,7 +4196,8 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				{
 					assert(ch1->dac_enable);
 
-					uint8_t sample = ch1->current_volume * gb__PwmWaveForms[ch1->nr11.duty_cycle][ch1->wave_pos];
+					uint8_t sample =
+							ch1->current_volume * gb__PwmWaveForms[ch1->nr11.duty_cycle][ch1->wave_timer.wave_pos];
 					if (gb->apu.nr51.ch1_left == 1)
 					{
 						samples[0] += 1.0f - sample / 7.5f;
@@ -4221,7 +4212,8 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				{
 					assert(ch2->dac_enable);
 
-					uint8_t sample = ch2->current_volume * gb__PwmWaveForms[ch2->nr21.duty_cycle][ch2->wave_pos];
+					uint8_t sample =
+							ch2->current_volume * gb__PwmWaveForms[ch2->nr21.duty_cycle][ch2->wave_timer.wave_pos];
 					if (gb->apu.nr51.ch2_left == 1)
 					{
 						samples[0] += 1.0f - sample / 7.5f;
@@ -4235,7 +4227,7 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 				if (ch3->channel_enable)
 				{
 					assert(ch3->nr30.dac_enable);
-					uint8_t pos = ch3->wave_pos;
+					uint8_t pos = ch3->wave_timer.wave_pos;
 					// NOTE: I think Argentum does the wrong thing here. Upper nibble comes first.
 					uint8_t sample = (gb->apu.wave_pattern[pos / 2] >> ((pos & 0x01) == 0 ? 4u : 0u)) & 0x0F;
 
