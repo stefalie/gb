@@ -176,19 +176,19 @@ static const size_t num_mag_options = sizeof(mag_options) / sizeof(mag_options[0
 
 enum Speed
 {
-	SPEED_DEFAULT = 1,
-	SPEED_HALF = 0,
-	SPEED_2X = 2,
-	SPEED_4X = 4,
-	SPEED_8X = 8,
+	SPEED_HALF = 0xFF,
+	SPEED_DEFAULT = 0,
+	SPEED_2X = 1,
+	SPEED_4X = 2,
+	SPEED_8X = 3,
 };
 static const struct
 {
 	Speed type;
 	const char *nice_name = NULL;
 } speed_options[] = {
-	{ SPEED_DEFAULT, "Default" },
 	{ SPEED_HALF, "1/2x" },
+	{ SPEED_DEFAULT, "Default" },
 	{ SPEED_2X, "2x" },
 	{ SPEED_4X, "4x" },
 	{ SPEED_8X, "8x" },
@@ -484,31 +484,6 @@ PlayAudio(void *user_data, const int8_t *data, size_t len_in_bytes)
 	SDL_QueueAudio(*(SDL_AudioDeviceID *)user_data, data, (uint32_t)len_in_bytes);
 }
 
-static void
-LoadGameState(gb_GameBoy *gb, const char *dir, int slot, Rom rom, SDL_AudioDeviceID *audio_dev)
-{
-	char path[512];
-	PrepareSavePath(gb, dir, slot, path);
-
-	FILE *file = fopen(path, "rb");
-	if (file)
-	{
-		fseek(file, 0, SEEK_END);
-		size_t size = ftell(file);
-		fseek(file, 0, SEEK_SET);
-		assert(size == sizeof(gb_GameBoy));
-		(void)size;
-
-		fread(gb, sizeof(gb_GameBoy), 1, file);
-		fclose(file);
-
-		// This is the only pointer inside the gb_GameBoy struct.
-		// It needs patching.
-		gb->rom.data = rom.data;
-		gb_SetAudioCallback(gb, &PlayAudio, audio_dev);
-	}
-}
-
 struct Emulator
 {
 	Ini ini;
@@ -583,6 +558,34 @@ struct Emulator
 		SDL_AudioDeviceID audio_dev = 0;
 	} handles;
 };
+
+static void
+LoadGameState(gb_GameBoy *gb, Emulator *emu)
+{
+	char path[512];
+	PrepareSavePath(gb, emu->save_dir_path, emu->gui.save_slot, path);
+
+	FILE *file = fopen(path, "rb");
+	if (file)
+	{
+		fseek(file, 0, SEEK_END);
+		size_t size = ftell(file);
+		fseek(file, 0, SEEK_SET);
+		assert(size == sizeof(gb_GameBoy));
+		(void)size;
+
+		fread(gb, sizeof(gb_GameBoy), 1, file);
+		fclose(file);
+
+		// The ROM, audio callback and user data for it are the pointers.
+		// They need patching.
+		gb->rom.data = emu->rom.data;
+		gb_SetAudioCallback(gb, &PlayAudio, &emu->handles.audio_dev,
+				emu->gui.speed_frame_multiplier == 0xFF ? -1 : emu->gui.speed_frame_multiplier);
+
+		emu->gui.reset_delta_time = true;
+	}
+}
 
 static bool
 LoadRomFromFile(Emulator *emu, gb_GameBoy *gb, const char *file_path)
@@ -740,8 +743,7 @@ GuiDraw(Emulator *emu, gb_GameBoy *gb)
 				}
 				if (ImGui::MenuItem("Load", "F7", false, emu->gui.has_active_rom))
 				{
-					LoadGameState(gb, emu->save_dir_path, emu->gui.save_slot, emu->rom, &emu->handles.audio_dev);
-					emu->gui.reset_delta_time = true;
+					LoadGameState(gb, emu);
 				}
 				if (ImGui::BeginMenu("Save Slot"))
 				{
@@ -807,6 +809,8 @@ GuiDraw(Emulator *emu, gb_GameBoy *gb)
 									emu->gui.speed_frame_multiplier == speed_options[i].type))
 						{
 							emu->gui.speed_frame_multiplier = speed_options[i].type;
+							gb_SetAudioCallback(gb, &PlayAudio, &emu->handles.audio_dev,
+									emu->gui.speed_frame_multiplier == 0xFF ? -1 : emu->gui.speed_frame_multiplier);
 						}
 					}
 					ImGui::EndMenu();
@@ -1539,7 +1543,8 @@ main(int argc, char *argv[])
 		SDL_CheckError();
 		exit(1);
 	}
-	gb_SetAudioCallback(&gb, &PlayAudio, &emu.handles.audio_dev);
+	gb_SetAudioCallback(&gb, &PlayAudio, &emu.handles.audio_dev,
+			emu.gui.speed_frame_multiplier == 0xFF ? -1 : emu.gui.speed_frame_multiplier);
 	SDL_ClearQueuedAudio(emu.handles.audio_dev);
 	// Add a tiny audio delay
 	int8_t silence[1024 * 2] = { 0 };
@@ -1903,8 +1908,7 @@ main(int argc, char *argv[])
 				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F7)
 				{
-					LoadGameState(&gb, emu.save_dir_path, emu.gui.save_slot, emu.rom, &emu.handles.audio_dev);
-					emu.gui.reset_delta_time = true;
+					LoadGameState(&gb, &emu);
 				}
 				else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_F10)
 				{
@@ -1997,7 +2001,7 @@ main(int argc, char *argv[])
 			}
 			else
 			{
-				m_cycle_acc += emu.gui.speed_frame_multiplier * elapsed_m_cycles;
+				m_cycle_acc += elapsed_m_cycles << emu.gui.speed_frame_multiplier;
 			}
 
 			// Makes sure that we run the magnification filter and texture update

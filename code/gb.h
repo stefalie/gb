@@ -83,8 +83,12 @@ gb_SetInput(gb_GameBoy *gb, gb_Input input, bool down);
 // The emulators calls the callback and provides stereo 8-bit integer audio samples at 48 kHz.
 typedef void
 gb_AudioCallback(void *user_data, const int8_t *data, size_t len_in_bytes);
+
+// Set the audio callback. With the speed multiplier shift you tell the APU that the
+// emulator is running faster/slower than in reality. For example -1 for half the speed,
+// 2 for 4 times the normal speed, 0 for normal speed.
 void
-gb_SetAudioCallback(gb_GameBoy *gb, gb_AudioCallback *callback, void *user_data);
+gb_SetAudioCallback(gb_GameBoy *gb, gb_AudioCallback *callback, void *user_data, int speed_multiplier_shift);
 
 // Note that this is currently rather wasteful as we only support the monochrome
 // DMG. If we however decide to go for Color GameBoy support, this will make it
@@ -462,7 +466,8 @@ typedef struct gb_GameBoy
 	// in the APU).
 	struct gb_Apu
 	{
-		uint64_t clock_acc;
+		uint64_t clock_acc;  // TODO(stefalie): Is 32 bit enough?
+		int speed_multiplier_shift;
 
 		gb_AudioCallback *callback;
 		void *callback_user_data;

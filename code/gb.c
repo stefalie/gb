@@ -4184,11 +4184,22 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 	//
 	// LCM of 48k and 1 MHz is 375 * 1024 * 1024 == 8192 * 48000
 	gb->apu.clock_acc += elapsed_m_cycles * 375;
-
-	if (gb->apu.clock_acc >= 8192)
+	uint64_t sampling_period = 8192;
+	if (gb->apu.speed_multiplier_shift > 0)
 	{
-		gb->apu.clock_acc -= 8192;
-		assert(gb->apu.clock_acc < 8192);
+		sampling_period <<= gb->apu.speed_multiplier_shift;
+	}
+	else if (gb->apu.speed_multiplier_shift < 0)
+	{
+		sampling_period >>= -gb->apu.speed_multiplier_shift;
+	}
+	assert((sampling_period & (sampling_period - 1)) == 0);  // POT
+
+	// NOTE: This should only do more than 1 iteration when switching from a higher
+	// speed to a lower one.
+	while (gb->apu.clock_acc >= sampling_period)
+	{
+		gb->apu.clock_acc -= sampling_period;
 
 		if (gb->apu.callback)
 		{
@@ -4457,10 +4468,11 @@ gb_SetInput(gb_GameBoy *gb, gb_Input input, bool down)
 }
 
 void
-gb_SetAudioCallback(gb_GameBoy *gb, gb_AudioCallback *callback, void *user_data)
+gb_SetAudioCallback(gb_GameBoy *gb, gb_AudioCallback *callback, void *user_data, int speed_multiplier_shift)
 {
 	gb->apu.callback = callback;
 	gb->apu.callback_user_data = user_data;
+	gb->apu.speed_multiplier_shift = speed_multiplier_shift;
 }
 
 gb_Tile
