@@ -617,20 +617,10 @@ gb__ClearApu(gb_GameBoy *gb)
 	gb->apu.nr51.reg = 0;
 	gb->apu.nr50.reg = 0;
 
-	// TODO SND
-	// struct gb_PulseA old_ch1 = gb->apu.ch1;
 	gb->apu.ch1 = (struct gb_PulseA){ 0 };
-
-	// gb->apu.ch1.length_timer = old_ch1.length_timer;
-	// gb->apu.ch1.volume_timer = old_ch1.volume_timer;
-	// gb->apu.ch1.freq_timer = old_ch1.freq_timer;
-
-	// TODO SND
-	// struct gb_PulseB old_ch2 = gb->apu.ch2;
 	gb->apu.ch2 = (struct gb_PulseB){ 0 };
-
-	// gb->apu.ch2.length_timer = old_ch2.length_timer;
-	// gb->apu.ch2.volume_timer = old_ch2.volume_timer;
+	gb->apu.ch3 = (struct gb_Wave){ 0 };
+	gb->apu.ch4 = (struct gb_Noise){ 0 };
 
 	// Reset undefined values to 1.
 	gb->apu.ch1.nr10._ = 1;
@@ -654,17 +644,10 @@ gb__ClearApu(gb_GameBoy *gb)
 	// so it starts at 2048 and then again after each subsequent 16384
 	// ticks.
 	// See: https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html
-	gb->apu.ch1.wave_timer = (gb_SoundSampleTimer){ 0 };
-	gb->apu.ch1.timeout.length_timer = 0;
 	gb->apu.ch1.volume_sweep.volume_timer = 2048;
 	gb->apu.ch1.freq_timer = 4096;  // Similar thought process for the frequency sweep timing.
-
-	gb->apu.ch2.wave_timer = (gb_SoundSampleTimer){ 0 };
-	gb->apu.ch2.timeout.length_timer = 0;
 	gb->apu.ch2.volume_sweep.volume_timer = 2048;
-
-	gb->apu.ch3.wave_timer = (gb_SoundSampleTimer){ 0 };
-	gb->apu.ch3.timeout.length_timer = 0;
+	gb->apu.ch4.volume_sweep.volume_timer = 2048;
 }
 
 static void
@@ -996,7 +979,6 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					else if (addr == 0xFF20)
 					{
 						gb->apu.ch4.nr41.reg = (undefined_value & 0xC0) + (value & 0x3F);
-						// TODO SND?
 						gb->apu.ch4.timeout.length_counter = 64 - gb->apu.ch4.nr41.length;
 					}
 					else if (addr == 0xFF21)
@@ -1014,8 +996,7 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 					}
 					else if (addr == 0xFF23)
 					{
-						gb->apu.ch4.nr44.reg = (undefined_value & ~0x3F) + (value & 0xC0);
-						// TODO SND?
+						gb->apu.ch4.nr44.reg = (undefined_value & 0x3F) + (value & 0xC0);
 					}
 					// Master volume
 					else if (addr == 0xFF24)
@@ -4082,8 +4063,6 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 			}
 		}
 
-		// TODO(stefalie): Can we somehow de-duplicate some of this? The timers Maybe?
-		// Now I can wish I could use inheritance for at least pulse A & B.
 		{  // Channel 2
 			struct gb_PulseB *ch2 = &gb->apu.ch2;
 
@@ -4137,9 +4116,64 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 
 		{  // Channel 4
 			struct gb_Noise *ch4 = &gb->apu.ch4;
-			// TODO SND
 
-			(void)ch4;
+			if (ch4->nr44.trigger == 1 && ch4->dac_enable)
+			{
+				ch4->nr44.trigger = 0;
+				ch4->channel_enable = true;
+
+				if (ch4->timeout.length_counter == 0)
+				{
+					ch4->timeout.length_counter = 64;
+				}
+
+				ch4->volume_sweep.current_volume = ch4->nr42.volume;
+				ch4->volume_sweep.current_sweep_pace = ch4->nr42.volume_sweep_pace;
+				ch4->volume_sweep.current_envelope_dir = ch4->nr42.envelope_dir;
+				ch4->volume_sweep.sweep_pace_counter = ch4->volume_sweep.current_sweep_pace;
+			}
+
+			uint16_t period = 1u << ch4->nr43.clock_shift;
+			period *= 4;  // Because LFSR is ticket at 256 MHz, not 1 GHz.
+			if (ch4->nr43.clock_div == 0)
+			{
+				period >>= 1;
+			}
+			else
+			{
+				period *= ch4->nr43.clock_div;
+			}
+
+			ch4->lfsr_timer += elapsed_m_cycles;
+			while (ch4->lfsr_timer >= period)
+			{
+				ch4->lfsr_timer -= period;
+
+				// NOTE: The following two sources implement the LFSR differently (but the
+				// effect should be the same). I follow gbdev.io.
+				// - https://gbdev.io/pandocs/Audio_details.html#noise-channel-ch4
+				// - https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware#Noise_Channel
+				assert((ch4->lfsr_state & 0x8000) == 0);
+				uint16_t xor_bit = ((ch4->lfsr_state >> 1u) & 0x0001) ^ (ch4->lfsr_state & 0x0001);
+				uint16_t eq_bit = (~xor_bit) & 0x0001;
+
+				ch4->lfsr_state |= eq_bit << 15u;
+
+				// For 7-bit mode, copy bit :
+				if (ch4->nr43.lfsr_width == 1)
+				{
+					ch4->lfsr_state = (ch4->lfsr_state & 0xFF7F) | (eq_bit << 7u);
+				}
+
+				ch4->lfsr_state >>= 1u;
+			}
+
+			if (gb__SoundTimeoutAdvance(&ch4->timeout, elapsed_m_cycles, ch4->nr44.length_enable))
+			{
+				ch4->channel_enable = false;
+			}
+
+			gb__VolumeSweepAdvance(&ch4->volume_sweep, elapsed_m_cycles);
 		}
 	}
 
@@ -4240,9 +4274,10 @@ gb__AdvanceApu(gb_GameBoy *gb, uint16_t elapsed_m_cycles)
 
 				if (ch4->channel_enable)
 				{
-					assert(ch2->dac_enable);
+					assert(ch4->dac_enable);
 
-					uint8_t sample = 0;
+					uint8_t sample = ch4->volume_sweep.current_volume * (ch4->lfsr_state & 0x0001);
+
 					if (gb->apu.nr51.ch4_left == 1)
 					{
 						samples[0] += 1.0f - sample / 7.5f;

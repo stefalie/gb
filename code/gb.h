@@ -648,11 +648,8 @@ typedef struct gb_GameBoy
 			bool dac_enable;
 			bool channel_enable;
 			gb_SoundTimeout timeout;
-			// TODO SND
-			uint8_t current_volume;
-			uint8_t current_sweep_pace;
-			uint8_t current_envelope_dir;
-
+			gb_SoundVolumeSweep volume_sweep;
+			uint16_t lfsr_timer;
 			uint16_t lfsr_state;
 
 			union
