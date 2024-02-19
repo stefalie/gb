@@ -28,6 +28,10 @@ gb_LoadRom(gb_GameBoy *gb, const uint8_t *rom, uint32_t num_bytes, bool skip_bio
 uint8_t
 gb_MemoryReadByte(const gb_GameBoy *gb, uint16_t addr);
 
+// Read a two byte word from the GameBoy's memory space at 'addr'.
+uint16_t
+gb_MemoryReadWord(const gb_GameBoy *gb, uint16_t addr);
+
 // Resets the GameBoy.
 void
 gb_Reset(gb_GameBoy *gb, bool skip_bios);

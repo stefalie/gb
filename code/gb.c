@@ -1204,6 +1204,7 @@ static inline void
 gb__PushWordToStack(gb_GameBoy *gb, uint16_t value)
 {
 	gb->cpu.sp -= 2;
+	assert(gb->cpu.sp >= 0);
 	gb__MemoryWriteWord(gb, gb->cpu.sp, value);
 }
 
@@ -1212,6 +1213,7 @@ gb__PopWordToStack(gb_GameBoy *gb)
 {
 	uint16_t result = gb__MemoryReadWord(gb, gb->cpu.sp);
 	gb->cpu.sp += 2;
+	assert(gb->cpu.sp <= 0xFFFE);
 	return result;
 }
 
@@ -3340,27 +3342,27 @@ gb__HandleInterrupts(gb_GameBoy *gb)
 		if (intr_pending.vblank)
 		{
 			intr->if_flags.vblank = 0;
-			gb->cpu.pc = 0x40;
+			gb->cpu.pc = 0x0040;
 		}
 		else if (intr_pending.lcd_stat)
 		{
 			intr->if_flags.lcd_stat = 0;
-			gb->cpu.pc = 0x48;
+			gb->cpu.pc = 0x0048;
 		}
 		else if (intr_pending.timer)
 		{
 			intr->if_flags.timer = 0;
-			gb->cpu.pc = 0x50;
+			gb->cpu.pc = 0x0050;
 		}
 		else if (intr_pending.serial)
 		{
 			intr->if_flags.serial = 0;
-			gb->cpu.pc = 0x58;
+			gb->cpu.pc = 0x0058;
 		}
 		else if (intr_pending.joypad)
 		{
 			intr->if_flags.joypad = 0;
-			gb->cpu.pc = 0x60;
+			gb->cpu.pc = 0x0060;
 		}
 		else
 		{

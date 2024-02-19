@@ -1295,7 +1295,7 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 				ImGui::Text("\thblank (mode 0) int = %u", gb->ppu.stat.interrupt_mode_hblank);
 				ImGui::Text("\tvblank (mode 1) int = %u", gb->ppu.stat.interrupt_mode_vblank);
 				ImGui::Text("\toam (mode 2) int    = %u", gb->ppu.stat.interrupt_mode_oam_scan);
-				ImGui::Text("\tly == lyc int       = %u", gb->ppu.stat.coincidence_flag);
+				ImGui::Text("\tly == lyc int       = %u", gb->ppu.stat.interrupt_coincidence);
 			}
 			ImGui::Text("scy  0xFF42 = 0x%02X (%3u)", gb->ppu.scy, gb->ppu.scy);
 			ImGui::Text("scx  0xFF43 = 0x%02X (%3u)", gb->ppu.scx, gb->ppu.scx);
