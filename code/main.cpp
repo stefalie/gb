@@ -27,6 +27,9 @@ extern "C" {
 #include "gb.h"
 }
 
+FILE *log_file;
+bool log_enabled = false;
+
 static inline void
 _SDL_CheckError(const char *file, int line)
 {
@@ -1389,6 +1392,7 @@ DebuggerDraw(Emulator *emu, gb_GameBoy *gb)
 
 	{
 		ImGui::Begin(tab_name_options);
+		ImGui::Checkbox("Log", &log_enabled);
 		ImGui::Checkbox("Highlight current instruction", &emu->debug.views_follow_pc);
 		ImGui::Checkbox("Single step mode/Pause (space then step with F10)", &emu->gui.pause);
 		ImGui::Checkbox("Stop at V-Blank (F11)", &emu->gui.stop_at_vblank);
@@ -1739,6 +1743,9 @@ main(int argc, char *argv[])
 
 	int64_t m_cycle_acc = 0;
 
+	log_file = fopen("log.txt", "w");
+	assert(log_file);
+
 	// Main Loop
 	while (!emu.quit)
 	{
@@ -2014,6 +2021,32 @@ main(int argc, char *argv[])
 
 			while (m_cycle_acc > 0)
 			{
+				if (log_enabled)
+				{  // Log
+					const gb_Instruction inst = gb_FetchInstruction(&gb, gb.cpu.pc);
+					char buf[33];
+					size_t end = gb_DisassembleInstruction(inst, buf, sizeof(buf));
+					buf[end] = '\0';
+					fprintf(log_file, "$%04X: ($%02X) %s", gb.cpu.pc, inst.opcode, buf);
+					if (gb.cpu.halt)
+					{
+						fprintf(log_file, "\tHALT");
+					}
+					fprintf(log_file, "\taf = $%04X", gb.cpu.af);
+					fprintf(log_file, "\tbc = $%04X", gb.cpu.bc);
+					fprintf(log_file, "\tde = $%04X", gb.cpu.de);
+					fprintf(log_file, "\thl = $%04X, (hl) = $%02X", gb.cpu.hl, gb_MemoryReadByte(&gb, gb.cpu.hl));
+					fprintf(log_file, "\tsp = $%04X, (sp) = $%04X", gb.cpu.sp, gb_MemoryReadWord(&gb, gb.cpu.sp));
+					fprintf(log_file, "\tpc = $%04X", gb.cpu.pc);
+					fprintf(log_file, "\n");
+				}
+				if (gb.cpu.pc == 0xFFFF || gb.cpu.sp == 0xFFFF)
+				{
+					fprintf(log_file, "OOPS\n");
+					fflush(log_file);
+				}
+
+
 				const size_t emulated_m_cycles = gb_ExecuteNextInstruction(&gb);
 				assert(emulated_m_cycles > 0);
 				m_cycle_acc -= emulated_m_cycles;
