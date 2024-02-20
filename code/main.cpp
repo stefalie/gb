@@ -737,6 +737,10 @@ GuiDraw(Emulator *emu, gb_GameBoy *gb)
 					emu->gui.pause = !emu->gui.pause;
 				}
 				ImGui::Separator();
+				// TODO(stefalie): Manually having to change slots is a pain.
+				// Do what VBA does: Automatically cycle through the slots.
+				// Whenever a state is saved, one automatically switches to the
+				// next slot.
 				if (ImGui::MenuItem("Save", "F5", false, emu->gui.has_active_rom))
 				{
 					SaveGameState(gb, emu->save_dir_path, emu->gui.save_slot);

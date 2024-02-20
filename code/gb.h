@@ -84,6 +84,17 @@ typedef enum gb_Input
 void
 gb_SetInput(gb_GameBoy *gb, gb_Input input, bool down);
 
+// TODO(stefalie): To me it's still unclear what the best way is to do sound.
+// With SDL, we can either push or pull. Push seems simpler and that's what I did.
+// With pull end up storing sound clock states as floats (which is an ugly mess)
+// unless we rerecord audio samples during emulation and keep them in a buffer
+// until we can rerecord.
+// Push on the other hand just has to make sure that the audio queue is always
+// fed well enough. Just adding a small delay (few ms) in the beginning of the
+// audio buffer should guarantee that there won't be a buffer underrun.
+// Argentum and VBA too (I think ) use an approach where the sound controls the
+// blocking/waiting of the main loop. I'm not convinced that's the best solution.
+//
 // The emulators calls the callback and provides stereo 8-bit integer audio samples at 48 kHz.
 typedef void
 gb_AudioCallback(void *user_data, const int8_t *data, size_t len_in_bytes);
