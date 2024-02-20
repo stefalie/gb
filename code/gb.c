@@ -1067,18 +1067,30 @@ gb__MemoryWriteByte(gb_GameBoy *gb, uint16_t addr, uint8_t value)
 				stat->mode = mode_read_only;
 				stat->coincidence_flag = coincidence_flag_read_only;
 
+				// TODO(stefalie): This makes Batman go into a RST 38 infinite loop (or crash)
+				// when finishing level 6 just before the cutscene of the Batmobile driving off.
+				// What happens is that STAT gets set to 0 (PC at $6869 in ROM bank 6), the
+				// spurious interrupt will occur, ($FF9A) contains 0 which causes the interrupt
+				// to return without popping AF. VBA seems to handle the spurious interrupts the
+				// same way, but there the problem doesn't occur. I dunno what they do
+				// differently. See here:
+				// https://github.com/visualboyadvance-m/visualboyadvance-m/blob/e7d135d/src/gb/GB.cpp#L1712
+				// BGB doesn't fire an interrupt either after $6869 either. (Too catch it the
+				// breakpoint needs to set ROM bank 6 as condition.)
+				//
 				// Spurious STAT interrupt bug. STAT becomes 0xFF for 1 cycle.
 				// See:
 				// https://www.devrs.com/gb/files/faqs.html#GBBugs
 				// https://gbdev.io/pandocs/STAT.html
 				// The various sources disagree on when exactly it thappens.
-				if ((stat->mode == GB_PPU_MODE_HBLANK || stat->mode == GB_PPU_MODE_VBLANK) || gb->ppu.ly == gb->ppu.lyc)
-				{
-					if (!prev_int48_signal)
-					{
-						gb->cpu.interrupt.if_flags.lcd_stat = 1;
-					}
-				}
+				// if ((stat->mode == GB_PPU_MODE_HBLANK || stat->mode == GB_PPU_MODE_VBLANK) || gb->ppu.ly ==
+				// gb->ppu.lyc)
+				//{
+				//	if (!prev_int48_signal)
+				//	{
+				//		gb->cpu.interrupt.if_flags.lcd_stat = 1;
+				//	}
+				//}
 
 				// TODO(stefalie): According to the following link, stat blocking only applies
 				// between the different LCD modes but not between LCD modes and the coincidence flag.
