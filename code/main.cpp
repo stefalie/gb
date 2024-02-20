@@ -463,27 +463,6 @@ struct Rom
 	int size = 0;
 };
 
-static void
-SaveGameState(const gb_GameBoy *gb, const char *dir, int slot)
-{
-	char path[512];
-	PrepareSavePath(gb, dir, slot, path);
-
-	FILE *file = fopen(path, "wb");
-	assert(file);
-	if (file)
-	{
-		fwrite(gb, sizeof(gb_GameBoy), 1, file);
-		fclose(file);
-	}
-}
-
-static void
-PlayAudio(void *user_data, const int8_t *data, size_t len_in_bytes)
-{
-	SDL_QueueAudio(*(SDL_AudioDeviceID *)user_data, data, (uint32_t)len_in_bytes);
-}
-
 struct Emulator
 {
 	Ini ini;
@@ -560,6 +539,27 @@ struct Emulator
 };
 
 static void
+PlayAudio(void *user_data, const int8_t *data, size_t len_in_bytes)
+{
+	SDL_QueueAudio(*(SDL_AudioDeviceID *)user_data, data, (uint32_t)len_in_bytes);
+}
+
+static void
+SaveGameState(const gb_GameBoy *gb, const char *dir, int slot)
+{
+	char path[512];
+	PrepareSavePath(gb, dir, slot, path);
+
+	FILE *file = fopen(path, "wb");
+	assert(file);
+	if (file)
+	{
+		fwrite(gb, sizeof(gb_GameBoy), 1, file);
+		fclose(file);
+	}
+}
+
+static void
 LoadGameState(gb_GameBoy *gb, Emulator *emu)
 {
 	char path[512];
@@ -584,6 +584,16 @@ LoadGameState(gb_GameBoy *gb, Emulator *emu)
 				emu->gui.speed_frame_multiplier == 0xFF ? -1 : emu->gui.speed_frame_multiplier);
 
 		emu->gui.reset_delta_time = true;
+
+		// Disable all buttons (they might be considered pressed in saved state).
+		gb_SetInput(gb, GB_INPUT_BUTTON_A, false);
+		gb_SetInput(gb, GB_INPUT_BUTTON_B, false);
+		gb_SetInput(gb, GB_INPUT_BUTTON_SELECT, false);
+		gb_SetInput(gb, GB_INPUT_BUTTON_START, false);
+		gb_SetInput(gb, GB_INPUT_ARROW_RIGHT, false);
+		gb_SetInput(gb, GB_INPUT_ARROW_LEFT, false);
+		gb_SetInput(gb, GB_INPUT_ARROW_UP, false);
+		gb_SetInput(gb, GB_INPUT_ARROW_DOWN, false);
 	}
 }
 
