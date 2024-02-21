@@ -1,22 +1,30 @@
 # GB - GameBoy Emulator
 
-TODO:
-http://gameboy.mongenel.com/dmg/opcodes.html
-https://cturt.github.io/cinoop.html
+![GB Teaser](gb_teaser.webp)
 
-GB is a simple GameBoy emulator for Windows written in C11.
+GB is a simple proof of concept GameBoy emulator for Windows.
 
-The emulator itself, `gb.h` and `gb.c`, is in pure C11 while all surrounding glue, UI, windowing code is in C-like C++ (this is because ImGui does not compile in C mode).
+The emulator itself, `gb.h` and `gb.c`, is written in pure C11 while all surrounding glue, UI, windowing code, etc. is in C-like C++ (this is because ImGui does not compile in C mode).
 
-TODO: screenshot
+GB takes shortcuts:
+
+- It is instruction-stepped and not cycle-stepped and therefore can't be accurate.
+- Complete scan lines are rendered at the beginning of the LCD's VRAM scan mode instead of squeezing pixel after pixel out of the FIFO at subsequent ticks of the clock.
+- No multiplayer. The serial port is not implemented.
+- A lot of known hardware bugs and obscure GameBoy behaviors are not implemented.
+- Only DMG support, not GameBoy Color, Super GameBoy, or GameBoy Pocket.
+
+While not accurate nor complete, it was play tested on and solid enough to play the games I loved as a kid: Adventure Island 1 & 2, Batman, Batman - Return of the Joker, Donkey Kong, Donkey Kong Land, Duck Tales 1 & 2, Jurassic Park 2, Motocross Maniacs, Nintendo World Cup, Super Mario Land 1 & 2, Tiny Toon Adventures, Tom & Jerry, Wario Land, and of course Tetris.
+
+GB also passes [Blargg's](https://github.com/retrio/gb-test-roms/tree/master) CPU instruction tests (but not most other Blargg tests due to being instruction-stepped).
 
 ## Dependencies
 
-This project is shipped with third-party dependencies, each of which may have independent licensing (see [`external`](external) directory):
+This project is shipped with third-party dependencies, each of which have independent licensing (see [`external`](external) directory):
 
 - [SDL](https://libsdl.org/)
 - [ImGui](https://github.com/ocornut/imgui)
-- [DMCA Sans Serif font](https://typedesign.netlify.app/dmcasansserif.html)
+- [DMCA Sans Serif font](https://web.archive.org/web/20210127100531/https://typedesign.netlify.app/dmcasansserif.html)
 
 ## Building on Windows
 
@@ -45,15 +53,17 @@ The build script can be called with these options: `build_win_x64.bat (Clang|Msv
 - `Clang` or `Msvc` to choose the compiler
 - `Rel` or `Deb` for release or debug flags
 
-For debugging call `devenv build\gb.exe` in the project directory (make sure `msvc_shell.bat` has been called first), or simply use the VSCode project by calling `code .` in the project directory (this also requires prior setup of the environment via `shell_msvc.bat`).
+For debugging call `devenv build\gb.exe` in the project directory (make sure `msvc_shell.bat` has been called first).
 
-When running any of the [Blargg test ROMs](https://github.com/retrio/gb-test-roms/tree/master), set the `BLARGG_TEST_ENABLE` macro to `1` (otherwise, loading the ROM fails because it CGB ROM type).
-If you want to see the output written to the serial port of the GameBoy, the build script needs to be modified to use `SUBSYSTEM:console` (otherwise, the printf output won't show).
+When running any of the [Blargg test ROMs](https://github.com/retrio/gb-test-roms/tree/master), set the `BLARGG_TEST_ENABLE` macro to `1` in [`code/gb.c`](code/gb.c) (otherwise, loading the ROM fails because its checksum is wrong/missing).
+If you want to see the output of the Blargg tests written to the serial port of the GameBoy in the terminal, the build script needs to be modified to use `SUBSYSTEM:console` (otherwise, the `printf` output won't show).
 
 ## Known Issues & TODO
 
 TODO: split this into a different file.
 TODO: list which blargg tests actually work
+TODO: audio pops/clicks/cracks
+TODO: super mario status bar flicker
 
 ### Blargg Tests Fail Because gb Is Instruction-Stepped
 
@@ -93,3 +103,6 @@ blargg
 cinoop
 https://github.com/ThomasRinsma/dromaius
 consider switching to clang-cl instead of clang (then you can just use the same compile params as for msvc)
+vba
+argentum
+
