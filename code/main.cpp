@@ -1469,13 +1469,12 @@ static const char* fragment_shader_source =
 		"\n"
 		"uniform ivec2 viewport_size;\n"
 		"uniform ivec2 viewport_pos;\n"
+		"uniform ivec2 texture_size;\n"
 		"uniform sampler2D gameboy_fb_tex;\n"
-		"// TODO(stefalie): Pass the size fo gameboy_fb_tex as uniform or accept that 'textureSize(...)\n"
-		"// not available below version 130' warning (or 'gl_FragColor not available above version 130').\n"
 		"\n"
 		"void main()\n"
 		"{\n"
-		"	vec2 scale = vec2(viewport_size) / vec2(textureSize(gameboy_fb_tex, 0));\n"
+		"	vec2 scale = vec2(viewport_size) / vec2(texture_size);\n"
 		"\n"
 		"\n"
 		"	vec2 mag_coord = (gl_FragCoord.xy - vec2(viewport_pos)) / scale;\n"
@@ -1487,7 +1486,7 @@ static const char* fragment_shader_source =
 		"	// Interpolate only over one screen pixel exactly in the middle between 'scale'-sized magnified pixels.\n"
 		"	// Line equation (origin in the middle of a pixel in mag space): scale * x - 0.5 * (scale - 1.0)\n"
 		"	vec2 mag_sample_uv = mag_base + clamp(x * scale - 0.5 * (scale - 1.0), 0.0, 1.0);\n"
-		"	mag_sample_uv /= vec2(textureSize(gameboy_fb_tex, 0));\n"
+		"	mag_sample_uv /= vec2(texture_size);\n"
 		"\n"
 		"	mag_sample_uv.y = 1.0 - mag_sample_uv.y;  // Image is upside down in tex memory.\n"
 		"	vec3 color = texture2D(gameboy_fb_tex, mag_sample_uv).rgb;\n"
@@ -1681,6 +1680,7 @@ main(int argc, char *argv[])
 	GLuint shader_program;
 	GLint viewport_size_loc;
 	GLint viewport_pos_loc;
+	GLint texture_size_loc;
 	GLint gb_fb_tex_loc;
 	GLuint texture;
 	{
@@ -1711,9 +1711,11 @@ main(int argc, char *argv[])
 
 		viewport_size_loc = glGetUniformLocation(shader_program, "viewport_size");
 		viewport_pos_loc = glGetUniformLocation(shader_program, "viewport_pos");
+		texture_size_loc = glGetUniformLocation(shader_program, "texture_size");
 		gb_fb_tex_loc = glGetUniformLocation(shader_program, "gameboy_fb_tex");
 		assert(viewport_size_loc != -1);
 		assert(viewport_pos_loc != -1);
+		assert(texture_size_loc != -1);
 		assert(gb_fb_tex_loc != -1);
 
 		glEnable(GL_TEXTURE_2D);
@@ -2124,6 +2126,10 @@ main(int argc, char *argv[])
 			glUseProgram(shader_program);
 			glUniform2i(viewport_size_loc, w, h);
 			glUniform2i(viewport_pos_loc, x, y);
+			int tex_w, tex_h;
+			glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &tex_w);
+			glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &tex_h);
+			glUniform2i(texture_size_loc, tex_w, tex_h);
 			glUniform1i(gb_fb_tex_loc, 0);  // Tex unit 0
 			glRects(-1, -1, 1, 1);
 			glUseProgram(0);

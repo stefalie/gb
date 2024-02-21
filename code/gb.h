@@ -94,6 +94,9 @@ gb_SetInput(gb_GameBoy *gb, gb_Input input, bool down);
 // audio buffer should guarantee that there won't be a buffer underrun.
 // Argentum and VBA too (I think ) use an approach where the sound controls the
 // blocking/waiting of the main loop. I'm not convinced that's the best solution.
+// A problem of the current implementation is that it sometimes becomes out of 
+// sync/delayed (not exactly sure why). If that happens one can save and reload
+// the game state to reset the audio queue.
 //
 // The emulators calls the callback and provides stereo 8-bit integer audio samples at 48 kHz.
 typedef void
