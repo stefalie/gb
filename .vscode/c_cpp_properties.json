@@ -1,10 +1,12 @@
 {
     "configurations": [
         {
-            "name": "Win32",
+            "name": "Win MSVC",
             "includePath": [
                 "${workspaceFolder}/code/**",
-                "${workspaceFolder}/external/SDL2-2.0.14/SDL2/**"
+                "${workspaceFolder}/external/SDL2-2.0.14/SDL2/**",
+                "${workspaceFolder}/external/imgui/**",
+                "${workspaceFolder}/external/imgui_club/**"
             ],
             "defines": [
                 "_DEBUG"
@@ -19,7 +21,8 @@
                 "path": [
                     "${workspaceFolder}/code/**",
                     "${workspaceFolder}/external/SDL2-2.0.14/SDL2/**",
-                    "${workspaceFolder}/external/microui/**"
+                    "${workspaceFolder}/external/imgui/**",
+                    "${workspaceFolder}/external/imgui_club/**"
                 ],
                 "limitSymbolsToIncludedHeaders": true
             }
@@ -29,7 +32,8 @@
             "includePath": [
                 "${workspaceFolder}/code/**",
                 "${workspaceFolder}/external/SDL2-2.0.14/SDL2/**",
-                "${workspaceFolder}/external/microui/**"
+                "${workspaceFolder}/external/imgui/**",
+                "${workspaceFolder}/external/imgui_club/**"
             ],
             "compilerPath": "C:/Program Files/LLVM/bin/clang.exe",
             "cStandard": "c11",
