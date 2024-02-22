@@ -14,7 +14,7 @@ GB currently takes shortcuts:
 - A lot of known hardware bugs and obscure behavior of the GameBoy are not implemented.
 - Only support for DMG. No support for GameBoy Color, Super GameBoy, or GameBoy Pocket.
 
-While not accurate nor complete, GB was play tested on and solid enough to play the games I loved as a kid: Adventure Island 1 & 2, Batman, Batman - Return of the Joker, Donkey Kong, Donkey Kong Land, Duck Tales 1 & 2, Jurassic Park 2, Motocross Maniacs, Nintendo World Cup, Super Mario Land 1 & 2, Tiny Toon Adventures, Tom & Jerry, Wario Land, and of course Tetris.
+While not accurate nor complete, GB was play tested on and is solid enough to play the games I loved as a kid: Adventure Island 1 & 2, Batman, Batman - Return of the Joker, Donkey Kong, Donkey Kong Land, Duck Tales 1 & 2, Jurassic Park 2, Motocross Maniacs, Nintendo World Cup, Super Mario Land 1 & 2, Tiny Toon Adventures, Tom & Jerry, Wario Land, and of course Tetris.
 
 GB also passes [Blargg's](https://github.com/retrio/gb-test-roms/tree/master) CPU instruction tests (but not most other Blargg tests due to instruction-stepping).
 
