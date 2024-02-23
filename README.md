@@ -4,7 +4,7 @@
 
 GB is a simple proof of concept GameBoy emulator for Windows in alpha state.
 
-The emulator itself, `gb.h` and `gb.c`, is written in pure C11 while all surrounding glue, UI, windowing code is in C-like C++ (this is because ImGui does not compile in C mode).
+The emulator itself, `gb.h` and `gb.c`, is written in pure C11 while all surrounding glue, UI, and windowing code is in C-like C++ (this is because ImGui does not compile in C mode).
 
 GB currently takes shortcuts:
 
